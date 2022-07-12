@@ -12,6 +12,7 @@
 #include <linux/slab.h>
 
 #include <drm/drm_edid.h>
+#include <drm/bridge/dw_hdmi.h>
 
 #include <media/cec.h>
 #include <media/cec-notifier.h>
@@ -270,12 +271,16 @@ static int dw_hdmi_cec_probe(struct platform_device *pdev)
 	if (IS_ERR(cec->adap))
 		return PTR_ERR(cec->adap);
 
+	dw_hdmi_set_cec_adap(cec->hdmi, cec->adap);
+
 	/* override the module pointer */
 	cec->adap->owner = THIS_MODULE;
 
-	ret = devm_add_action_or_reset(&pdev->dev, dw_hdmi_cec_del, cec);
-	if (ret)
+	ret = devm_add_action(&pdev->dev, dw_hdmi_cec_del, cec);
+	if (ret) {
+		cec_delete_adapter(cec->adap);
 		return ret;
+	}
 
 	ret = devm_request_threaded_irq(&pdev->dev, cec->irq,
 					dw_hdmi_cec_hardirq,
