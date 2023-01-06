@@ -386,6 +386,53 @@ int dp_panel_init_panel_info(struct dp_panel *dp_panel)
 	return 0;
 }
 
+/*
+ * Mapper function which outputs colorimetry to be used for a
+ * given colorspace value when misc field of MSA is used to
+ * change the colorimetry. Currently only RGB formats have been
+ * added. This API will be extended to YUV once it's supported on DP.
+ */
+u8 dp_panel_get_misc_colorimetry_val(struct dp_panel *dp_panel)
+{
+	u8 colorimetry;
+	u32 colorspace;
+	u32 cc;
+	struct dp_panel_private *panel;
+
+	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+
+	cc = dp_link_get_colorimetry_config(panel->link);
+	/*
+	 * If there is a non-zero value then compliance test-case
+	 * is going on, otherwise we can honor the colorspace setting
+	 */
+	if (cc)
+		return cc;
+
+	colorspace = dp_panel->connector->state->colorspace;
+	drm_dbg_dp(panel->drm_dev, "colorspace=%d\n", colorspace);
+
+	switch (colorspace) {
+	case DRM_MODE_COLORIMETRY_DCI_P3_RGB_D65:
+	case DRM_MODE_COLORIMETRY_DCI_P3_RGB_THEATER:
+		colorimetry = 0x7;
+		break;
+	case DRM_MODE_COLORIMETRY_RGB_WIDE_FIXED:
+		colorimetry = 0x3;
+		break;
+	case DRM_MODE_COLORIMETRY_RGB_WIDE_FLOAT:
+		colorimetry = 0xb;
+		break;
+	case DRM_MODE_COLORIMETRY_OPRGB:
+		colorimetry = 0xc;
+		break;
+	default:
+		colorimetry = 0;	/* legacy RGB mode */
+	}
+
+	return colorimetry;
+}
+
 struct dp_panel *dp_panel_get(struct dp_panel_in *in)
 {
 	struct dp_panel_private *panel;
