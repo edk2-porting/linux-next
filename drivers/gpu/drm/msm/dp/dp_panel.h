@@ -65,6 +65,7 @@ int dp_panel_get_modes(struct dp_panel *dp_panel,
 		struct drm_connector *connector);
 void dp_panel_handle_sink_request(struct dp_panel *dp_panel);
 void dp_panel_tpg_config(struct dp_panel *dp_panel, bool enable);
+u8 dp_panel_get_misc_colorimetry_val(struct dp_panel *dp_panel);
 
 /**
  * is_link_rate_valid() - validates the link rate

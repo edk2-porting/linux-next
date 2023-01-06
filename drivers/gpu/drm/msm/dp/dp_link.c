@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved
  */
 
 #define pr_fmt(fmt)	"[drm-dp] %s: " fmt, __func__
@@ -11,6 +12,11 @@
 #include "dp_panel.h"
 
 #define DP_TEST_REQUEST_MASK		0x7F
+
+enum dynamic_range {
+	DP_DYNAMIC_RANGE_RGB_VESA,
+	DP_DYNAMIC_RANGE_RGB_CEA,
+};
 
 enum audio_sample_rate {
 	AUDIO_SAMPLE_RATE_32_KHZ	= 0x00,
@@ -1083,6 +1089,7 @@ int dp_link_process_request(struct dp_link *dp_link)
 int dp_link_get_colorimetry_config(struct dp_link *dp_link)
 {
 	u32 cc;
+	enum dynamic_range dr;
 	struct dp_link_private *link;
 
 	if (!dp_link) {
@@ -1092,14 +1099,21 @@ int dp_link_get_colorimetry_config(struct dp_link *dp_link)
 
 	link = container_of(dp_link, struct dp_link_private, dp_link);
 
-	/*
-	 * Unless a video pattern CTS test is ongoing, use RGB_VESA
-	 * Only RGB_VESA and RGB_CEA supported for now
-	 */
+	/* unless a video pattern CTS test is ongoing, use CEA_VESA */
 	if (dp_link_is_video_pattern_requested(link))
-		cc = link->dp_link.test_video.test_dyn_range;
+		dr = link->dp_link.test_video.test_dyn_range;
 	else
-		cc = DP_TEST_DYNAMIC_RANGE_VESA;
+		dr = DP_DYNAMIC_RANGE_RGB_VESA;
+
+	/* Only RGB_VESA and RGB_CEA supported for now */
+	switch (dr) {
+	case DP_DYNAMIC_RANGE_RGB_CEA:
+		cc = BIT(2);
+		break;
+	case DP_DYNAMIC_RANGE_RGB_VESA:
+	default:
+		cc = 0;
+	}
 
 	return cc;
 }
