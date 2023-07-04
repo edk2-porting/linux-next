@@ -2731,6 +2731,80 @@
 			};
 		};
 
+		venus: video-codec@aa00000 {
+			compatible = "qcom,sm8550-vidc";
+			status = "okay";
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			reg = <0 0x0aa00000 0 0xF0000>;
+			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+
+			power-domains = <&videocc VIDEO_CC_MVS0C_GDSC>,
+					<&videocc VIDEO_CC_MVS0_GDSC>,
+					<&rpmhpd SM8550_MXC>,
+					<&rpmhpd SM8550_MMCX>;
+			power-domain-names = "iris-ctl", "vcodec", "mx", "mmcx";
+			operating-points-v2 = <&venus_opp_table>;
+
+			clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
+				<&videocc VIDEO_CC_MVS0C_CLK>,
+				<&videocc VIDEO_CC_MVS0_CLK>;
+			clock-names = "gcc_video_axi0", "core_clk", "vcodec_clk";
+
+			interconnects =
+				<&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_VENUS_CFG 0>,
+				<&mmss_noc MASTER_VIDEO 0 &mc_virt SLAVE_EBI1 0>;
+			interconnect-names = "venus-cnoc", "venus-ddr";
+
+			/* FW load region */
+			memory-region = <&video_mem>;
+
+			resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
+			reset-names = "video_axi_reset";
+
+			non_securei_cb {
+				compatible = "qcom,vidc,cb-ns";
+				iommus = <&apps_smmu 0x1947 0x0000>,
+					<&apps_smmu 0x1940 0x0000>;
+				dma-coherent;
+			};
+			venus_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-240000000 {
+					 opp-hz = /bits/ 64 <240000000>;
+					 required-opps = <&rpmhpd_opp_svs>,
+							 <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-338000000 {
+					 opp-hz = /bits/ 64 <338000000>;
+					 required-opps = <&rpmhpd_opp_svs>,
+							 <&rpmhpd_opp_svs>;
+				};
+
+				opp-366000000 {
+					opp-hz = /bits/ 64 <366000000>;
+					required-opps = <&rpmhpd_opp_svs_l1>,
+							<&rpmhpd_opp_svs_l1>;
+				};
+
+				opp-444000000 {
+					opp-hz = /bits/ 64 <444000000>;
+					required-opps = <&rpmhpd_opp_turbo>,
+							<&rpmhpd_opp_turbo>;
+				};
+
+				 opp-481000000 {
+					 opp-hz = /bits/ 64 <481000000>;
+					 required-opps = <&rpmhpd_opp_turbo_l1>,
+							 <&rpmhpd_opp_turbo_l1>;
+				};
+			};
+		};
+
 		videocc: clock-controller@aaf0000 {
 			compatible = "qcom,sm8550-videocc";
 			reg = <0 0x0aaf0000 0 0x10000>;
