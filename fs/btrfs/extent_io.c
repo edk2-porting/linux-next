@@ -1296,12 +1296,11 @@ static void find_next_dirty_byte(struct btrfs_fs_info *fs_info,
  */
 static noinline_for_stack int __extent_writepage_io(struct btrfs_inode *inode,
 				 struct page *page,
-				 struct btrfs_bio_ctrl *bio_ctrl,
-				 loff_t i_size,
-				 int *nr_ret)
+				 struct btrfs_bio_ctrl *bio_ctrl, loff_t i_size)
 {
 	struct btrfs_fs_info *fs_info = inode->root->fs_info;
-	u64 cur = page_offset(page);
+	u64 start = page_offset(page);
+	u64 cur = start;
 	u64 end = cur + PAGE_SIZE - 1;
 	u64 extent_offset;
 	u64 block_start;
@@ -1343,7 +1342,7 @@ static noinline_for_stack int __extent_writepage_io(struct btrfs_inode *inode,
 		em = btrfs_get_extent(inode, NULL, 0, cur, len);
 		if (IS_ERR(em)) {
 			ret = PTR_ERR_OR_ZERO(em);
-			goto out_error;
+			goto out;
 		}
 
 		extent_offset = cur - em->start;
@@ -1390,15 +1389,21 @@ static noinline_for_stack int __extent_writepage_io(struct btrfs_inode *inode,
 	}
 
 	btrfs_page_assert_not_dirty(fs_info, page);
-	*nr_ret = nr;
-	return 0;
+	ret = 0;
+out:
+	/* Make sure the mapping tag for page dirty gets cleared. */
+	if (nr == 0) {
+		set_page_writeback(page);
+		end_page_writeback(page);
+	}
+	if (ret) {
+		u32 remaining = end + 1 - cur;
 
-out_error:
-	/*
-	 * If we finish without problem, we should not only clear page dirty,
-	 * but also empty subpage dirty bits
-	 */
-	*nr_ret = nr;
+		btrfs_mark_ordered_io_finished(inode, page, cur, remaining,
+					       false);
+		btrfs_page_clear_uptodate(fs_info, page, cur, remaining);
+		mapping_set_error(page->mapping, ret);
+	}
 	return ret;
 }
 
@@ -1417,7 +1422,6 @@ static int __extent_writepage(struct page *page, struct btrfs_bio_ctrl *bio_ctrl
 	struct inode *inode = page->mapping->host;
 	const u64 page_start = page_offset(page);
 	int ret;
-	int nr = 0;
 	size_t pg_offset;
 	loff_t i_size = i_size_read(inode);
 	unsigned long end_index = i_size >> PAGE_SHIFT;
@@ -1439,28 +1443,25 @@ static int __extent_writepage(struct page *page, struct btrfs_bio_ctrl *bio_ctrl
 
 	ret = set_page_extent_mapped(page);
 	if (ret < 0)
-		goto done;
+		goto error;
 
 	ret = writepage_delalloc(BTRFS_I(inode), page, bio_ctrl->wbc);
 	if (ret == 1)
 		return 0;
 	if (ret)
-		goto done;
+		goto error;
 
-	ret = __extent_writepage_io(BTRFS_I(inode), page, bio_ctrl, i_size, &nr);
+	ret = __extent_writepage_io(BTRFS_I(inode), page, bio_ctrl, i_size);
+	/* __extent_writepage_io cleans up by itself on error. */
 	bio_ctrl->wbc->nr_to_write--;
+	goto unlock_page;
 
-done:
-	if (nr == 0) {
-		/* make sure the mapping tag for page dirty gets cleared */
-		set_page_writeback(page);
-		end_page_writeback(page);
-	}
-	if (ret) {
-		btrfs_mark_ordered_io_finished(BTRFS_I(inode), page, page_start,
-					       PAGE_SIZE, !ret);
-		mapping_set_error(page->mapping, ret);
-	}
+error:
+	/* Make sure the mapping tag for page dirty gets cleared. */
+	set_page_writeback(page);
+	end_page_writeback(page);
+	mapping_set_error(page->mapping, ret);
+unlock_page:
 	unlock_page(page);
 	ASSERT(ret <= 0);
 	return ret;
@@ -2178,7 +2179,6 @@ void extent_write_locked_range(struct inode *inode, struct page *locked_page,
 		u64 cur_end = min(round_down(cur, PAGE_SIZE) + PAGE_SIZE - 1, end);
 		u32 cur_len = cur_end + 1 - cur;
 		struct page *page;
-		int nr = 0;
 
 		page = find_get_page(mapping, cur >> PAGE_SHIFT);
 		ASSERT(PageLocked(page));
@@ -2188,18 +2188,7 @@ void extent_write_locked_range(struct inode *inode, struct page *locked_page,
 		}
 
 		ret = __extent_writepage_io(BTRFS_I(inode), page, &bio_ctrl,
-					    i_size, &nr);
-
-		/* Make sure the mapping tag for page dirty gets cleared. */
-		if (nr == 0) {
-			set_page_writeback(page);
-			end_page_writeback(page);
-		}
-		if (ret) {
-			btrfs_mark_ordered_io_finished(BTRFS_I(inode), page,
-						       cur, cur_len, !ret);
-			mapping_set_error(page->mapping, ret);
-		}
+					    i_size);
 		btrfs_page_unlock_writer(fs_info, page, cur, cur_len);
 		if (ret < 0)
 			found_error = true;
