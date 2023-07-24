@@ -104,7 +104,8 @@ struct btrfs_bio_ctrl {
 	struct writeback_control *wbc;
 };
 
-static void submit_one_bio(struct btrfs_bio_ctrl *bio_ctrl)
+static void submit_one_bio(struct btrfs_bio_ctrl *bio_ctrl,
+			   struct bio_list *bio_list)
 {
 	struct btrfs_bio *bbio = bio_ctrl->bbio;
 
@@ -117,6 +118,8 @@ static void submit_one_bio(struct btrfs_bio_ctrl *bio_ctrl)
 	if (btrfs_op(&bbio->bio) == BTRFS_MAP_READ &&
 	    bio_ctrl->compress_type != BTRFS_COMPRESS_NONE)
 		btrfs_submit_compressed_read(bbio);
+	else if (bio_list)
+		bio_list_add(bio_list, &bbio->bio);
 	else
 		btrfs_submit_bio(bbio, 0);
 
@@ -140,7 +143,22 @@ static void submit_write_bio(struct btrfs_bio_ctrl *bio_ctrl, int ret)
 		/* The bio is owned by the end_io handler now */
 		bio_ctrl->bbio = NULL;
 	} else {
-		submit_one_bio(bio_ctrl);
+		submit_one_bio(bio_ctrl, NULL);
+	}
+}
+
+static void btrfs_submit_pending_bios(struct bio_list *bio_list, int ret)
+{
+	struct bio *bio;
+
+	if (ret) {
+		blk_status_t status = errno_to_blk_status(ret);
+
+		while ((bio = bio_list_pop(bio_list)))
+			btrfs_bio_end_io(btrfs_bio(bio), status);
+	} else {
+		while ((bio = bio_list_pop(bio_list)))
+			btrfs_submit_bio(btrfs_bio(bio), 0);
 	}
 }
 
@@ -786,7 +804,8 @@ static void alloc_new_bio(struct btrfs_inode *inode,
  */
 static void submit_extent_page(struct btrfs_bio_ctrl *bio_ctrl,
 			       u64 disk_bytenr, struct page *page,
-			       size_t size, unsigned long pg_offset)
+			       size_t size, unsigned long pg_offset,
+			       struct bio_list *bio_list)
 {
 	struct btrfs_inode *inode = BTRFS_I(page->mapping->host);
 
@@ -795,7 +814,7 @@ static void submit_extent_page(struct btrfs_bio_ctrl *bio_ctrl,
 
 	if (bio_ctrl->bbio &&
 	    !btrfs_bio_is_contig(bio_ctrl, page, disk_bytenr, pg_offset))
-		submit_one_bio(bio_ctrl);
+		submit_one_bio(bio_ctrl, bio_list);
 
 	do {
 		u32 len = size;
@@ -815,7 +834,7 @@ static void submit_extent_page(struct btrfs_bio_ctrl *bio_ctrl,
 
 		if (bio_add_page(&bio_ctrl->bbio->bio, page, len, pg_offset) != len) {
 			/* bio full: move on to a new one */
-			submit_one_bio(bio_ctrl);
+			submit_one_bio(bio_ctrl, bio_list);
 			continue;
 		}
 
@@ -852,7 +871,7 @@ static void submit_extent_page(struct btrfs_bio_ctrl *bio_ctrl,
 
 		/* Ordered extent boundary: move on to a new bio. */
 		if (bio_ctrl->len_to_oe_boundary == 0)
-			submit_one_bio(bio_ctrl);
+			submit_one_bio(bio_ctrl, bio_list);
 	} while (size);
 }
 
@@ -1100,14 +1119,14 @@ static int btrfs_do_readpage(struct page *page, struct extent_map **em_cached,
 		}
 
 		if (bio_ctrl->compress_type != compress_type) {
-			submit_one_bio(bio_ctrl);
+			submit_one_bio(bio_ctrl, NULL);
 			bio_ctrl->compress_type = compress_type;
 		}
 
 		if (force_bio_submit)
-			submit_one_bio(bio_ctrl);
+			submit_one_bio(bio_ctrl, NULL);
 		submit_extent_page(bio_ctrl, disk_bytenr, page, iosize,
-				   pg_offset);
+				   pg_offset, NULL);
 		cur = cur + iosize;
 		pg_offset += iosize;
 	}
@@ -1131,7 +1150,7 @@ int btrfs_read_folio(struct file *file, struct folio *folio)
 	 * If btrfs_do_readpage() failed we will want to submit the assembled
 	 * bio to do the cleanup.
 	 */
-	submit_one_bio(&bio_ctrl);
+	submit_one_bio(&bio_ctrl, NULL);
 	return ret;
 }
 
@@ -1305,6 +1324,7 @@ static noinline_for_stack int __extent_writepage_io(struct btrfs_inode *inode,
 	u64 extent_offset;
 	u64 block_start;
 	struct extent_map *em;
+	struct bio_list bio_list = BIO_EMPTY_LIST;
 	int ret = 0;
 	int nr = 0;
 
@@ -1383,7 +1403,7 @@ static noinline_for_stack int __extent_writepage_io(struct btrfs_inode *inode,
 		btrfs_page_clear_dirty(fs_info, page, cur, iosize);
 
 		submit_extent_page(bio_ctrl, disk_bytenr, page, iosize,
-				   cur - page_offset(page));
+				   cur - page_offset(page), &bio_list);
 		cur += iosize;
 		nr++;
 	}
@@ -1396,6 +1416,16 @@ out:
 		set_page_writeback(page);
 		end_page_writeback(page);
 	}
+
+	/*
+	 * Submit all bios we queued up for this page.
+	 *
+	 * The bios are not submitted directly after building them as otherwise
+	 * a very fast I/O completion on an earlier bio could clear the page
+	 * writeback bit before the subsequent bios are even submitted.
+	 */
+	btrfs_submit_pending_bios(&bio_list, ret);
+
 	if (ret) {
 		u32 remaining = end + 1 - cur;
 
@@ -2250,7 +2280,7 @@ void extent_readahead(struct readahead_control *rac)
 
 	if (em_cached)
 		free_extent_map(em_cached);
-	submit_one_bio(&bio_ctrl);
+	submit_one_bio(&bio_ctrl, NULL);
 }
 
 /*
