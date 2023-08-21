@@ -8,6 +8,7 @@ config VIDEO_QCOM_IRIS
 	select VIDEOBUF2_DMA_CONTIG
 	select V4L2_MEM2MEM_DEV
 	select DMABUF_HEAPS
+	select DMABUF_HEAPS_SYSTEM
 	help
 	  This is a V4L2 driver for Qualcomm Iris video accelerator
 	  hardware. It accelerates encoding and decoding operations
