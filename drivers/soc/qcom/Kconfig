@@ -268,4 +268,17 @@ config QCOM_INLINE_CRYPTO_ENGINE
 	tristate
 	select QCOM_SCM
 
+config QCOM_DUMP_XBL_LOG
+	tristate "Qualcomm driver to print XBL logs on console from debugfs"
+	help
+	  This driver is used to capture secondary bootloader (xbl) log
+	  from a reserved memory region and provide a debugfs entry to read
+	  logs captured from this memory region and print them on console.
+	  User can use below command to print the xbl log on console:
+
+                cat /sys/kernel/debug/xbl_log
+
+	  These logs help to identify firmware configuration information on
+	  the SoC. The name of the built module will be dump_xbl_log
+
 endmenu
