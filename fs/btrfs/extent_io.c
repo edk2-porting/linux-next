@@ -1450,7 +1450,6 @@ static int __extent_writepage(struct page *page, struct btrfs_bio_ctrl *bio_ctrl
 {
 	struct folio *folio = page_folio(page);
 	struct inode *inode = page->mapping->host;
-	const u64 page_start = page_offset(page);
 	int ret;
 	size_t pg_offset;
 	loff_t i_size = i_size_read(inode);
