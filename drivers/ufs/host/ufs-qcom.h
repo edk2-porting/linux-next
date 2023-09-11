@@ -240,6 +240,7 @@ struct ufs_qcom_host {
 
 	struct gpio_desc *device_reset;
 
+	struct ufs_dev_params host_pwr_cap;
 	u32 phy_gear;
 
 	bool esi_enabled;
