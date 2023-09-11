@@ -6,36 +6,8 @@
 #ifndef BTRFS_CTREE_H
 #define BTRFS_CTREE_H
 
-#include <linux/mm.h>
-#include <linux/sched/signal.h>
-#include <linux/highmem.h>
-#include <linux/fs.h>
-#include <linux/rwsem.h>
-#include <linux/semaphore.h>
-#include <linux/completion.h>
-#include <linux/backing-dev.h>
-#include <linux/wait.h>
-#include <linux/slab.h>
-#include <trace/events/btrfs.h>
-#include <asm/unaligned.h>
 #include <linux/pagemap.h>
-#include <linux/btrfs.h>
-#include <linux/btrfs_tree.h>
-#include <linux/workqueue.h>
-#include <linux/security.h>
-#include <linux/sizes.h>
-#include <linux/dynamic_debug.h>
-#include <linux/refcount.h>
-#include <linux/crc32c.h>
-#include <linux/iomap.h>
-#include <linux/fscrypt.h>
-#include "extent-io-tree.h"
-#include "extent_io.h"
-#include "extent_map.h"
-#include "async-thread.h"
-#include "block-rsv.h"
 #include "locking.h"
-#include "misc.h"
 #include "fs.h"
 
 struct btrfs_trans_handle;
@@ -469,30 +441,6 @@ static inline u32 BTRFS_MAX_XATTR_SIZE(const struct btrfs_fs_info *info)
 
 #define BTRFS_BYTES_TO_BLKS(fs_info, bytes) \
 				((bytes) >> (fs_info)->sectorsize_bits)
-
-static inline u32 btrfs_crc32c(u32 crc, const void *address, unsigned length)
-{
-	return crc32c(crc, address, length);
-}
-
-static inline void btrfs_crc32c_final(u32 crc, u8 *result)
-{
-	put_unaligned_le32(~crc, result);
-}
-
-static inline u64 btrfs_name_hash(const char *name, int len)
-{
-       return crc32c((u32)~1, name, len);
-}
-
-/*
- * Figure the key offset of an extended inode ref
- */
-static inline u64 btrfs_extref_hash(u64 parent_objectid, const char *name,
-                                   int len)
-{
-       return (u64) crc32c(parent_objectid, name, len);
-}
 
 static inline gfp_t btrfs_alloc_write_mask(struct address_space *mapping)
 {
