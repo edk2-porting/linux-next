@@ -1044,7 +1044,7 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 				| UFSHCD_QUIRK_BROKEN_PA_RXHSUNTERMCAP);
 	}
 
-	if (host->hw_ver.major > 0x3)
+	if (host->hw_ver.major > 0x3 && host->hw_ver.major < 0x5)
 		hba->quirks |= UFSHCD_QUIRK_REINIT_AFTER_MAX_GEAR_SWITCH;
 }
 
@@ -1052,11 +1052,33 @@ static void ufs_qcom_set_pwr_mode_limits(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_dev_params *host_pwr_cap = &host->host_pwr_cap;
+	u32 val, dev_major = 0;
 
 	ufshcd_init_pwr_dev_param(host_pwr_cap);
 
 	/* This driver only supports symmetic gear setting i.e., hs_tx_gear == hs_rx_gear */
 	host_pwr_cap->hs_tx_gear = host_pwr_cap->hs_rx_gear = ufs_qcom_get_hs_gear(hba);
+	host->phy_gear = host_pwr_cap->hs_rx_gear;
+
+	if (host->hw_ver.major < 0x5) {
+		/*
+		 * Power up the PHY using the minimum supported gear (UFS_HS_G2).
+		 * Switching to max gear will be performed during reinit if supported.
+		 */
+		host->phy_gear = UFS_HS_G2;
+	} else {
+		val = ufshcd_readl(host->hba, REG_UFS_DEBUG_SPARE_CFG);
+		dev_major = FIELD_GET(GENMASK(7, 4), val);
+
+		if (host->hw_ver.major == 0x5 && (dev_major >= 0x4 ||
+						  dev_major == 0)) {
+			/* For UFS 4.0 and newer, or dev version is not populated */
+			host_pwr_cap->hs_rate = PA_HS_MODE_A;
+		} else if (dev_major < 0x4 && dev_major > 0) {
+			/* For UFS 3.1 and older, apply HS-G4 PHY settings to save power */
+			host->phy_gear = UFS_HS_G4;
+		}
+	}
 }
 
 static void ufs_qcom_set_caps(struct ufs_hba *hba)
@@ -1300,12 +1322,6 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 		/* Failure is non-fatal */
 		dev_warn(dev, "%s: failed to configure the testbus %d\n",
 				__func__, err);
-
-	/*
-	 * Power up the PHY using the minimum supported gear (UFS_HS_G2).
-	 * Switching to max gear will be performed during reinit if supported.
-	 */
-	host->phy_gear = UFS_HS_G2;
 
 	return 0;
 
