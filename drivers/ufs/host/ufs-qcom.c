@@ -442,7 +442,11 @@ static u32 ufs_qcom_get_hs_gear(struct ufs_hba *hba)
 static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct ufs_dev_params *host_pwr_cap = &host->host_pwr_cap;
 	struct phy *phy = host->generic_phy;
+	enum phy_mode mode = host_pwr_cap->hs_rate == PA_HS_MODE_B ?
+							PHY_MODE_UFS_HS_B :
+							PHY_MODE_UFS_HS_A;
 	int ret;
 
 	/* Reset UFS Host Controller and PHY */
@@ -459,7 +463,7 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 		return ret;
 	}
 
-	phy_set_mode_ext(phy, PHY_MODE_UFS_HS_B, host->phy_gear);
+	phy_set_mode_ext(phy, mode, host->phy_gear);
 
 	/* power on phy - start serdes and phy's power and clocks */
 	ret = phy_power_on(phy);
@@ -898,7 +902,6 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 				struct ufs_pa_layer_attr *dev_req_params)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct ufs_dev_params ufs_qcom_cap;
 	int ret = 0;
 
 	if (!dev_req_params) {
@@ -908,13 +911,7 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 
 	switch (status) {
 	case PRE_CHANGE:
-		ufshcd_init_pwr_dev_param(&ufs_qcom_cap);
-		ufs_qcom_cap.hs_rate = UFS_QCOM_LIMIT_HS_RATE;
-
-		/* This driver only supports symmetic gear setting i.e., hs_tx_gear == hs_rx_gear */
-		ufs_qcom_cap.hs_tx_gear = ufs_qcom_cap.hs_rx_gear = ufs_qcom_get_hs_gear(hba);
-
-		ret = ufshcd_get_pwr_dev_param(&ufs_qcom_cap,
+		ret = ufshcd_get_pwr_dev_param(&host->host_pwr_cap,
 					       dev_max_params,
 					       dev_req_params);
 		if (ret) {
@@ -1049,6 +1046,17 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 
 	if (host->hw_ver.major > 0x3)
 		hba->quirks |= UFSHCD_QUIRK_REINIT_AFTER_MAX_GEAR_SWITCH;
+}
+
+static void ufs_qcom_set_pwr_mode_limits(struct ufs_hba *hba)
+{
+	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
+	struct ufs_dev_params *host_pwr_cap = &host->host_pwr_cap;
+
+	ufshcd_init_pwr_dev_param(host_pwr_cap);
+
+	/* This driver only supports symmetic gear setting i.e., hs_tx_gear == hs_rx_gear */
+	host_pwr_cap->hs_tx_gear = host_pwr_cap->hs_rx_gear = ufs_qcom_get_hs_gear(hba);
 }
 
 static void ufs_qcom_set_caps(struct ufs_hba *hba)
@@ -1273,6 +1281,7 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	if (err)
 		goto out_variant_clear;
 
+	ufs_qcom_set_pwr_mode_limits(hba);
 	ufs_qcom_set_caps(hba);
 	ufs_qcom_advertise_quirks(hba);
 
