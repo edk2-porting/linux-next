@@ -625,18 +625,8 @@ our $signature_tags = qr{(?xi:
 our @link_tags = qw(Link Closes);
 
 #Create a search and print patterns for all these strings to be used directly below
-our $link_tags_search = "";
-our $link_tags_print = "";
-foreach my $entry (@link_tags) {
-	if ($link_tags_search ne "") {
-		$link_tags_search .= '|';
-		$link_tags_print .= ' or ';
-	}
-	$entry .= ':';
-	$link_tags_search .= $entry;
-	$link_tags_print .= "'$entry'";
-}
-$link_tags_search = "(?:${link_tags_search})";
+our $link_tags_search = '(?:' . join('|', @link_tags) . ')';
+our $link_tags_print = "'" . join("' or '", @link_tags) . "'";
 
 our $tracing_logging_tags = qr{(?xi:
 	[=-]*> |
@@ -819,15 +809,10 @@ our @mode_permission_funcs = (
 	["__ATTR", 2],
 );
 
-my $word_pattern = '\b[A-Z]?[a-z]{2,}\b';
-
 #Create a search pattern for all these functions to speed up a loop below
-our $mode_perms_search = "";
-foreach my $entry (@mode_permission_funcs) {
-	$mode_perms_search .= '|' if ($mode_perms_search ne "");
-	$mode_perms_search .= $entry->[0];
-}
-$mode_perms_search = "(?:${mode_perms_search})";
+our $mode_perms_search = '(?:' . join('|', map{$_->[0]} @mode_permission_funcs) . ')';
+
+my $word_pattern = '\b[A-Z]?[a-z]{2,}\b';
 
 our %deprecated_apis = (
 	"synchronize_rcu_bh"			=> "synchronize_rcu",
@@ -847,12 +832,7 @@ our %deprecated_apis = (
 );
 
 #Create a search pattern for all these strings to speed up a loop below
-our $deprecated_apis_search = "";
-foreach my $entry (keys %deprecated_apis) {
-	$deprecated_apis_search .= '|' if ($deprecated_apis_search ne "");
-	$deprecated_apis_search .= $entry;
-}
-$deprecated_apis_search = "(?:${deprecated_apis_search})";
+our $deprecated_apis_search = '(?:' . join('|', keys %deprecated_apis) . ')';
 
 our $mode_perms_world_writable = qr{
 	S_IWUGO		|
@@ -887,7 +867,7 @@ foreach my $entry (keys %mode_permission_string_types) {
 	$mode_perms_string_search .= '|' if ($mode_perms_string_search ne "");
 	$mode_perms_string_search .= $entry;
 }
-our $single_mode_perms_string_search = "(?:${mode_perms_string_search})";
+our $single_mode_perms_string_search = '(?:' . join('|', keys %mode_permission_string_types) . ')';
 our $multi_mode_perms_string_search = qr{
 	${single_mode_perms_string_search}
 	(?:\s*\|\s*${single_mode_perms_string_search})*
