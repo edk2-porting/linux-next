@@ -1321,7 +1321,8 @@ static void a6xx_set_cp_protect(struct msm_gpu *gpu)
 		BUILD_BUG_ON(ARRAY_SIZE(a660_protect) > 48);
 	} else if (adreno_is_a730(adreno_gpu) ||
 		   adreno_is_a740(adreno_gpu) ||
-		   adreno_is_a750(adreno_gpu)) {
+		   adreno_is_a750(adreno_gpu) ||
+		   adreno_is_a705(adreno_gpu)) {
 		regs = a730_protect;
 		count = ARRAY_SIZE(a730_protect);
 		count_max = 48;
@@ -1726,7 +1727,8 @@ static int hw_init(struct msm_gpu *gpu)
 	}
 
 	/* Some GPUs are stubborn and take their sweet time to unhalt GBIF! */
-	if (adreno_is_a7xx(adreno_gpu) && a6xx_has_gbif(adreno_gpu))
+	if (adreno_is_a7xx(adreno_gpu) && a6xx_has_gbif(adreno_gpu)
+		&& !adreno_is_a705(adreno_gpu))
 		spin_until(!gpu_read(gpu, REG_A6XX_GBIF_HALT_ACK));
 
 	gpu_write(gpu, REG_A6XX_RBBM_SECVID_TSB_CNTL, 0);

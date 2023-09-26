@@ -840,7 +840,9 @@ static int a6xx_gmu_fw_start(struct a6xx_gmu *gmu, unsigned int state)
 		 * This chipid that the GMU expects corresponds to the "GENX_Y_Z" naming,
 		 * where X = major, Y = minor, Z = patchlevel, e.g. GEN7_2_1 for prod A740.
 		 */
-		if (adreno_is_a740(adreno_gpu))
+		if (adreno_is_a705(adreno_gpu))
+			chipid_min = 5;
+		else if (adreno_is_a740(adreno_gpu))
 			chipid_min = 2;
 		else if (adreno_is_a750(adreno_gpu))
 			chipid_min = 9;
