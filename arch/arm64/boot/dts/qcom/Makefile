@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
+
+# Enable support for device-tree overlays required on qcs8550-ayn-odin2.
+DTC_FLAGS_qcs8550-ayn-odin2-hypdtbo := -@
+
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb
 
 apq8016-sbc-usb-host-dtbs	:= apq8016-sbc.dtb apq8016-sbc-usb-host.dtbo
@@ -229,5 +233,8 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8450-hdk.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8450-qrd.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8450-sony-xperia-nagara-pdx223.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8450-sony-xperia-nagara-pdx224.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-ayn-odin2.dtb
+qcs8550-ayn-odin2-hypdtbo-dtbs	:= qcs8550-ayn-odin2.dtb qcs8550-ayn-odin2-hypdtbo.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-ayn-odin2-hypdtbo.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-qrd.dtb
