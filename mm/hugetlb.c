@@ -92,9 +92,6 @@ struct mutex *hugetlb_fault_mutex_table ____cacheline_aligned_in_smp;
 
 /* Forward declaration */
 static int hugetlb_acct_memory(struct hstate *h, long delta);
-static void hugetlb_vma_lock_free(struct vm_area_struct *vma);
-static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma);
-static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma);
 static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
 		unsigned long start, unsigned long end);
 static struct resv_map *vma_resv_map(struct vm_area_struct *vma);
@@ -264,170 +261,41 @@ static inline struct hugepage_subpool *subpool_vma(struct vm_area_struct *vma)
  */
 void hugetlb_vma_lock_read(struct vm_area_struct *vma)
 {
-	if (__vma_shareable_lock(vma)) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		down_read(&vma_lock->rw_sema);
-	} else if (__vma_private_lock(vma)) {
-		struct resv_map *resv_map = vma_resv_map(vma);
-
-		down_read(&resv_map->rw_sema);
-	}
+	if (vma->vm_file)
+		filemap_invalidate_lock_shared(vma->vm_file->f_mapping);
 }
 
 void hugetlb_vma_unlock_read(struct vm_area_struct *vma)
 {
-	if (__vma_shareable_lock(vma)) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		up_read(&vma_lock->rw_sema);
-	} else if (__vma_private_lock(vma)) {
-		struct resv_map *resv_map = vma_resv_map(vma);
-
-		up_read(&resv_map->rw_sema);
-	}
+	if (vma->vm_file)
+		filemap_invalidate_unlock_shared(vma->vm_file->f_mapping);
 }
 
 void hugetlb_vma_lock_write(struct vm_area_struct *vma)
 {
-	if (__vma_shareable_lock(vma)) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		down_write(&vma_lock->rw_sema);
-	} else if (__vma_private_lock(vma)) {
-		struct resv_map *resv_map = vma_resv_map(vma);
-
-		down_write(&resv_map->rw_sema);
-	}
+	if (vma->vm_file)
+		filemap_invalidate_lock(vma->vm_file->f_mapping);
 }
 
 void hugetlb_vma_unlock_write(struct vm_area_struct *vma)
 {
-	if (__vma_shareable_lock(vma)) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		up_write(&vma_lock->rw_sema);
-	} else if (__vma_private_lock(vma)) {
-		struct resv_map *resv_map = vma_resv_map(vma);
-
-		up_write(&resv_map->rw_sema);
-	}
+	if (vma->vm_file)
+		filemap_invalidate_unlock(vma->vm_file->f_mapping);
 }
 
 int hugetlb_vma_trylock_write(struct vm_area_struct *vma)
 {
 
-	if (__vma_shareable_lock(vma)) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		return down_write_trylock(&vma_lock->rw_sema);
-	} else if (__vma_private_lock(vma)) {
-		struct resv_map *resv_map = vma_resv_map(vma);
-
-		return down_write_trylock(&resv_map->rw_sema);
-	}
+	if (vma->vm_file)
+		return filemap_invalidate_trylock(vma->vm_file->f_mapping);
 
 	return 1;
 }
 
 void hugetlb_vma_assert_locked(struct vm_area_struct *vma)
 {
-	if (__vma_shareable_lock(vma)) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		lockdep_assert_held(&vma_lock->rw_sema);
-	} else if (__vma_private_lock(vma)) {
-		struct resv_map *resv_map = vma_resv_map(vma);
-
-		lockdep_assert_held(&resv_map->rw_sema);
-	}
-}
-
-void hugetlb_vma_lock_release(struct kref *kref)
-{
-	struct hugetlb_vma_lock *vma_lock = container_of(kref,
-			struct hugetlb_vma_lock, refs);
-
-	kfree(vma_lock);
-}
-
-static void __hugetlb_vma_unlock_write_put(struct hugetlb_vma_lock *vma_lock)
-{
-	struct vm_area_struct *vma = vma_lock->vma;
-
-	/*
-	 * vma_lock structure may or not be released as a result of put,
-	 * it certainly will no longer be attached to vma so clear pointer.
-	 * Semaphore synchronizes access to vma_lock->vma field.
-	 */
-	vma_lock->vma = NULL;
-	vma->vm_private_data = NULL;
-	up_write(&vma_lock->rw_sema);
-	kref_put(&vma_lock->refs, hugetlb_vma_lock_release);
-}
-
-static void __hugetlb_vma_unlock_write_free(struct vm_area_struct *vma)
-{
-	if (__vma_shareable_lock(vma)) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		__hugetlb_vma_unlock_write_put(vma_lock);
-	} else if (__vma_private_lock(vma)) {
-		struct resv_map *resv_map = vma_resv_map(vma);
-
-		/* no free for anon vmas, but still need to unlock */
-		up_write(&resv_map->rw_sema);
-	}
-}
-
-static void hugetlb_vma_lock_free(struct vm_area_struct *vma)
-{
-	/*
-	 * Only present in sharable vmas.
-	 */
-	if (!vma || !__vma_shareable_lock(vma))
-		return;
-
-	if (vma->vm_private_data) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		down_write(&vma_lock->rw_sema);
-		__hugetlb_vma_unlock_write_put(vma_lock);
-	}
-}
-
-static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma)
-{
-	struct hugetlb_vma_lock *vma_lock;
-
-	/* Only establish in (flags) sharable vmas */
-	if (!vma || !(vma->vm_flags & VM_MAYSHARE))
-		return;
-
-	/* Should never get here with non-NULL vm_private_data */
-	if (vma->vm_private_data)
-		return;
-
-	vma_lock = kmalloc(sizeof(*vma_lock), GFP_KERNEL);
-	if (!vma_lock) {
-		/*
-		 * If we can not allocate structure, then vma can not
-		 * participate in pmd sharing.  This is only a possible
-		 * performance enhancement and memory saving issue.
-		 * However, the lock is also used to synchronize page
-		 * faults with truncation.  If the lock is not present,
-		 * unlikely races could leave pages in a file past i_size
-		 * until the file is removed.  Warn in the unlikely case of
-		 * allocation failure.
-		 */
-		pr_warn_once("HugeTLB: unable to allocate vma specific lock\n");
-		return;
-	}
-
-	kref_init(&vma_lock->refs);
-	init_rwsem(&vma_lock->rw_sema);
-	vma_lock->vma = vma;
-	vma->vm_private_data = vma_lock;
+	if (vma->vm_file)
+		lockdep_assert_held(&vma->vm_file->f_mapping->invalidate_lock);
 }
 
 /* Helper that removes a struct file_region from the resv_map cache and returns
@@ -1093,7 +961,6 @@ struct resv_map *resv_map_alloc(void)
 	kref_init(&resv_map->refs);
 	spin_lock_init(&resv_map->lock);
 	INIT_LIST_HEAD(&resv_map->regions);
-	init_rwsem(&resv_map->rw_sema);
 
 	resv_map->adds_in_progress = 0;
 	/*
@@ -1187,22 +1054,11 @@ void hugetlb_dup_vma_private(struct vm_area_struct *vma)
 	VM_BUG_ON_VMA(!is_vm_hugetlb_page(vma), vma);
 	/*
 	 * Clear vm_private_data
-	 * - For shared mappings this is a per-vma semaphore that may be
-	 *   allocated in a subsequent call to hugetlb_vm_op_open.
-	 *   Before clearing, make sure pointer is not associated with vma
-	 *   as this will leak the structure.  This is the case when called
-	 *   via clear_vma_resv_huge_pages() and hugetlb_vm_op_open has already
-	 *   been called to allocate a new structure.
 	 * - For MAP_PRIVATE mappings, this is the reserve map which does
 	 *   not apply to children.  Faults generated by the children are
 	 *   not guaranteed to succeed, even if read-only.
 	 */
-	if (vma->vm_flags & VM_MAYSHARE) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		if (vma_lock && vma_lock->vma != vma)
-			vma->vm_private_data = NULL;
-	} else
+	if (!(vma->vm_flags & VM_MAYSHARE))
 		vma->vm_private_data = NULL;
 }
 
@@ -4868,25 +4724,6 @@ static void hugetlb_vm_op_open(struct vm_area_struct *vma)
 		resv_map_dup_hugetlb_cgroup_uncharge_info(resv);
 		kref_get(&resv->refs);
 	}
-
-	/*
-	 * vma_lock structure for sharable mappings is vma specific.
-	 * Clear old pointer (if copied via vm_area_dup) and allocate
-	 * new structure.  Before clearing, make sure vma_lock is not
-	 * for this vma.
-	 */
-	if (vma->vm_flags & VM_MAYSHARE) {
-		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
-
-		if (vma_lock) {
-			if (vma_lock->vma != vma) {
-				vma->vm_private_data = NULL;
-				hugetlb_vma_lock_alloc(vma);
-			} else
-				pr_warn("HugeTLB: vma_lock already exists in %s.\n", __func__);
-		} else
-			hugetlb_vma_lock_alloc(vma);
-	}
 }
 
 static void hugetlb_vm_op_close(struct vm_area_struct *vma)
@@ -4896,8 +4733,6 @@ static void hugetlb_vm_op_close(struct vm_area_struct *vma)
 	struct hugepage_subpool *spool = subpool_vma(vma);
 	unsigned long reserve, start, end;
 	long gbl_reserve;
-
-	hugetlb_vma_lock_free(vma);
 
 	resv = vma_resv_map(vma);
 	if (!resv || !is_vma_resv_set(vma, HPAGE_RESV_OWNER))
@@ -5070,15 +4905,9 @@ int copy_hugetlb_page_range(struct mm_struct *dst, struct mm_struct *src,
 		mmu_notifier_invalidate_range_start(&range);
 		vma_assert_write_locked(src_vma);
 		raw_write_seqcount_begin(&src->write_protect_seq);
-	} else {
-		/*
-		 * For shared mappings the vma lock must be held before
-		 * calling hugetlb_walk() in the src vma. Otherwise, the
-		 * returned ptep could go away if part of a shared pmd and
-		 * another thread calls huge_pmd_unshare.
-		 */
-		hugetlb_vma_lock_read(src_vma);
 	}
+
+	hugetlb_vma_lock_read(src_vma);
 
 	last_addr_mask = hugetlb_mask_last_page(h);
 	for (addr = src_vma->vm_start; addr < src_vma->vm_end; addr += sz) {
@@ -5231,9 +5060,9 @@ again:
 	if (cow) {
 		raw_write_seqcount_end(&src->write_protect_seq);
 		mmu_notifier_invalidate_range_end(&range);
-	} else {
-		hugetlb_vma_unlock_read(src_vma);
 	}
+
+	hugetlb_vma_unlock_read(src_vma);
 
 	return ret;
 }
@@ -5475,28 +5304,12 @@ void __hugetlb_zap_begin(struct vm_area_struct *vma,
 void __hugetlb_zap_end(struct vm_area_struct *vma,
 		       struct zap_details *details)
 {
-	zap_flags_t zap_flags = details ? details->zap_flags : 0;
-
 	if (!vma->vm_file)	/* hugetlbfs_file_mmap error */
 		return;
 
-	if (zap_flags & ZAP_FLAG_UNMAP) {	/* final unmap */
-		/*
-		 * Unlock and free the vma lock before releasing i_mmap_rwsem.
-		 * When the vma_lock is freed, this makes the vma ineligible
-		 * for pmd sharing.  And, i_mmap_rwsem is required to set up
-		 * pmd sharing.  This is important as page tables for this
-		 * unmapped range will be asynchrously deleted.  If the page
-		 * tables are shared, there will be issues when accessed by
-		 * someone else.
-		 */
-		__hugetlb_vma_unlock_write_free(vma);
-	} else {
-		hugetlb_vma_unlock_write(vma);
-	}
-
 	if (vma->vm_file)
 		i_mmap_unlock_write(vma->vm_file->f_mapping);
+	hugetlb_vma_unlock_write(vma);
 }
 
 void unmap_hugepage_range(struct vm_area_struct *vma, unsigned long start,
@@ -6772,12 +6585,6 @@ bool hugetlb_reserve_pages(struct inode *inode,
 	}
 
 	/*
-	 * vma specific semaphore used for pmd sharing and fault/truncation
-	 * synchronization
-	 */
-	hugetlb_vma_lock_alloc(vma);
-
-	/*
 	 * Only apply hugepage reservation if asked. At fault time, an
 	 * attempt will be made for VM_NORESERVE to allocate a page
 	 * without using reserves
@@ -6899,7 +6706,6 @@ out_uncharge_cgroup:
 	hugetlb_cgroup_uncharge_cgroup_rsvd(hstate_index(h),
 					    chg * pages_per_huge_page(h), h_cg);
 out_err:
-	hugetlb_vma_lock_free(vma);
 	if (!vma || vma->vm_flags & VM_MAYSHARE)
 		/* Only call region_abort if the region_chg succeeded but the
 		 * region_add failed or didn't run.
@@ -6971,13 +6777,10 @@ static unsigned long page_table_shareable(struct vm_area_struct *svma,
 	/*
 	 * match the virtual addresses, permission and the alignment of the
 	 * page table page.
-	 *
-	 * Also, vma_lock (vm_private_data) is required for sharing.
 	 */
 	if (pmd_index(addr) != pmd_index(saddr) ||
 	    vm_flags != svm_flags ||
-	    !range_in_vma(svma, sbase, s_end) ||
-	    !svma->vm_private_data)
+	    !range_in_vma(svma, sbase, s_end))
 		return 0;
 
 	return saddr;
@@ -6996,8 +6799,6 @@ bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr)
 	 * check on proper vm_flags and page table alignment
 	 */
 	if (!(vma->vm_flags & VM_MAYSHARE))
-		return false;
-	if (!vma->vm_private_data)	/* vma lock required for sharing */
 		return false;
 	if (!range_in_vma(vma, start, end))
 		return false;
