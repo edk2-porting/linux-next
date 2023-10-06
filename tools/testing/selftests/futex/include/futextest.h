@@ -25,28 +25,6 @@
 typedef volatile u_int32_t futex_t;
 #define FUTEX_INITIALIZER 0
 
-/* Define the newer op codes if the system header file is not up to date. */
-#ifndef FUTEX_WAIT_BITSET
-#define FUTEX_WAIT_BITSET		9
-#endif
-#ifndef FUTEX_WAKE_BITSET
-#define FUTEX_WAKE_BITSET		10
-#endif
-#ifndef FUTEX_WAIT_REQUEUE_PI
-#define FUTEX_WAIT_REQUEUE_PI		11
-#endif
-#ifndef FUTEX_CMP_REQUEUE_PI
-#define FUTEX_CMP_REQUEUE_PI		12
-#endif
-#ifndef FUTEX_WAIT_REQUEUE_PI_PRIVATE
-#define FUTEX_WAIT_REQUEUE_PI_PRIVATE	(FUTEX_WAIT_REQUEUE_PI | \
-					 FUTEX_PRIVATE_FLAG)
-#endif
-#ifndef FUTEX_REQUEUE_PI_PRIVATE
-#define FUTEX_CMP_REQUEUE_PI_PRIVATE	(FUTEX_CMP_REQUEUE_PI | \
-					 FUTEX_PRIVATE_FLAG)
-#endif
-
 /**
  * futex() - SYS_futex syscall wrapper
  * @uaddr:	address of first futex
