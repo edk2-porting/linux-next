@@ -2767,16 +2767,24 @@ cannot_expand:
 	vma->vm_pgoff = pgoff;
 
 	if (file) {
-		if (is_shared_maywrite(vm_flags)) {
-			error = mapping_map_writable(file->f_mapping);
-			if (error)
-				goto free_vma;
-		}
+		int writable_error = 0;
+
+		if (vma_is_shared_maywrite(vma))
+			writable_error = mapping_map_writable(file->f_mapping);
 
 		vma->vm_file = get_file(file);
 		error = call_mmap(file, vma);
 		if (error)
 			goto unmap_and_free_vma;
+
+		/*
+		 * call_mmap() may have changed VMA flags, so retry this check
+		 * if it failed before.
+		 */
+		if (writable_error && vma_is_shared_maywrite(vma)) {
+			error = writable_error;
+			goto close_and_free_vma;
+		}
 
 		/*
 		 * Expansion is handled above, merging is handled below.
