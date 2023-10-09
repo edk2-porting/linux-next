@@ -780,7 +780,7 @@ static inline bool reiserfs_posix_acl_list(const char *name,
 }
 
 /* This is the implementation for the xattr plugin infrastructure */
-static inline bool reiserfs_xattr_list(const struct xattr_handler **handlers,
+static inline bool reiserfs_xattr_list(const struct xattr_handler * const *handlers,
 				       const char *name, struct dentry *dentry)
 {
 	if (handlers) {
