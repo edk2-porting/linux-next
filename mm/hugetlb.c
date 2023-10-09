@@ -3307,7 +3307,8 @@ static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 	}
 
 	/* list will be empty if hstate_is_gigantic */
-	prep_and_add_allocated_folios(h, &folio_list);
+	if (!hstate_is_gigantic(h))
+		prep_and_add_allocated_folios(h, &folio_list);
 
 	if (i < h->max_huge_pages) {
 		char buf[32];
