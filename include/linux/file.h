@@ -113,6 +113,7 @@ int receive_fd_replace(int new_fd, struct file *file, unsigned int o_flags);
 extern void flush_delayed_fput(void);
 extern void __fput_sync(struct file *);
 
-extern unsigned int sysctl_nr_open_min, sysctl_nr_open_max;
+extern const unsigned int sysctl_nr_open_min;
+extern const unsigned int sysctl_nr_open_max;
 
 #endif /* __LINUX_FILE_H */
