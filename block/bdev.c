@@ -292,7 +292,7 @@ EXPORT_SYMBOL(thaw_bdev);
  */
 
 static  __cacheline_aligned_in_smp DEFINE_MUTEX(bdev_lock);
-static struct kmem_cache * bdev_cachep __ro_after_init;
+static struct kmem_cache *bdev_cachep __ro_after_init;
 
 static struct inode *bdev_alloc_inode(struct super_block *sb)
 {
