@@ -89,8 +89,6 @@ static inline struct mempolicy *mpol_dup(struct mempolicy *pol)
 	return pol;
 }
 
-#define vma_policy(vma) ((vma)->vm_policy)
-
 static inline void mpol_get(struct mempolicy *pol)
 {
 	if (pol)
@@ -221,8 +219,6 @@ static inline struct mempolicy *get_vma_policy(struct vm_area_struct *vma,
 	*ilx = 0;
 	return NULL;
 }
-
-#define vma_policy(vma) NULL
 
 static inline int
 vma_dup_policy(struct vm_area_struct *src, struct vm_area_struct *dst)
