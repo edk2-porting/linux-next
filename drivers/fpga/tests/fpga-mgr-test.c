@@ -14,6 +14,8 @@
 #include <linux/scatterlist.h>
 #include <linux/types.h>
 
+#include "fpga-test-helpers.h"
+
 #define HEADER_FILL		'H'
 #define IMAGE_FILL		'P'
 #define IMAGE_BLOCK		1024
@@ -277,6 +279,18 @@ static void fpga_mgr_test_img_load_sgt(struct kunit *test)
 	sg_free_table(ctx->img_info->sgt);
 }
 
+TEST_PLATFORM_DRIVER(test_platform_driver);
+
+static int fpga_mgr_test_suite_init(struct kunit_suite *suite)
+{
+	return platform_driver_register(&test_platform_driver);
+}
+
+static void fpga_mgr_test_suite_exit(struct kunit_suite *suite)
+{
+	platform_driver_unregister(&test_platform_driver);
+}
+
 static int fpga_mgr_test_init(struct kunit *test)
 {
 	struct mgr_ctx *ctx;
@@ -284,7 +298,7 @@ static int fpga_mgr_test_init(struct kunit *test)
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
 
-	ctx->pdev = platform_device_register_simple("mgr_pdev", PLATFORM_DEVID_AUTO, NULL, 0);
+	ctx->pdev = platform_device_register_simple(TEST_PDEV_NAME, PLATFORM_DEVID_AUTO, NULL, 0);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->pdev);
 
 	ctx->mgr = devm_fpga_mgr_register(&ctx->pdev->dev, "Fake FPGA Manager", &fake_mgr_ops,
@@ -317,6 +331,8 @@ static struct kunit_case fpga_mgr_test_cases[] = {
 
 static struct kunit_suite fpga_mgr_suite = {
 	.name = "fpga_mgr",
+	.suite_init = fpga_mgr_test_suite_init,
+	.suite_exit = fpga_mgr_test_suite_exit,
 	.init = fpga_mgr_test_init,
 	.exit = fpga_mgr_test_exit,
 	.test_cases = fpga_mgr_test_cases,
