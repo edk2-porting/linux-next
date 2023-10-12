@@ -2953,19 +2953,16 @@ bool __folio_end_writeback(struct folio *folio)
 		unsigned long flags;
 
 		xa_lock_irqsave(&mapping->i_pages, flags);
-		ret = folio_test_clear_writeback(folio);
-		if (ret) {
-			__xa_clear_mark(&mapping->i_pages, folio_index(folio),
-						PAGECACHE_TAG_WRITEBACK);
-			if (bdi->capabilities & BDI_CAP_WRITEBACK_ACCT) {
-				struct bdi_writeback *wb = inode_to_wb(inode);
+		ret = folio_xor_flags_has_waiters(folio, 1 << PG_writeback);
+		__xa_clear_mark(&mapping->i_pages, folio_index(folio),
+					PAGECACHE_TAG_WRITEBACK);
+		if (bdi->capabilities & BDI_CAP_WRITEBACK_ACCT) {
+			struct bdi_writeback *wb = inode_to_wb(inode);
 
-				wb_stat_mod(wb, WB_WRITEBACK, -nr);
-				__wb_writeout_add(wb, nr);
-				if (!mapping_tagged(mapping,
-						    PAGECACHE_TAG_WRITEBACK))
-					wb_inode_writeback_end(wb);
-			}
+			wb_stat_mod(wb, WB_WRITEBACK, -nr);
+			__wb_writeout_add(wb, nr);
+			if (!mapping_tagged(mapping, PAGECACHE_TAG_WRITEBACK))
+				wb_inode_writeback_end(wb);
 		}
 
 		if (mapping->host && !mapping_tagged(mapping,
@@ -2974,14 +2971,14 @@ bool __folio_end_writeback(struct folio *folio)
 
 		xa_unlock_irqrestore(&mapping->i_pages, flags);
 	} else {
-		ret = folio_test_clear_writeback(folio);
+		ret = folio_xor_flags_has_waiters(folio, 1 << PG_writeback);
 	}
-	if (ret) {
-		lruvec_stat_mod_folio(folio, NR_WRITEBACK, -nr);
-		zone_stat_mod_folio(folio, NR_ZONE_WRITE_PENDING, -nr);
-		node_stat_mod_folio(folio, NR_WRITTEN, nr);
-	}
+
+	lruvec_stat_mod_folio(folio, NR_WRITEBACK, -nr);
+	zone_stat_mod_folio(folio, NR_ZONE_WRITE_PENDING, -nr);
+	node_stat_mod_folio(folio, NR_WRITTEN, nr);
 	folio_memcg_unlock(folio);
+
 	return ret;
 }
 

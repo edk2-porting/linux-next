@@ -83,29 +83,6 @@ static const struct fs_parameter_spec hugetlb_fs_parameters[] = {
 	{}
 };
 
-#ifdef CONFIG_NUMA
-static inline void hugetlb_set_vma_policy(struct vm_area_struct *vma,
-					struct inode *inode, pgoff_t index)
-{
-	vma->vm_policy = mpol_shared_policy_lookup(&HUGETLBFS_I(inode)->policy,
-							index);
-}
-
-static inline void hugetlb_drop_vma_policy(struct vm_area_struct *vma)
-{
-	mpol_cond_put(vma->vm_policy);
-}
-#else
-static inline void hugetlb_set_vma_policy(struct vm_area_struct *vma,
-					struct inode *inode, pgoff_t index)
-{
-}
-
-static inline void hugetlb_drop_vma_policy(struct vm_area_struct *vma)
-{
-}
-#endif
-
 /*
  * Mask used when checking the page offset value passed in via system
  * calls.  This value will be converted to a loff_t which is signed.
@@ -135,7 +112,7 @@ static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	vm_flags_set(vma, VM_HUGETLB | VM_DONTEXPAND);
 	vma->vm_ops = &hugetlb_vm_ops;
 
-	ret = seal_check_future_write(info->seals, vma);
+	ret = seal_check_write(info->seals, vma);
 	if (ret)
 		return ret;
 
@@ -485,7 +462,6 @@ static void hugetlb_unmap_file_folio(struct hstate *h,
 					struct folio *folio, pgoff_t index)
 {
 	struct rb_root_cached *root = &mapping->i_mmap;
-	struct hugetlb_vma_lock *vma_lock;
 	struct page *page = &folio->page;
 	struct vm_area_struct *vma;
 	unsigned long v_start;
@@ -495,9 +471,9 @@ static void hugetlb_unmap_file_folio(struct hstate *h,
 	start = index * pages_per_huge_page(h);
 	end = (index + 1) * pages_per_huge_page(h);
 
+	filemap_invalidate_lock(mapping);
 	i_mmap_lock_write(mapping);
-retry:
-	vma_lock = NULL;
+
 	vma_interval_tree_foreach(vma, root, start, end - 1) {
 		v_start = vma_offset_start(vma, start);
 		v_end = vma_offset_end(vma, end);
@@ -505,62 +481,12 @@ retry:
 		if (!hugetlb_vma_maps_page(vma, v_start, page))
 			continue;
 
-		if (!hugetlb_vma_trylock_write(vma)) {
-			vma_lock = vma->vm_private_data;
-			/*
-			 * If we can not get vma lock, we need to drop
-			 * immap_sema and take locks in order.  First,
-			 * take a ref on the vma_lock structure so that
-			 * we can be guaranteed it will not go away when
-			 * dropping immap_sema.
-			 */
-			kref_get(&vma_lock->refs);
-			break;
-		}
-
 		unmap_hugepage_range(vma, v_start, v_end, NULL,
 				     ZAP_FLAG_DROP_MARKER);
-		hugetlb_vma_unlock_write(vma);
 	}
 
+	filemap_invalidate_unlock(mapping);
 	i_mmap_unlock_write(mapping);
-
-	if (vma_lock) {
-		/*
-		 * Wait on vma_lock.  We know it is still valid as we have
-		 * a reference.  We must 'open code' vma locking as we do
-		 * not know if vma_lock is still attached to vma.
-		 */
-		down_write(&vma_lock->rw_sema);
-		i_mmap_lock_write(mapping);
-
-		vma = vma_lock->vma;
-		if (!vma) {
-			/*
-			 * If lock is no longer attached to vma, then just
-			 * unlock, drop our reference and retry looking for
-			 * other vmas.
-			 */
-			up_write(&vma_lock->rw_sema);
-			kref_put(&vma_lock->refs, hugetlb_vma_lock_release);
-			goto retry;
-		}
-
-		/*
-		 * vma_lock is still attached to vma.  Check to see if vma
-		 * still maps page and if so, unmap.
-		 */
-		v_start = vma_offset_start(vma, start);
-		v_end = vma_offset_end(vma, end);
-		if (hugetlb_vma_maps_page(vma, v_start, page))
-			unmap_hugepage_range(vma, v_start, v_end, NULL,
-					     ZAP_FLAG_DROP_MARKER);
-
-		kref_put(&vma_lock->refs, hugetlb_vma_lock_release);
-		hugetlb_vma_unlock_write(vma);
-
-		goto retry;
-	}
 }
 
 static void
@@ -578,20 +504,10 @@ hugetlb_vmdelete_list(struct rb_root_cached *root, pgoff_t start, pgoff_t end,
 		unsigned long v_start;
 		unsigned long v_end;
 
-		if (!hugetlb_vma_trylock_write(vma))
-			continue;
-
 		v_start = vma_offset_start(vma, start);
 		v_end = vma_offset_end(vma, end);
 
 		unmap_hugepage_range(vma, v_start, v_end, NULL, zap_flags);
-
-		/*
-		 * Note that vma lock only exists for shared/non-private
-		 * vmas.  Therefore, lock is not held when calling
-		 * unmap_hugepage_range for private vmas.
-		 */
-		hugetlb_vma_unlock_write(vma);
 	}
 }
 
@@ -726,10 +642,12 @@ static void hugetlb_vmtruncate(struct inode *inode, loff_t offset)
 	pgoff = offset >> PAGE_SHIFT;
 
 	i_size_write(inode, offset);
+	filemap_invalidate_lock(mapping);
 	i_mmap_lock_write(mapping);
 	if (!RB_EMPTY_ROOT(&mapping->i_mmap.rb_root))
 		hugetlb_vmdelete_list(&mapping->i_mmap, pgoff, 0,
 				      ZAP_FLAG_DROP_MARKER);
+	filemap_invalidate_unlock(mapping);
 	i_mmap_unlock_write(mapping);
 	remove_inode_hugepages(inode, offset, LLONG_MAX);
 }
@@ -779,6 +697,7 @@ static long hugetlbfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 		return -EPERM;
 	}
 
+	filemap_invalidate_lock(mapping);
 	i_mmap_lock_write(mapping);
 
 	/* If range starts before first full page, zero partial page. */
@@ -800,6 +719,7 @@ static long hugetlbfs_punch_hole(struct inode *inode, loff_t offset, loff_t len)
 				hole_end, offset + len);
 
 	i_mmap_unlock_write(mapping);
+	filemap_invalidate_unlock(mapping);
 
 	/* Remove full pages from the file. */
 	if (hole_end > hole_start)
@@ -853,8 +773,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 
 	/*
 	 * Initialize a pseudo vma as this is required by the huge page
-	 * allocation routines.  If NUMA is configured, use page index
-	 * as input to create an allocation policy.
+	 * allocation routines.
 	 */
 	vma_init(&pseudo_vma, mm);
 	vm_flags_init(&pseudo_vma, VM_HUGETLB | VM_MAYSHARE | VM_SHARED);
@@ -902,9 +821,7 @@ static long hugetlbfs_fallocate(struct file *file, int mode, loff_t offset,
 		 * folios in these areas, we need to consume the reserves
 		 * to keep reservation accounting consistent.
 		 */
-		hugetlb_set_vma_policy(&pseudo_vma, inode, index);
 		folio = alloc_hugetlb_folio(&pseudo_vma, addr, 0);
-		hugetlb_drop_vma_policy(&pseudo_vma);
 		if (IS_ERR(folio)) {
 			mutex_unlock(&hugetlb_fault_mutex_table[hash]);
 			error = PTR_ERR(folio);
@@ -1283,18 +1200,6 @@ static struct inode *hugetlbfs_alloc_inode(struct super_block *sb)
 		hugetlbfs_inc_free_inodes(sbinfo);
 		return NULL;
 	}
-
-	/*
-	 * Any time after allocation, hugetlbfs_destroy_inode can be called
-	 * for the inode.  mpol_free_shared_policy is unconditionally called
-	 * as part of hugetlbfs_destroy_inode.  So, initialize policy here
-	 * in case of a quick call to destroy.
-	 *
-	 * Note that the policy is initialized even if we are creating a
-	 * private inode.  This simplifies hugetlbfs_destroy_inode.
-	 */
-	mpol_shared_policy_init(&p->policy, NULL);
-
 	return &p->vfs_inode;
 }
 
@@ -1306,7 +1211,6 @@ static void hugetlbfs_free_inode(struct inode *inode)
 static void hugetlbfs_destroy_inode(struct inode *inode)
 {
 	hugetlbfs_inc_free_inodes(HUGETLBFS_SB(inode->i_sb));
-	mpol_free_shared_policy(&HUGETLBFS_I(inode)->policy);
 }
 
 static const struct address_space_operations hugetlbfs_aops = {

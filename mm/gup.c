@@ -1471,6 +1471,9 @@ static __always_inline long __get_user_pages_locked(struct mm_struct *mm,
 	long ret, pages_done;
 	bool must_unlock = false;
 
+	if (!nr_pages)
+		return 0;
+
 	/*
 	 * The internal caller expects GUP to manage the lock internally and the
 	 * lock must be released when this returns.
@@ -1595,6 +1598,14 @@ retry:
 		mmap_read_unlock(mm);
 		*locked = 0;
 	}
+
+	/*
+	 * Failing to pin anything implies something has gone wrong (except when
+	 * FOLL_NOWAIT is specified).
+	 */
+	if (WARN_ON_ONCE(pages_done == 0 && !(flags & FOLL_NOWAIT)))
+		return -EFAULT;
+
 	return pages_done;
 }
 
@@ -2227,12 +2238,11 @@ static bool is_valid_gup_args(struct page **pages, int *locked,
 	/*
 	 * These flags not allowed to be specified externally to the gup
 	 * interfaces:
-	 * - FOLL_PIN/FOLL_TRIED/FOLL_FAST_ONLY are internal only
+	 * - FOLL_TOUCH/FOLL_PIN/FOLL_TRIED/FOLL_FAST_ONLY are internal only
 	 * - FOLL_REMOTE is internal only and used on follow_page()
 	 * - FOLL_UNLOCKABLE is internal only and used if locked is !NULL
 	 */
-	if (WARN_ON_ONCE(gup_flags & (FOLL_PIN | FOLL_TRIED | FOLL_UNLOCKABLE |
-				      FOLL_REMOTE | FOLL_FAST_ONLY)))
+	if (WARN_ON_ONCE(gup_flags & INTERNAL_GUP_FLAGS))
 		return false;
 
 	gup_flags |= to_set;
@@ -3400,3 +3410,90 @@ long pin_user_pages_unlocked(unsigned long start, unsigned long nr_pages,
 				     &locked, gup_flags);
 }
 EXPORT_SYMBOL(pin_user_pages_unlocked);
+
+/**
+ * pin_user_pages_fd() - pin user pages associated with a file
+ * @fd:         the fd whose pages are to be pinned
+ * @start:      starting file offset
+ * @nr_pages:   number of pages from start to pin
+ * @gup_flags:  flags modifying pin behaviour
+ * @pages:      array that receives pointers to the pages pinned.
+ *              Should be at least nr_pages long.
+ *
+ * Attempt to pin (and migrate) pages associated with a file belonging to
+ * either shmem or hugetlbfs. An error is returned if pages associated with
+ * hugetlbfs files are not present in the page cache. However, shmem pages
+ * are swapped in or allocated if they are not present in the page cache.
+ *
+ * Returns number of pages pinned. This would be equal to the number of
+ * pages requested.
+ * If nr_pages is 0 or negative, returns 0. If no pages were pinned, returns
+ * -errno.
+ */
+long pin_user_pages_fd(int fd, pgoff_t start, unsigned long nr_pages,
+		       unsigned int gup_flags, struct page **pages)
+{
+	struct page *page;
+	struct file *filep;
+	unsigned int flags, i;
+	long ret;
+
+	if (nr_pages <= 0)
+		return 0;
+	if (!is_valid_gup_args(pages, NULL, &gup_flags, FOLL_PIN))
+		return 0;
+
+	if (start < 0)
+		return -EINVAL;
+
+	filep = fget(fd);
+	if (!filep)
+	    return -EINVAL;
+
+	if (!shmem_file(filep) && !is_file_hugepages(filep))
+	    return -EINVAL;
+
+	flags = memalloc_pin_save();
+	do {
+		for (i = 0; i < nr_pages; i++) {
+			if (shmem_mapping(filep->f_mapping)) {
+				page = shmem_read_mapping_page(filep->f_mapping,
+							       start + i);
+				if (IS_ERR(page)) {
+					ret = PTR_ERR(page);
+					goto err;
+				}
+			} else {
+				page = find_get_page_flags(filep->f_mapping,
+							   start + i,
+							   FGP_ACCESSED);
+				if (!page) {
+					ret = -EINVAL;
+					goto err;
+				}
+			}
+			ret = try_grab_page(page, FOLL_PIN);
+			if (unlikely(ret))
+				goto err;
+
+			pages[i] = page;
+			put_page(pages[i]);
+		}
+
+		ret = check_and_migrate_movable_pages(nr_pages, pages);
+	} while (ret == -EAGAIN);
+
+err:
+	memalloc_pin_restore(flags);
+	fput(filep);
+	if (!ret)
+		return nr_pages;
+
+	while (i > 0 && pages[--i]) {
+		unpin_user_page(pages[i]);
+		pages[i] = NULL;
+	}
+	return ret;
+}
+EXPORT_SYMBOL_GPL(pin_user_pages_fd);
+
