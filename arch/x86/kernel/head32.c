@@ -19,6 +19,7 @@
 #include <asm/apic.h>
 #include <asm/io_apic.h>
 #include <asm/bios_ebda.h>
+#include <asm/microcode.h>
 #include <asm/tlbflush.h>
 #include <asm/bootparam_utils.h>
 
@@ -33,6 +34,8 @@ asmlinkage __visible void __init __noreturn i386_start_kernel(void)
 {
 	/* Make sure IDT is set up before any exception happens */
 	idt_setup_early_handler();
+
+	load_ucode_bsp();
 
 	cr4_init_shadow();
 
@@ -70,7 +73,8 @@ asmlinkage __visible void __init __noreturn i386_start_kernel(void)
  * always zero at this stage.
  */
 void __init mk_early_pgtbl_32(void);
-void __init mk_early_pgtbl_32(void)
+
+void __init __no_stack_protector mk_early_pgtbl_32(void)
 {
 #ifdef __pa
 #undef __pa
