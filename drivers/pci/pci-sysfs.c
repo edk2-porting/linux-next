@@ -530,10 +530,7 @@ static ssize_t d3cold_allowed_store(struct device *dev,
 		return -EINVAL;
 
 	pdev->d3cold_allowed = !!val;
-	if (pdev->d3cold_allowed)
-		pci_d3cold_enable(pdev);
-	else
-		pci_d3cold_disable(pdev);
+	pci_bridge_d3_update(pdev);
 
 	pm_runtime_resume(dev);
 
@@ -1551,11 +1548,10 @@ static umode_t pci_dev_attrs_are_visible(struct kobject *kobj,
 	struct device *dev = kobj_to_dev(kobj);
 	struct pci_dev *pdev = to_pci_dev(dev);
 
-	if (a == &dev_attr_boot_vga.attr)
-		if ((pdev->class >> 8) != PCI_CLASS_DISPLAY_VGA)
-			return 0;
+	if (a == &dev_attr_boot_vga.attr && pci_is_vga(pdev))
+		return a->mode;
 
-	return a->mode;
+	return 0;
 }
 
 static struct attribute *pci_dev_hp_attrs[] = {
