@@ -45,6 +45,7 @@ struct dpp;
 struct dce_hwseq;
 struct link_resource;
 struct dc_dmub_cmd;
+struct pg_block_update;
 
 struct subvp_pipe_control_lock_fast_params {
 	struct dc *dc;
@@ -134,6 +135,12 @@ struct set_ocsc_default_params {
 	enum mpc_output_csc_mode ocsc_mode;
 };
 
+struct subvp_save_surf_addr {
+	struct dc_dmub_srv *dc_dmub_srv;
+	const struct dc_plane_address *addr;
+	uint8_t subvp_index;
+};
+
 union block_sequence_params {
 	struct update_plane_addr_params update_plane_addr_params;
 	struct subvp_pipe_control_lock_fast_params subvp_pipe_control_lock_fast_params;
@@ -151,6 +158,7 @@ union block_sequence_params {
 	struct power_on_mpc_mem_pwr_params power_on_mpc_mem_pwr_params;
 	struct set_output_csc_params set_output_csc_params;
 	struct set_ocsc_default_params set_ocsc_default_params;
+	struct subvp_save_surf_addr subvp_save_surf_addr;
 };
 
 enum block_sequence_func {
@@ -170,6 +178,7 @@ enum block_sequence_func {
 	MPC_POWER_ON_MPC_MEM_PWR,
 	MPC_SET_OUTPUT_CSC,
 	MPC_SET_OCSC_DEFAULT,
+	DMUB_SUBVP_SAVE_SURF_ADDR,
 };
 
 struct block_sequence {
@@ -251,11 +260,6 @@ struct hw_sequencer_funcs {
 	void (*set_static_screen_control)(struct pipe_ctx **pipe_ctx,
 			int num_pipes,
 			const struct dc_static_screen_params *events);
-#ifndef TRIM_FSFT
-	bool (*optimize_timing_for_fsft)(struct dc *dc,
-			struct dc_crtc_timing *timing,
-			unsigned int max_input_rate_in_khz);
-#endif
 
 	/* Stream Related */
 	void (*enable_stream)(struct pipe_ctx *pipe_ctx);
@@ -372,7 +376,18 @@ struct hw_sequencer_funcs {
 
 	bool (*does_plane_fit_in_mall)(struct dc *dc, struct dc_plane_state *plane,
 			struct dc_cursor_attributes *cursor_attr);
+	void (*commit_subvp_config)(struct dc *dc, struct dc_state *context);
+	void (*enable_phantom_streams)(struct dc *dc, struct dc_state *context);
+	void (*subvp_pipe_control_lock)(struct dc *dc,
+			struct dc_state *context,
+			bool lock,
+			bool should_lock_all_pipes,
+			struct pipe_ctx *top_pipe_to_program,
+			bool subvp_prev_use);
+	void (*subvp_pipe_control_lock_fast)(union block_sequence_params *params);
 
+	void (*z10_restore)(const struct dc *dc);
+	void (*z10_save_init)(struct dc *dc);
 	bool (*is_abm_supported)(struct dc *dc,
 			struct dc_state *context, struct dc_stream_state *stream);
 
@@ -383,29 +398,31 @@ struct hw_sequencer_funcs {
 			enum dc_color_depth color_depth,
 			const struct tg_color *solid_color,
 			int width, int height, int offset);
-
-	void (*subvp_pipe_control_lock_fast)(union block_sequence_params *params);
-	void (*z10_restore)(const struct dc *dc);
-	void (*z10_save_init)(struct dc *dc);
-
+	void (*blank_phantom)(struct dc *dc,
+			struct timing_generator *tg,
+			int width,
+			int height);
 	void (*update_visual_confirm_color)(struct dc *dc,
 			struct pipe_ctx *pipe_ctx,
 			int mpcc_id);
-
 	void (*update_phantom_vp_position)(struct dc *dc,
 			struct dc_state *context,
 			struct pipe_ctx *phantom_pipe);
 	void (*apply_update_flags_for_phantom)(struct pipe_ctx *phantom_pipe);
 
-	void (*commit_subvp_config)(struct dc *dc, struct dc_state *context);
-	void (*enable_phantom_streams)(struct dc *dc, struct dc_state *context);
-	void (*subvp_pipe_control_lock)(struct dc *dc,
-			struct dc_state *context,
-			bool lock,
-			bool should_lock_all_pipes,
-			struct pipe_ctx *top_pipe_to_program,
-			bool subvp_prev_use);
-
+	void (*calc_blocks_to_gate)(struct dc *dc, struct dc_state *context,
+		struct pg_block_update *update_state);
+	void (*calc_blocks_to_ungate)(struct dc *dc, struct dc_state *context,
+		struct pg_block_update *update_state);
+	void (*block_power_control)(struct dc *dc,
+		struct pg_block_update *update_state, bool power_on);
+	void (*root_clock_control)(struct dc *dc,
+		struct pg_block_update *update_state, bool power_on);
+	void (*set_idle_state)(const struct dc *dc, bool allow_idle);
+	uint32_t (*get_idle_state)(const struct dc *dc);
+	bool (*is_pipe_topology_transition_seamless)(struct dc *dc,
+			const struct dc_state *cur_ctx,
+			const struct dc_state *new_ctx);
 };
 
 void color_space_to_black_color(
@@ -420,15 +437,12 @@ const uint16_t *find_color_matrix(
 		enum dc_color_space color_space,
 		uint32_t *array_size);
 
+void get_surface_tile_visual_confirm_color(
+		struct pipe_ctx *pipe_ctx,
+		struct tg_color *color);
 void get_surface_visual_confirm_color(
 		const struct pipe_ctx *pipe_ctx,
 		struct tg_color *color);
-
-void get_subvp_visual_confirm_color(
-	struct dc *dc,
-	struct dc_state *context,
-	struct pipe_ctx *pipe_ctx,
-	struct tg_color *color);
 
 void get_hdr_visual_confirm_color(
 		struct pipe_ctx *pipe_ctx,
@@ -436,9 +450,12 @@ void get_hdr_visual_confirm_color(
 void get_mpctree_visual_confirm_color(
 		struct pipe_ctx *pipe_ctx,
 		struct tg_color *color);
-void get_surface_tile_visual_confirm_color(
-		struct pipe_ctx *pipe_ctx,
-		struct tg_color *color);
+
+void get_subvp_visual_confirm_color(
+	struct dc *dc,
+	struct dc_state *context,
+	struct pipe_ctx *pipe_ctx,
+	struct tg_color *color);
 
 void get_mclk_switch_visual_confirm_color(
 		struct dc *dc,
@@ -470,5 +487,7 @@ void hwss_power_on_mpc_mem_pwr(union block_sequence_params *params);
 void hwss_set_output_csc(union block_sequence_params *params);
 
 void hwss_set_ocsc_default(union block_sequence_params *params);
+
+void hwss_subvp_save_surf_addr(union block_sequence_params *params);
 
 #endif /* __DC_HW_SEQUENCER_H__ */
