@@ -2479,22 +2479,22 @@ static int send_break(struct tty_struct *tty, unsigned int duration)
 		return 0;
 
 	if (tty->driver->flags & TTY_DRIVER_HARDWARE_BREAK)
-		retval = tty->ops->break_ctl(tty, duration);
-	else {
-		/* Do the work ourselves */
-		if (tty_write_lock(tty, false) < 0)
-			return -EINTR;
-		retval = tty->ops->break_ctl(tty, -1);
-		if (retval)
-			goto out;
-		if (!signal_pending(current))
-			msleep_interruptible(duration);
+		return tty->ops->break_ctl(tty, duration);
+
+	/* Do the work ourselves */
+	if (tty_write_lock(tty, false) < 0)
+		return -EINTR;
+
+	retval = tty->ops->break_ctl(tty, -1);
+	if (!retval) {
+		msleep_interruptible(duration);
 		retval = tty->ops->break_ctl(tty, 0);
-out:
-		tty_write_unlock(tty);
-		if (signal_pending(current))
-			retval = -EINTR;
 	}
+	tty_write_unlock(tty);
+
+	if (signal_pending(current))
+		retval = -EINTR;
+
 	return retval;
 }
 
@@ -3304,7 +3304,7 @@ void tty_unregister_device(struct tty_driver *driver, unsigned index)
 EXPORT_SYMBOL(tty_unregister_device);
 
 /**
- * __tty_alloc_driver -- allocate tty driver
+ * __tty_alloc_driver - allocate tty driver
  * @lines: count of lines this driver can handle at most
  * @owner: module which is responsible for this driver
  * @flags: some of %TTY_DRIVER_ flags, will be set in driver->flags
@@ -3397,7 +3397,7 @@ static void destruct_tty_driver(struct kref *kref)
 }
 
 /**
- * tty_driver_kref_put -- drop a reference to a tty driver
+ * tty_driver_kref_put - drop a reference to a tty driver
  * @driver: driver of which to drop the reference
  *
  * The final put will destroy and free up the driver.
@@ -3409,7 +3409,7 @@ void tty_driver_kref_put(struct tty_driver *driver)
 EXPORT_SYMBOL(tty_driver_kref_put);
 
 /**
- * tty_register_driver -- register a tty driver
+ * tty_register_driver - register a tty driver
  * @driver: driver to register
  *
  * Called by a tty driver to register itself.
@@ -3474,7 +3474,7 @@ err:
 EXPORT_SYMBOL(tty_register_driver);
 
 /**
- * tty_unregister_driver -- unregister a tty driver
+ * tty_unregister_driver - unregister a tty driver
  * @driver: driver to unregister
  *
  * Called by a tty driver to unregister itself.
