@@ -206,14 +206,6 @@ static const u16 subplatform_g12_ids[] = {
 	INTEL_DG2_G12_IDS(0),
 };
 
-static const u16 subplatform_m_ids[] = {
-	INTEL_MTL_M_IDS(0),
-};
-
-static const u16 subplatform_p_ids[] = {
-	INTEL_MTL_P_IDS(0),
-};
-
 static bool find_devid(u16 id, const u16 *p, unsigned int num)
 {
 	for (; num; num--, p++) {
@@ -275,12 +267,6 @@ static void intel_device_info_subplatform_init(struct drm_i915_private *i915)
 	} else if (find_devid(devid, subplatform_g12_ids,
 			      ARRAY_SIZE(subplatform_g12_ids))) {
 		mask = BIT(INTEL_SUBPLATFORM_G12);
-	} else if (find_devid(devid, subplatform_m_ids,
-			      ARRAY_SIZE(subplatform_m_ids))) {
-		mask = BIT(INTEL_SUBPLATFORM_M);
-	} else if (find_devid(devid, subplatform_p_ids,
-			      ARRAY_SIZE(subplatform_p_ids))) {
-		mask = BIT(INTEL_SUBPLATFORM_P);
 	}
 
 	GEM_BUG_ON(mask & ~INTEL_SUBPLATFORM_MASK);
@@ -424,7 +410,6 @@ void intel_device_info_driver_create(struct drm_i915_private *i915,
 				     const struct intel_device_info *match_info)
 {
 	struct intel_runtime_info *runtime;
-	u16 ver, rel, step;
 
 	/* Setup INTEL_INFO() */
 	i915->__info = match_info;
@@ -432,19 +417,6 @@ void intel_device_info_driver_create(struct drm_i915_private *i915,
 	/* Initialize initial runtime info from static const data and pdev. */
 	runtime = RUNTIME_INFO(i915);
 	memcpy(runtime, &INTEL_INFO(i915)->__runtime, sizeof(*runtime));
-
-	/* Probe display support */
-	i915->display.info.__device_info = intel_display_device_probe(i915, HAS_GMD_ID(i915),
-								      &ver, &rel, &step);
-	memcpy(DISPLAY_RUNTIME_INFO(i915),
-	       &DISPLAY_INFO(i915)->__runtime_defaults,
-	       sizeof(*DISPLAY_RUNTIME_INFO(i915)));
-
-	if (HAS_GMD_ID(i915)) {
-		DISPLAY_RUNTIME_INFO(i915)->ip.ver = ver;
-		DISPLAY_RUNTIME_INFO(i915)->ip.rel = rel;
-		DISPLAY_RUNTIME_INFO(i915)->ip.step = step;
-	}
 
 	runtime->device_id = device_id;
 }
