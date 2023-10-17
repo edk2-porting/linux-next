@@ -13,6 +13,8 @@
 #include <linux/module.h>
 #include <linux/types.h>
 
+#include "fpga-test-helpers.h"
+
 struct bridge_stats {
 	bool enable;
 };
@@ -53,7 +55,7 @@ static struct bridge_ctx *register_test_bridge(struct kunit *test)
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
 
-	ctx->pdev = platform_device_register_simple("bridge_pdev", PLATFORM_DEVID_AUTO, NULL, 0);
+	ctx->pdev = platform_device_register_simple(TEST_PDEV_NAME, PLATFORM_DEVID_AUTO, NULL, 0);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->pdev);
 
 	ctx->bridge = fpga_bridge_register(&ctx->pdev->dev, "Fake FPGA bridge", &fake_bridge_ops,
@@ -144,6 +146,18 @@ static void fpga_bridge_test_get_put_list(struct kunit *test)
 	unregister_test_bridge(ctx_1);
 }
 
+TEST_PLATFORM_DRIVER(test_platform_driver);
+
+static int fpga_bridge_test_suite_init(struct kunit_suite *suite)
+{
+	return platform_driver_register(&test_platform_driver);
+}
+
+static void fpga_bridge_test_suite_exit(struct kunit_suite *suite)
+{
+	platform_driver_unregister(&test_platform_driver);
+}
+
 static int fpga_bridge_test_init(struct kunit *test)
 {
 	test->priv = register_test_bridge(test);
@@ -165,6 +179,8 @@ static struct kunit_case fpga_bridge_test_cases[] = {
 
 static struct kunit_suite fpga_bridge_suite = {
 	.name = "fpga_bridge",
+	.suite_init = fpga_bridge_test_suite_init,
+	.suite_exit = fpga_bridge_test_suite_exit,
 	.init = fpga_bridge_test_init,
 	.exit = fpga_bridge_test_exit,
 	.test_cases = fpga_bridge_test_cases,

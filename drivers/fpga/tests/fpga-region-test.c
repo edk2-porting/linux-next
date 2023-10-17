@@ -15,6 +15,8 @@
 #include <linux/platform_device.h>
 #include <linux/types.h>
 
+#include "fpga-test-helpers.h"
+
 struct mgr_stats {
 	u32 write_count;
 };
@@ -93,6 +95,8 @@ static void fpga_region_test_class_find(struct kunit *test)
 
 	region = fpga_region_class_find(NULL, &ctx->region_pdev->dev, fake_region_match);
 	KUNIT_EXPECT_PTR_EQ(test, region, ctx->region);
+
+	put_device(&region->dev);
 }
 
 /*
@@ -132,6 +136,18 @@ static void fpga_region_test_program_fpga(struct kunit *test)
 	fpga_image_info_free(img_info);
 }
 
+TEST_PLATFORM_DRIVER(test_platform_driver);
+
+static int fpga_region_test_suite_init(struct kunit_suite *suite)
+{
+	return platform_driver_register(&test_platform_driver);
+}
+
+static void fpga_region_test_suite_exit(struct kunit_suite *suite)
+{
+	platform_driver_unregister(&test_platform_driver);
+}
+
 /*
  * The configuration used in this test suite uses a single bridge to
  * limit the code under test to a single unit. The functions used by the
@@ -146,14 +162,15 @@ static int fpga_region_test_init(struct kunit *test)
 	ctx = kunit_kzalloc(test, sizeof(*ctx), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx);
 
-	ctx->mgr_pdev = platform_device_register_simple("mgr_pdev", PLATFORM_DEVID_AUTO, NULL, 0);
+	ctx->mgr_pdev = platform_device_register_simple(TEST_PDEV_NAME, PLATFORM_DEVID_AUTO,
+							NULL, 0);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->mgr_pdev);
 
 	ctx->mgr = devm_fpga_mgr_register(&ctx->mgr_pdev->dev, "Fake FPGA Manager", &fake_mgr_ops,
 					  &ctx->mgr_stats);
 	KUNIT_ASSERT_FALSE(test, IS_ERR_OR_NULL(ctx->mgr));
 
-	ctx->bridge_pdev = platform_device_register_simple("bridge_pdev", PLATFORM_DEVID_AUTO,
+	ctx->bridge_pdev = platform_device_register_simple(TEST_PDEV_NAME, PLATFORM_DEVID_AUTO,
 							   NULL, 0);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->bridge_pdev);
 
@@ -163,7 +180,7 @@ static int fpga_region_test_init(struct kunit *test)
 
 	ctx->bridge_stats.enable = true;
 
-	ctx->region_pdev = platform_device_register_simple("region_pdev", PLATFORM_DEVID_AUTO,
+	ctx->region_pdev = platform_device_register_simple(TEST_PDEV_NAME, PLATFORM_DEVID_AUTO,
 							   NULL, 0);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, ctx->region_pdev);
 
@@ -195,12 +212,13 @@ static void fpga_region_test_exit(struct kunit *test)
 static struct kunit_case fpga_region_test_cases[] = {
 	KUNIT_CASE(fpga_region_test_class_find),
 	KUNIT_CASE(fpga_region_test_program_fpga),
-
 	{}
 };
 
 static struct kunit_suite fpga_region_suite = {
-	.name = "fpga_mgr",
+	.name = "fpga_region",
+	.suite_init = fpga_region_test_suite_init,
+	.suite_exit = fpga_region_test_suite_exit,
 	.init = fpga_region_test_init,
 	.exit = fpga_region_test_exit,
 	.test_cases = fpga_region_test_cases,
