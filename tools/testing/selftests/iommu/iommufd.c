@@ -86,12 +86,13 @@ TEST_F(iommufd, cmd_fail)
 
 TEST_F(iommufd, cmd_length)
 {
-#define TEST_LENGTH(_struct, _ioctl)                                     \
+#define TEST_LENGTH(_struct, _ioctl, _last)                              \
 	{                                                                \
+		size_t min_size = offsetofend(struct _struct, _last);    \
 		struct {                                                 \
 			struct _struct cmd;                              \
 			uint8_t extra;                                   \
-		} cmd = { .cmd = { .size = sizeof(struct _struct) - 1 }, \
+		} cmd = { .cmd = { .size = min_size - 1 },               \
 			  .extra = UINT8_MAX };                          \
 		int old_errno;                                           \
 		int rc;                                                  \
@@ -112,16 +113,19 @@ TEST_F(iommufd, cmd_length)
 		}                                                        \
 	}
 
-	TEST_LENGTH(iommu_destroy, IOMMU_DESTROY);
-	TEST_LENGTH(iommu_hw_info, IOMMU_GET_HW_INFO);
-	TEST_LENGTH(iommu_ioas_alloc, IOMMU_IOAS_ALLOC);
-	TEST_LENGTH(iommu_ioas_iova_ranges, IOMMU_IOAS_IOVA_RANGES);
-	TEST_LENGTH(iommu_ioas_allow_iovas, IOMMU_IOAS_ALLOW_IOVAS);
-	TEST_LENGTH(iommu_ioas_map, IOMMU_IOAS_MAP);
-	TEST_LENGTH(iommu_ioas_copy, IOMMU_IOAS_COPY);
-	TEST_LENGTH(iommu_ioas_unmap, IOMMU_IOAS_UNMAP);
-	TEST_LENGTH(iommu_option, IOMMU_OPTION);
-	TEST_LENGTH(iommu_vfio_ioas, IOMMU_VFIO_IOAS);
+	TEST_LENGTH(iommu_destroy, IOMMU_DESTROY, id);
+	TEST_LENGTH(iommu_hw_info, IOMMU_GET_HW_INFO, __reserved);
+	TEST_LENGTH(iommu_hwpt_alloc, IOMMU_HWPT_ALLOC, __reserved);
+	TEST_LENGTH(iommu_ioas_alloc, IOMMU_IOAS_ALLOC, out_ioas_id);
+	TEST_LENGTH(iommu_ioas_iova_ranges, IOMMU_IOAS_IOVA_RANGES,
+		    out_iova_alignment);
+	TEST_LENGTH(iommu_ioas_allow_iovas, IOMMU_IOAS_ALLOW_IOVAS,
+		    allowed_iovas);
+	TEST_LENGTH(iommu_ioas_map, IOMMU_IOAS_MAP, iova);
+	TEST_LENGTH(iommu_ioas_copy, IOMMU_IOAS_COPY, src_iova);
+	TEST_LENGTH(iommu_ioas_unmap, IOMMU_IOAS_UNMAP, length);
+	TEST_LENGTH(iommu_option, IOMMU_OPTION, val64);
+	TEST_LENGTH(iommu_vfio_ioas, IOMMU_VFIO_IOAS, __reserved);
 #undef TEST_LENGTH
 }
 
@@ -1404,13 +1408,28 @@ TEST_F(iommufd_mock_domain, alloc_hwpt)
 	int i;
 
 	for (i = 0; i != variant->mock_domains; i++) {
+		uint32_t hwpt_id[2];
 		uint32_t stddev_id;
-		uint32_t hwpt_id;
 
-		test_cmd_hwpt_alloc(self->idev_ids[0], self->ioas_id, &hwpt_id);
-		test_cmd_mock_domain(hwpt_id, &stddev_id, NULL, NULL);
+		test_err_hwpt_alloc(EOPNOTSUPP,
+				    self->idev_ids[i], self->ioas_id,
+				    ~IOMMU_HWPT_ALLOC_NEST_PARENT, &hwpt_id[0]);
+		test_cmd_hwpt_alloc(self->idev_ids[i], self->ioas_id,
+				    0, &hwpt_id[0]);
+		test_cmd_hwpt_alloc(self->idev_ids[i], self->ioas_id,
+				    IOMMU_HWPT_ALLOC_NEST_PARENT, &hwpt_id[1]);
+
+		/* Do a hw_pagetable rotation test */
+		test_cmd_mock_domain_replace(self->stdev_ids[i], hwpt_id[0]);
+		EXPECT_ERRNO(EBUSY, _test_ioctl_destroy(self->fd, hwpt_id[0]));
+		test_cmd_mock_domain_replace(self->stdev_ids[i], hwpt_id[1]);
+		EXPECT_ERRNO(EBUSY, _test_ioctl_destroy(self->fd, hwpt_id[1]));
+		test_cmd_mock_domain_replace(self->stdev_ids[i], self->ioas_id);
+		test_ioctl_destroy(hwpt_id[1]);
+
+		test_cmd_mock_domain(hwpt_id[0], &stddev_id, NULL, NULL);
 		test_ioctl_destroy(stddev_id);
-		test_ioctl_destroy(hwpt_id);
+		test_ioctl_destroy(hwpt_id[0]);
 	}
 }
 
@@ -1729,7 +1748,7 @@ TEST_F(vfio_compat_mock_domain, map)
 	ASSERT_EQ(0, ioctl(self->fd, VFIO_IOMMU_UNMAP_DMA, &unmap_cmd));
 	ASSERT_EQ(BUFFER_SIZE, unmap_cmd.size);
 
-	/* UNMAP_FLAG_ALL requres 0 iova/size */
+	/* UNMAP_FLAG_ALL requires 0 iova/size */
 	ASSERT_EQ(0, ioctl(self->fd, VFIO_IOMMU_MAP_DMA, &map_cmd));
 	unmap_cmd.flags = VFIO_DMA_UNMAP_FLAG_ALL;
 	EXPECT_ERRNO(EINVAL, ioctl(self->fd, VFIO_IOMMU_UNMAP_DMA, &unmap_cmd));
