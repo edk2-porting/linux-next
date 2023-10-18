@@ -204,37 +204,35 @@ void dm_helpers_dp_update_branch_info(
 {}
 
 static void dm_helpers_construct_old_payload(
-			struct dc_link *link,
-			int pbn_per_slot,
+			struct drm_dp_mst_topology_mgr *mgr,
+			struct drm_dp_mst_topology_state *mst_state,
 			struct drm_dp_mst_atomic_payload *new_payload,
 			struct drm_dp_mst_atomic_payload *old_payload)
 {
-	struct link_mst_stream_allocation_table current_link_table =
-									link->mst_stream_alloc_table;
-	struct link_mst_stream_allocation *dc_alloc;
-	int i;
+	struct drm_dp_mst_atomic_payload *pos;
+	int pbn_per_slot = mst_state->pbn_div;
+	u8 next_payload_vc_start = mgr->next_start_slot;
+	u8 payload_vc_start = new_payload->vc_start_slot;
+	u8 allocated_time_slots;
 
 	*old_payload = *new_payload;
 
 	/* Set correct time_slots/PBN of old payload.
 	 * other fields (delete & dsc_enabled) in
 	 * struct drm_dp_mst_atomic_payload are don't care fields
-	 * while calling drm_dp_remove_payload()
+	 * while calling drm_dp_remove_payload_part2()
 	 */
-	for (i = 0; i < current_link_table.stream_count; i++) {
-		dc_alloc =
-			&current_link_table.stream_allocations[i];
-
-		if (dc_alloc->vcp_id == new_payload->vcpi) {
-			old_payload->time_slots = dc_alloc->slot_count;
-			old_payload->pbn = dc_alloc->slot_count * pbn_per_slot;
-			break;
-		}
+	list_for_each_entry(pos, &mst_state->payloads, next) {
+		if (pos != new_payload &&
+		    pos->vc_start_slot > payload_vc_start &&
+		    pos->vc_start_slot < next_payload_vc_start)
+			next_payload_vc_start = pos->vc_start_slot;
 	}
 
-	/* make sure there is an old payload*/
-	ASSERT(i != current_link_table.stream_count);
+	allocated_time_slots = next_payload_vc_start - payload_vc_start;
 
+	old_payload->time_slots = allocated_time_slots;
+	old_payload->pbn = allocated_time_slots * pbn_per_slot;
 }
 
 /*
@@ -263,21 +261,20 @@ bool dm_helpers_dp_mst_write_payload_allocation_table(
 
 	mst_mgr = &aconnector->mst_root->mst_mgr;
 	mst_state = to_drm_dp_mst_topology_state(mst_mgr->base.state);
-
-	/* It's OK for this to fail */
 	new_payload = drm_atomic_get_mst_payload_state(mst_state, aconnector->mst_output_port);
 
 	if (enable) {
 		target_payload = new_payload;
 
+		/* It's OK for this to fail */
 		drm_dp_add_payload_part1(mst_mgr, mst_state, new_payload);
 	} else {
 		/* construct old payload by VCPI*/
-		dm_helpers_construct_old_payload(stream->link, mst_state->pbn_div,
-						new_payload, &old_payload);
+		dm_helpers_construct_old_payload(mst_mgr, mst_state,
+						 new_payload, &old_payload);
 		target_payload = &old_payload;
 
-		drm_dp_remove_payload(mst_mgr, mst_state, &old_payload, new_payload);
+		drm_dp_remove_payload_part1(mst_mgr, mst_state, new_payload);
 	}
 
 	/* mst_mgr->->payloads are VC payload notify MST branch using DPCD or
@@ -344,7 +341,7 @@ bool dm_helpers_dp_mst_send_payload_allocation(
 	struct amdgpu_dm_connector *aconnector;
 	struct drm_dp_mst_topology_state *mst_state;
 	struct drm_dp_mst_topology_mgr *mst_mgr;
-	struct drm_dp_mst_atomic_payload *payload;
+	struct drm_dp_mst_atomic_payload *new_payload, old_payload;
 	enum mst_progress_status set_flag = MST_ALLOCATE_NEW_PAYLOAD;
 	enum mst_progress_status clr_flag = MST_CLEAR_ALLOCATED_PAYLOAD;
 	int ret = 0;
@@ -357,15 +354,20 @@ bool dm_helpers_dp_mst_send_payload_allocation(
 	mst_mgr = &aconnector->mst_root->mst_mgr;
 	mst_state = to_drm_dp_mst_topology_state(mst_mgr->base.state);
 
-	payload = drm_atomic_get_mst_payload_state(mst_state, aconnector->mst_output_port);
+	new_payload = drm_atomic_get_mst_payload_state(mst_state, aconnector->mst_output_port);
 
 	if (!enable) {
 		set_flag = MST_CLEAR_ALLOCATED_PAYLOAD;
 		clr_flag = MST_ALLOCATE_NEW_PAYLOAD;
 	}
 
-	if (enable)
-		ret = drm_dp_add_payload_part2(mst_mgr, mst_state->base.state, payload);
+	if (enable) {
+		ret = drm_dp_add_payload_part2(mst_mgr, mst_state->base.state, new_payload);
+	} else {
+		dm_helpers_construct_old_payload(mst_mgr, mst_state,
+						 new_payload, &old_payload);
+		drm_dp_remove_payload_part2(mst_mgr, mst_state, &old_payload, new_payload);
+	}
 
 	if (ret) {
 		amdgpu_dm_set_mst_status(&aconnector->mst_status,

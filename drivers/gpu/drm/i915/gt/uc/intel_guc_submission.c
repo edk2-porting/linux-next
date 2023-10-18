@@ -1690,9 +1690,7 @@ static void guc_engine_reset_prepare(struct intel_engine_cs *engine)
 	 * Wa_22011802037: In addition to stopping the cs, we need
 	 * to wait for any pending mi force wakeups
 	 */
-	if (IS_MTL_GRAPHICS_STEP(engine->i915, M, STEP_A0, STEP_B0) ||
-	    (GRAPHICS_VER(engine->i915) >= 11 &&
-	     GRAPHICS_VER_FULL(engine->i915) < IP_VER(12, 70))) {
+	if (intel_engine_reset_needs_wa_22011802037(engine->gt)) {
 		intel_engine_stop_cs(engine);
 		intel_engine_wait_for_pending_mi_fw(engine);
 	}
@@ -4299,7 +4297,7 @@ static void guc_default_vfuncs(struct intel_engine_cs *engine)
 
 	/* Wa_14014475959:dg2 */
 	if (engine->class == COMPUTE_CLASS)
-		if (IS_MTL_GRAPHICS_STEP(engine->i915, M, STEP_A0, STEP_B0) ||
+		if (IS_GFX_GT_IP_STEP(engine->gt, IP_VER(12, 70), STEP_A0, STEP_B0) ||
 		    IS_DG2(engine->i915))
 			engine->flags |= I915_ENGINE_USES_WA_HOLD_CCS_SWITCHOUT;
 
@@ -4804,19 +4802,19 @@ static void guc_context_replay(struct intel_context *ce)
 static void guc_handle_context_reset(struct intel_guc *guc,
 				     struct intel_context *ce)
 {
+	bool capture = intel_context_is_schedulable(ce);
+
 	trace_intel_context_reset(ce);
 
-	guc_dbg(guc, "Got context reset notification: 0x%04X on %s, exiting = %s, banned = %s\n",
+	guc_dbg(guc, "%s context reset notification: 0x%04X on %s, exiting = %s, banned = %s\n",
+		capture ? "Got" : "Ignoring",
 		ce->guc_id.id, ce->engine->name,
 		str_yes_no(intel_context_is_exiting(ce)),
 		str_yes_no(intel_context_is_banned(ce)));
 
-	if (likely(intel_context_is_schedulable(ce))) {
+	if (capture) {
 		capture_error_state(guc, ce);
 		guc_context_replay(ce);
-	} else {
-		guc_info(guc, "Ignoring context reset notification of exiting context 0x%04X on %s",
-			 ce->guc_id.id, ce->engine->name);
 	}
 }
 
