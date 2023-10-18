@@ -400,7 +400,7 @@ struct tb_regs_port_header {
 #define ADP_DP_CS_1_AUX_RX_HOPID_SHIFT		11
 #define ADP_DP_CS_2				0x02
 #define ADP_DP_CS_2_NRD_MLC_MASK		GENMASK(2, 0)
-#define ADP_DP_CS_2_HDP				BIT(6)
+#define ADP_DP_CS_2_HPD				BIT(6)
 #define ADP_DP_CS_2_NRD_MLR_MASK		GENMASK(9, 7)
 #define ADP_DP_CS_2_NRD_MLR_SHIFT		7
 #define ADP_DP_CS_2_CA				BIT(10)
@@ -417,7 +417,7 @@ struct tb_regs_port_header {
 #define ADP_DP_CS_2_ESTIMATED_BW_MASK		GENMASK(31, 24)
 #define ADP_DP_CS_2_ESTIMATED_BW_SHIFT		24
 #define ADP_DP_CS_3				0x03
-#define ADP_DP_CS_3_HDPC			BIT(9)
+#define ADP_DP_CS_3_HPDC			BIT(9)
 #define DP_LOCAL_CAP				0x04
 #define DP_REMOTE_CAP				0x05
 /* For DP IN adapter */
@@ -484,9 +484,6 @@ struct tb_regs_port_header {
 #define ADP_USB3_CS_3				0x03
 #define ADP_USB3_CS_3_SCALE_MASK		GENMASK(5, 0)
 #define ADP_USB3_CS_4				0x04
-#define ADP_USB3_CS_4_ALR_MASK			GENMASK(6, 0)
-#define ADP_USB3_CS_4_ALR_20G			0x1
-#define ADP_USB3_CS_4_ULV			BIT(7)
 #define ADP_USB3_CS_4_MSLR_MASK			GENMASK(18, 12)
 #define ADP_USB3_CS_4_MSLR_SHIFT		12
 #define ADP_USB3_CS_4_MSLR_20G			0x1
