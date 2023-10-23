@@ -166,7 +166,7 @@ objpool_try_add_slot(void *obj, struct objpool_head *pool, int cpu)
 		head = READ_ONCE(slot->head);
 		/* fault caught: something must be wrong */
 		WARN_ON_ONCE(tail - head > pool->nr_objs);
-	} while (!try_cmpxchg_acquire(&slot->tail, &tail, tail + 1));
+	} while (!try_cmpxchg_local(&slot->tail, &tail, tail + 1));
 
 	/* now the tail position is reserved for the given obj */
 	WRITE_ONCE(slot->entries[tail & slot->mask], obj);
