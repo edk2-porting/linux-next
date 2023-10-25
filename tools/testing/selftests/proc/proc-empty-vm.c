@@ -37,6 +37,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "../kselftest.h"
 
 #ifdef __amd64__
 #define TEST_VSYSCALL
@@ -83,10 +84,7 @@ static const char proc_pid_smaps_vsyscall_1[] =
 "SwapPss:               0 kB\n"
 "Locked:                0 kB\n"
 "THPeligible:           0\n"
-/*
- * "ProtectionKey:" field is conditional. It is possible to check it as well,
- * but I don't have such machine.
- */
+"ProtectionKey:         0\n"
 ;
 
 static const char proc_pid_smaps_vsyscall_2[] =
@@ -113,10 +111,7 @@ static const char proc_pid_smaps_vsyscall_2[] =
 "SwapPss:               0 kB\n"
 "Locked:                0 kB\n"
 "THPeligible:           0\n"
-/*
- * "ProtectionKey:" field is conditional. It is possible to check it as well,
- * but I'm too tired.
- */
+"ProtectionKey:         0\n"
 ;
 
 static void sigaction_SIGSEGV(int _, siginfo_t *__, void *___)
@@ -241,13 +236,26 @@ static int test_proc_pid_smaps(pid_t pid)
 	} else {
 		ssize_t rv = read(fd, buf, sizeof(buf));
 		close(fd);
-		if (g_vsyscall == 0) {
-			assert(rv == 0);
-		} else {
-			size_t len = strlen(g_proc_pid_maps_vsyscall);
-			/* TODO "ProtectionKey:" */
-			assert(rv > len);
-			assert(memcmp(buf, g_proc_pid_maps_vsyscall, len) == 0);
+		assert(rv >= 0);
+		assert(rv <= sizeof(buf));
+		if (g_vsyscall != 0) {
+			int pkey = pkey_alloc(0, 0);
+
+			if (pkey < 0) {
+				size_t len = strlen(g_proc_pid_maps_vsyscall);
+
+				assert(rv > len);
+				assert(memcmp(buf, g_proc_pid_maps_vsyscall, len) == 0);
+			} else {
+				pkey_free(pkey);
+				static const char * const S[] = {
+					"ProtectionKey:         0\n"
+				};
+				int i;
+
+				for (i = 0; i < ARRAY_SIZE(S); i++)
+					assert(memmem(buf, rv, S[i], strlen(S[i])));
+			}
 		}
 		return EXIT_SUCCESS;
 	}
