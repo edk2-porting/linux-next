@@ -26,7 +26,6 @@
 #include <uapi/linux/videodev2.h>
 
 #include "rockchip_drm_drv.h"
-#include "rockchip_drm_vop.h"
 
 #define HIWORD_UPDATE(val, mask)	(val | (mask) << 16)
 
