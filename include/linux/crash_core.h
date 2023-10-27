@@ -131,7 +131,7 @@ static inline void __init reserve_crashkernel_generic(char *cmdline,
 struct crash_mem {
 	unsigned int max_nr_ranges;
 	unsigned int nr_ranges;
-	struct range ranges[];
+	struct range ranges[] __counted_by(max_nr_ranges);
 };
 
 extern int crash_exclude_mem_range(struct crash_mem *mem,
