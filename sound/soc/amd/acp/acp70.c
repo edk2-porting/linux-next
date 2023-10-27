@@ -3,12 +3,11 @@
 // This file is provided under a dual BSD/GPLv2 license. When using or
 // redistributing this file, you may do so under either license.
 //
-// Copyright(c) 2022 Advanced Micro Devices, Inc.
+// Copyright(c) 2023 Advanced Micro Devices, Inc.
 //
-// Authors: Ajit Kumar Pandey <AjitKumar.Pandey@amd.com>
-//          V sujith kumar Reddy <Vsujithkumar.Reddy@amd.com>
+// Authors: Syed Saba kareem <syed.sabakareem@amd.com>
 /*
- * Hardware interface for Renoir ACP block
+ * Hardware interface for ACP7.0 block
  */
 
 #include <linux/platform_device.h>
@@ -19,19 +18,12 @@
 #include <sound/soc.h>
 #include <sound/soc-dai.h>
 #include <linux/dma-mapping.h>
-#include <linux/pci.h>
 #include <linux/pm_runtime.h>
-
+#include <linux/pci.h>
 #include "amd.h"
-#include "../mach-config.h"
 #include "acp-mach.h"
 
-#define DRV_NAME "acp_asoc_rembrandt"
-
-#define MP1_C2PMSG_69 0x3B10A14
-#define MP1_C2PMSG_85 0x3B10A54
-#define MP1_C2PMSG_93 0x3B10A74
-#define HOST_BRIDGE_ID 0x14B5
+#define DRV_NAME "acp_asoc_acp70"
 
 static struct acp_resource rsrc = {
 	.offset = 0,
@@ -45,37 +37,15 @@ static struct acp_resource rsrc = {
 	.sram_pte_offset = 0x03802800,
 };
 
-static struct snd_soc_acpi_codecs amp_rt1019 = {
-	.num_codecs = 1,
-	.codecs = {"10EC1019"}
-};
-
-static struct snd_soc_acpi_codecs amp_max = {
-	.num_codecs = 1,
-	.codecs = {"MX98360A"}
-};
-
-static struct snd_soc_acpi_mach snd_soc_acpi_amd_rmb_acp_machines[] = {
+static struct snd_soc_acpi_mach snd_soc_acpi_amd_acp70_acp_machines[] = {
 	{
-		.id = "10508825",
-		.drv_name = "rmb-nau8825-max",
-		.machine_quirk = snd_soc_acpi_codec_list,
-		.quirk_data = &amp_max,
-	},
-	{
-		.id = "AMDI0007",
-		.drv_name = "rembrandt-acp",
-	},
-	{
-		.id = "RTL5682",
-		.drv_name = "rmb-rt5682s-rt1019",
-		.machine_quirk = snd_soc_acpi_codec_list,
-		.quirk_data = &amp_rt1019,
+		.id = "AMDI0029",
+		.drv_name = "acp70-acp",
 	},
 	{},
 };
 
-static struct snd_soc_dai_driver acp_rmb_dai[] = {
+static struct snd_soc_dai_driver acp70_dai[] = {
 {
 	.name = "acp-i2s-sp",
 	.id = I2S_SP_INSTANCE,
@@ -166,32 +136,12 @@ static struct snd_soc_dai_driver acp_rmb_dai[] = {
 },
 };
 
-static int acp6x_master_clock_generate(struct device *dev)
-{
-	int data = 0;
-	struct pci_dev *smn_dev;
-
-	smn_dev = pci_get_device(PCI_VENDOR_ID_AMD, HOST_BRIDGE_ID, NULL);
-	if (!smn_dev) {
-		dev_err(dev, "Failed to get host bridge device\n");
-		return -ENODEV;
-	}
-
-	smn_write(smn_dev, MP1_C2PMSG_93, 0);
-	smn_write(smn_dev, MP1_C2PMSG_85, 0xC4);
-	smn_write(smn_dev, MP1_C2PMSG_69, 0x4);
-	read_poll_timeout(smn_read, data, data, DELAY_US,
-			  ACP_TIMEOUT, false, smn_dev, MP1_C2PMSG_93);
-	return 0;
-}
-
-static int rembrandt_audio_probe(struct platform_device *pdev)
+static int acp_acp70_audio_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct acp_chip_info *chip;
 	struct acp_dev_data *adata;
 	struct resource *res;
-	u32 ret;
 
 	chip = dev_get_platdata(&pdev->dev);
 	if (!chip || !chip->base) {
@@ -199,7 +149,7 @@ static int rembrandt_audio_probe(struct platform_device *pdev)
 		return -ENODEV;
 	}
 
-	if (chip->acp_rev != ACP6X_DEV) {
+	if (chip->acp_rev != ACP70_DEV) {
 		dev_err(&pdev->dev, "Un-supported ACP Revision %d\n", chip->acp_rev);
 		return -ENODEV;
 	}
@@ -226,21 +176,15 @@ static int rembrandt_audio_probe(struct platform_device *pdev)
 
 	adata->i2s_irq = res->start;
 	adata->dev = dev;
-	adata->dai_driver = acp_rmb_dai;
-	adata->num_dai = ARRAY_SIZE(acp_rmb_dai);
+	adata->dai_driver = acp70_dai;
+	adata->num_dai = ARRAY_SIZE(acp70_dai);
 	adata->rsrc = &rsrc;
-	adata->platform = REMBRANDT;
+	adata->machines = snd_soc_acpi_amd_acp70_acp_machines;
+	adata->platform = ACP70;
 	adata->flag = chip->flag;
-	adata->machines = snd_soc_acpi_amd_rmb_acp_machines;
 	acp_machine_select(adata);
 
 	dev_set_drvdata(dev, adata);
-
-	if (chip->flag != FLAG_AMD_LEGACY_ONLY_DMIC) {
-		ret = acp6x_master_clock_generate(dev);
-		if (ret)
-			return ret;
-	}
 	acp_enable_interrupts(adata);
 	acp_platform_register(dev);
 	pm_runtime_set_autosuspend_delay(&pdev->dev, ACP_SUSPEND_DELAY_MS);
@@ -251,7 +195,7 @@ static int rembrandt_audio_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static void rembrandt_audio_remove(struct platform_device *pdev)
+static void acp_acp70_audio_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct acp_dev_data *adata = dev_get_drvdata(dev);
@@ -261,7 +205,7 @@ static void rembrandt_audio_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
-static int __maybe_unused rmb_pcm_resume(struct device *dev)
+static int __maybe_unused acp70_pcm_resume(struct device *dev)
 {
 	struct acp_dev_data *adata = dev_get_drvdata(dev);
 	struct acp_stream *stream;
@@ -269,43 +213,42 @@ static int __maybe_unused rmb_pcm_resume(struct device *dev)
 	snd_pcm_uframes_t buf_in_frames;
 	u64 buf_size;
 
-	if (adata->flag != FLAG_AMD_LEGACY_ONLY_DMIC)
-		acp6x_master_clock_generate(dev);
-
 	spin_lock(&adata->acp_lock);
 	list_for_each_entry(stream, &adata->stream_list, list) {
-		substream = stream->substream;
-		if (substream && substream->runtime) {
-			buf_in_frames = (substream->runtime->buffer_size);
-			buf_size = frames_to_bytes(substream->runtime, buf_in_frames);
-			config_pte_for_stream(adata, stream);
-			config_acp_dma(adata, stream, buf_size);
-			if (stream->dai_id)
-				restore_acp_i2s_params(substream, adata, stream);
-			else
-				restore_acp_pdm_params(substream, adata);
+		if (stream) {
+			substream = stream->substream;
+			if (substream && substream->runtime) {
+				buf_in_frames = (substream->runtime->buffer_size);
+				buf_size = frames_to_bytes(substream->runtime, buf_in_frames);
+				config_pte_for_stream(adata, stream);
+				config_acp_dma(adata, stream, buf_size);
+				if (stream->dai_id)
+					restore_acp_i2s_params(substream, adata, stream);
+				else
+					restore_acp_pdm_params(substream, adata);
+			}
 		}
 	}
-	spin_unlock(&adata->acp_lock);
-	return 0;
+		spin_unlock(&adata->acp_lock);
+		return 0;
 }
 
-static const struct dev_pm_ops rmb_dma_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(NULL, rmb_pcm_resume)
+static const struct dev_pm_ops acp70_dma_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(NULL, acp70_pcm_resume)
 };
 
-static struct platform_driver rembrandt_driver = {
-	.probe = rembrandt_audio_probe,
-	.remove_new = rembrandt_audio_remove,
+static struct platform_driver acp70_driver = {
+	.probe = acp_acp70_audio_probe,
+	.remove_new = acp_acp70_audio_remove,
 	.driver = {
-		.name = "acp_asoc_rembrandt",
-		.pm = &rmb_dma_pm_ops,
+		.name = "acp_asoc_acp70",
+		.pm = &acp70_dma_pm_ops,
 	},
 };
 
-module_platform_driver(rembrandt_driver);
+module_platform_driver(acp70_driver);
 
-MODULE_DESCRIPTION("AMD ACP Rembrandt Driver");
+MODULE_DESCRIPTION("AMD ACP ACP70 Driver");
 MODULE_IMPORT_NS(SND_SOC_ACP_COMMON);
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_ALIAS("platform:" DRV_NAME);
