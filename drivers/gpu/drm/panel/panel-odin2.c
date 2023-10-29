@@ -70,18 +70,18 @@ static int sim_off(struct sim *ctx)
 
 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 
-	ret = mipi_dsi_dcs_set_display_off(dsi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set display off: %d\n", ret);
-		return ret;
-	}
-	msleep(50);
+	// ret = mipi_dsi_dcs_set_display_off(dsi);
+	// if (ret < 0) {
+	// 	dev_err(dev, "Failed to set display off: %d\n", ret);
+	// 	return ret;
+	// }
+	// msleep(50);
 
-	ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
-	if (ret < 0) {
-		dev_err(dev, "Failed to enter sleep mode: %d\n", ret);
-		return ret;
-	}
+	// ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
+	// if (ret < 0) {
+	// 	dev_err(dev, "Failed to enter sleep mode: %d\n", ret);
+	// 	return ret;
+	// }
 	msleep(120);
 
 	return 0;
@@ -194,9 +194,10 @@ static int sim_probe(struct mipi_dsi_device *dsi)
 		       DRM_MODE_CONNECTOR_DSI);
 	ctx->panel.prepare_prev_first = true;
 
-	// ret = drm_panel_of_backlight(&ctx->panel);
-	// if (ret)
-	// 	return dev_err_probe(dev, ret, "Failed to get backlight\n");
+	ret = drm_panel_of_backlight(&ctx->panel);
+	if (ret)
+		dev_err(dev, "Failed to get backlight: %d\n", ret);
+		// return dev_err_probe(dev, ret, "Failed to get backlight\n");
 
 	drm_panel_add(&ctx->panel);
 

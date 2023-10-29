@@ -32,16 +32,43 @@
 		serial2 = &uart15;
 	};
 
-	// backlight: backlight {
-	// 	compatible = "pwm-backlight";
-	// 	pwms = <&pwm0 0 1000000>;
-	// 	// power-supply = <&bl_pp5000>;
-	// 	enable-gpios = <&pio 176 0>;
-	// 	brightness-levels = <0 1023>;
-	// 	num-interpolated-steps = <1023>;
-	// 	default-brightness-level = <576>;
-	// 	status = "okay";
-	// };
+	wcd938x: audio-codec {
+		compatible = "qcom,wcd9385-codec";
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&wcd_default>;
+
+		qcom,micbias1-microvolt = <1800000>;
+		qcom,micbias2-microvolt = <1800000>;
+		qcom,micbias3-microvolt = <1800000>;
+		qcom,micbias4-microvolt = <1800000>;
+		qcom,mbhc-buttons-vthreshold-microvolt = <75000 150000 237000 500000 500000 500000 500000 500000>;
+		qcom,mbhc-headset-vthreshold-microvolt = <1700000>;
+		qcom,mbhc-headphone-vthreshold-microvolt = <50000>;
+		qcom,rx-device = <&wcd_rx>;
+		qcom,tx-device = <&wcd_tx>;
+
+		reset-gpios = <&tlmm 108 GPIO_ACTIVE_LOW>;
+
+		vdd-buck-supply = <&vreg_l15b_1p8>;
+		vdd-rxtx-supply = <&vreg_l15b_1p8>;
+		vdd-io-supply = <&vreg_l15b_1p8>;
+		vdd-mic-bias-supply = <&vreg_bob1>;
+
+		#sound-dai-cells = <1>;
+	};
+
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pmk8550_pwm 0 860000>;
+		brightness-levels = <1023 0>;
+		num-interpolated-steps = <1023>;
+		default-brightness-level = <600>;
+		// enable-gpios = <&tlmm 142 GPIO_ACTIVE_HIGH>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pwm_backlight_default>;
+		status = "okay";
+	};
 
 	gpio-keys {
 		compatible = "gpio-keys";
@@ -263,6 +290,7 @@
 			regulator-min-microvolt = <3008000>;
 			regulator-max-microvolt = <3008000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-always-on;
 		};
 
 		vreg_l5b_3p1: ldo5 {
@@ -312,6 +340,7 @@
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-always-on;
 		};
 
 		// vreg_l13b_3p0: ldo13 {
@@ -583,8 +612,8 @@
 		pinctrl-0 = <&ts_int_default &ts_reset_default>;
 		pinctrl-1 = <&ts_int_sleep &ts_reset_sleep>;
 
-		vdd-supply = <&vreg_l2b_3p0>;
-		vio-supply = <&vreg_l12b_1p8>;
+		// vdd-supply = <&vreg_l2b_3p0>;
+		// vio-supply = <&vreg_l12b_1p8>;
 
 		syna,startup-delay-ms = <200>;
 		syna,reset-delay-ms = <200>;
@@ -724,6 +753,15 @@
 	// };
 };
 
+&lpass_vamacro {
+	// pinctrl-0 = <&dmic01_default>, <&dmic02_default>;
+	// pinctrl-names = "default";
+	// vdd-micb-supply = <&vreg_s10b_1p8>;
+	qcom,dmic-sample-rate = <600000>;
+
+	status = "okay";
+};
+
 &mdss {
 	status = "okay";
 };
@@ -759,7 +797,7 @@
 		// vdd-supply = <&vreg_l11b_1p2>;
 		// vddio-supply = <&vreg_l12b_1p8>;
 
-		// backlight = <&backlight>;
+		backlight = <&backlight>;
 		reset-gpios = <&tlmm 133 GPIO_ACTIVE_LOW>;
 
 		port {
@@ -857,6 +895,20 @@
 		bias-disable;
 		power-source = <0>;
 	};
+
+	pwm_backlight_default: pwm-backlight-default-state {
+		pins = "gpio5";
+		function = "func3";
+		input-disable;
+		output-enable;
+		bias-disable;
+		power-source = <0>;
+		qcom,drive-strength = <2>;
+	};
+};
+
+&pmk8550_pwm {
+	status = "okay";
 };
 
 &pmk8550_rtc {
@@ -898,11 +950,11 @@
 	status = "okay";
 };
 
-// &remoteproc_cdsp {
-// 	firmware-name = "qcom/sm8550/cdsp.mbn",
-// 			"qcom/sm8550/cdsp_dtb.mbn";
-// 	status = "okay";
-// };
+&remoteproc_cdsp {
+	firmware-name = "qcom/sm8550/ayn/odin2/cdsp.mbn",
+			"qcom/sm8550/ayn/odin2/cdsp_dtb.mbn";
+	status = "okay";
+};
 
 &sdhc_2 {
 	cd-gpios = <&pm8550_gpios 12 GPIO_ACTIVE_LOW>;
@@ -926,57 +978,27 @@
 	clock-frequency = <32000>;
 };
 
-// &swr0 {
-// 	status = "okay";
+&swr1 {
+	status = "okay";
 
-// 	/* WSA8845, Speaker North */
-// 	north_spkr: speaker@0,0 {
-// 		compatible = "sdw20217020400";
-// 		reg = <0 0>;
-// 		pinctrl-names = "default";
-// 		pinctrl-0 = <&spkr_1_sd_n_active>;
-// 		powerdown-gpios = <&lpass_tlmm 17 GPIO_ACTIVE_LOW>;
-// 		#sound-dai-cells = <0>;
-// 		sound-name-prefix = "SpkrLeft";
-// 		vdd-1p8-supply = <&vreg_l15b_1p8>;
-// 		vdd-io-supply = <&vreg_l3g_1p2>;
-// 	};
+	/* WCD9385 RX */
+	wcd_rx: codec@0,4 {
+		compatible = "sdw20217010d00";
+		reg = <0 4>;
+		qcom,rx-port-mapping = <1 2 3 4 5>;
+	};
+};
 
-// 	/* WSA8845, Speaker South */
-// 	south_spkr: speaker@0,1 {
-// 		compatible = "sdw20217020400";
-// 		reg = <0 1>;
-// 		pinctrl-names = "default";
-// 		pinctrl-0 = <&spkr_2_sd_n_active>;
-// 		powerdown-gpios = <&lpass_tlmm 18 GPIO_ACTIVE_LOW>;
-// 		#sound-dai-cells = <0>;
-// 		sound-name-prefix = "SpkrRight";
-// 		vdd-1p8-supply = <&vreg_l15b_1p8>;
-// 		vdd-io-supply = <&vreg_l3g_1p2>;
-// 	};
-// };
+&swr2 {
+	status = "okay";
 
-// &swr1 {
-// 	status = "okay";
-
-// 	/* WCD9385 RX */
-// 	wcd_rx: codec@0,4 {
-// 		compatible = "sdw20217010d00";
-// 		reg = <0 4>;
-// 		qcom,rx-port-mapping = <1 2 3 4 5>;
-// 	};
-// };
-
-// &swr2 {
-// 	status = "okay";
-
-// 	/* WCD9385 TX */
-// 	wcd_tx: codec@0,3 {
-// 		compatible = "sdw20217010d00";
-// 		reg = <0 3>;
-// 		qcom,tx-port-mapping = <1 1 2 3>;
-// 	};
-// };
+	/* WCD9385 TX */
+	wcd_tx: codec@0,3 {
+		compatible = "sdw20217010d00";
+		reg = <0 3>;
+		qcom,tx-port-mapping = <1 1 2 3>;
+	};
+};
 
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
@@ -1082,13 +1104,13 @@
 	// 	bias-pull-down;
 	// };
 
-	// wcd_default: wcd-reset-n-active-state {
-	// 	pins = "gpio108";
-	// 	function = "gpio";
-	// 	drive-strength = <16>;
-	// 	bias-disable;
-	// 	output-low;
-	// };
+	wcd_default: wcd-reset-n-active-state {
+		pins = "gpio108";
+		function = "gpio";
+		drive-strength = <16>;
+		bias-disable;
+		output-low;
+	};
 };
 
 &uart7 {
