@@ -123,7 +123,8 @@ void dp_ctrl_push_idle(struct dp_ctrl *dp_ctrl)
 
 static void dp_ctrl_config_ctrl(struct dp_ctrl_private *ctrl)
 {
-	u32 config = 0, tbd;
+	u32 config = 0;
+	u32 bpc = 1;	/* BPC = 8 */
 	const u8 *dpcd = ctrl->panel->dpcd;
 
 	/* Default-> LSCLK DIV: 1/4 LCLK  */
@@ -133,15 +134,21 @@ static void dp_ctrl_config_ctrl(struct dp_ctrl_private *ctrl)
 	if (drm_dp_alternate_scrambler_reset_cap(dpcd))
 		config |= DP_CONFIGURATION_CTRL_ASSR;
 
-	tbd = dp_link_get_test_bits_depth(ctrl->link,
-			ctrl->panel->dp_mode.bpp);
-
-	if (tbd == DP_TEST_BIT_DEPTH_UNKNOWN) {
-		pr_debug("BIT_DEPTH not set. Configure default\n");
-		tbd = DP_TEST_BIT_DEPTH_8;
+	switch (ctrl->panel->dp_mode.bpp) {
+	case 18:
+		bpc = 0;	/* BPC = 6 */
+		break;
+	case 24:
+		bpc = 1;	/* BPC = 8 */
+		break;
+	case 30:
+		bpc = 2;	/* BPC = 10 */
+		break;
 	}
 
-	config |= tbd << DP_CONFIGURATION_CTRL_BPC_SHIFT;
+	drm_dbg_dp(ctrl->drm_dev, "bpp=%d bpc=%d\n", ctrl->panel->dp_mode.bpp, bpc);
+
+	config |= bpc << DP_CONFIGURATION_CTRL_BPC_SHIFT;
 
 	/* Num of Lanes */
 	config |= ((ctrl->link->link_params.num_lanes - 1)
