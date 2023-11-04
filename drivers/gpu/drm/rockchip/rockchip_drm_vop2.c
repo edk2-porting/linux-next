@@ -170,6 +170,7 @@ struct vop2_video_port {
 	u32 win_mask;
 
 	struct vop2_win *primary_plane;
+	struct vop2_win *cursor_plane;
 	struct drm_pending_vblank_event *event;
 
 	unsigned int nlayers;
@@ -2290,12 +2291,63 @@ static struct vop2_video_port *find_vp_without_primary(struct vop2 *vop2)
 	return NULL;
 }
 
+static struct vop2_video_port *find_vp_without_cursor(struct vop2 *vop2)
+{
+	int i;
+
+	for (i = 0; i < vop2->data->nr_vps; i++) {
+		struct vop2_video_port *vp = &vop2->vps[i];
+
+		if (!vp->crtc.port)
+			continue;
+		/*
+		 * Only assign a cursor plane for a VP if it has more than 2 layers
+		 */
+		if (vp->nlayers <= 2)
+			continue;
+		if (vp->cursor_plane)
+			continue;
+
+		return vp;
+	}
+
+	return NULL;
+}
+
+/*
+ *  divide the total windows equally between all used vp
+ */
+static void vop2_calc_layers_for_each_vp(struct vop2 *vop2, int nvps)
+{
+	const struct vop2_data *vop2_data = vop2->data;
+	struct vop2_video_port *vp;
+	unsigned int nlayers = vop2_data->win_size / nvps;
+	unsigned int used_layers = 0;
+	int i;
+
+	for (i = 0; i < vop2->data->nr_vps; i++) {
+		vp = &vop2->vps[i];
+
+		if (!vp->crtc.port)
+			continue;
+		/*
+		 * The last VP maybe get a fewer windows
+		 */
+		if (vop2_data->win_size - used_layers < nlayers)
+			vp->nlayers = vop2_data->win_size - used_layers;
+		else
+			vp->nlayers = nlayers;
+		used_layers += vp->nlayers;
+	}
+}
+
 static int vop2_create_crtcs(struct vop2 *vop2)
 {
 	const struct vop2_data *vop2_data = vop2->data;
 	struct drm_device *drm = vop2->drm;
 	struct device *dev = vop2->dev;
-	struct drm_plane *plane;
+	struct drm_plane *primary;
+	struct drm_plane *cursor;
 	struct device_node *port;
 	struct vop2_video_port *vp;
 	int i, nvp, nvps = 0;
@@ -2336,6 +2388,8 @@ static int vop2_create_crtcs(struct vop2 *vop2)
 		nvps++;
 	}
 
+	vop2_calc_layers_for_each_vp(vop2, nvps);
+
 	nvp = 0;
 	for (i = 0; i < vop2->registered_num_wins; i++) {
 		struct vop2_win *win = &vop2->win[i];
@@ -2367,6 +2421,18 @@ static int vop2_create_crtcs(struct vop2 *vop2)
 			}
 		}
 
+		if (win->type == DRM_PLANE_TYPE_OVERLAY) {
+			vp = find_vp_without_cursor(vop2);
+			if (vp) {
+				win->type = DRM_PLANE_TYPE_CURSOR;
+				/*
+				 * let __drm_crtc_init_with_planes handle it
+				 */
+				possible_crtcs = 0;
+				vp->cursor_plane = win;
+			}
+		}
+
 		if (win->type == DRM_PLANE_TYPE_OVERLAY)
 			possible_crtcs = (1 << nvps) - 1;
 
@@ -2384,9 +2450,13 @@ static int vop2_create_crtcs(struct vop2 *vop2)
 		if (!vp->crtc.port)
 			continue;
 
-		plane = &vp->primary_plane->base;
+		primary = &vp->primary_plane->base;
+		if (vp->cursor_plane)
+			cursor = &vp->cursor_plane->base;
+		else
+			cursor = NULL;
 
-		ret = drm_crtc_init_with_planes(drm, &vp->crtc, plane, NULL,
+		ret = drm_crtc_init_with_planes(drm, &vp->crtc, primary, cursor,
 						&vop2_crtc_funcs,
 						"video_port%d", vp->id);
 		if (ret) {
@@ -2397,18 +2467,6 @@ static int vop2_create_crtcs(struct vop2 *vop2)
 		drm_crtc_helper_add(&vp->crtc, &vop2_crtc_helper_funcs);
 
 		init_completion(&vp->dsp_hold_completion);
-	}
-
-	/*
-	 * On the VOP2 it's very hard to change the number of layers on a VP
-	 * during runtime, so we distribute the layers equally over the used
-	 * VPs
-	 */
-	for (i = 0; i < vop2->data->nr_vps; i++) {
-		struct vop2_video_port *vp = &vop2->vps[i];
-
-		if (vp->crtc.port)
-			vp->nlayers = vop2_data->win_size / nvps;
 	}
 
 	return 0;
