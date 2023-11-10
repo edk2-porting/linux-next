@@ -2247,8 +2247,11 @@ static int vop2_plane_init(struct vop2 *vop2, struct vop2_win *win,
 	unsigned int blend_caps = BIT(DRM_MODE_BLEND_PIXEL_NONE) |
 				  BIT(DRM_MODE_BLEND_PREMULTI) |
 				  BIT(DRM_MODE_BLEND_COVERAGE);
+	unsigned int zpos = win->win_id;
 	int ret;
 
+	if (win->type == DRM_PLANE_TYPE_CURSOR)
+		zpos = 8;
 	ret = drm_universal_plane_init(vop2->drm, &win->base, possible_crtcs,
 				       &vop2_plane_funcs, win_data->formats,
 				       win_data->nformats,
@@ -2267,7 +2270,7 @@ static int vop2_plane_init(struct vop2 *vop2, struct vop2_win *win,
 						   win->data->supported_rotations);
 	drm_plane_create_alpha_property(&win->base);
 	drm_plane_create_blend_mode_property(&win->base, blend_caps);
-	drm_plane_create_zpos_property(&win->base, win->win_id, 0,
+	drm_plane_create_zpos_property(&win->base, zpos, 0,
 				       vop2->registered_num_wins - 1);
 
 	return 0;
