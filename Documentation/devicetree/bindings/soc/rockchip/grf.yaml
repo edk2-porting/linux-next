@@ -31,6 +31,7 @@ properties:
               - rockchip,rk3588-usb-grf
               - rockchip,rk3588-usbdpphy-grf
               - rockchip,rk3588-vo-grf
+              - rockchip,rk3588-vop-grf
               - rockchip,rv1108-usbgrf
           - const: syscon
       - items:
