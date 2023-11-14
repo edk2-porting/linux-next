@@ -5,7 +5,7 @@
 #include <linux/list.h>
 #include <linux/rhashtable.h>
 
-//#include "bkey_methods.h"
+#include "btree_key_cache_types.h"
 #include "buckets_types.h"
 #include "darray.h"
 #include "errcode.h"
@@ -185,33 +185,32 @@ struct btree_node_iter {
  * Iterate over all possible positions, synthesizing deleted keys for holes:
  */
 static const __maybe_unused u16 BTREE_ITER_SLOTS		= 1 << 0;
-static const __maybe_unused u16 BTREE_ITER_ALL_LEVELS		= 1 << 1;
 /*
  * Indicates that intent locks should be taken on leaf nodes, because we expect
  * to be doing updates:
  */
-static const __maybe_unused u16 BTREE_ITER_INTENT		= 1 << 2;
+static const __maybe_unused u16 BTREE_ITER_INTENT		= 1 << 1;
 /*
  * Causes the btree iterator code to prefetch additional btree nodes from disk:
  */
-static const __maybe_unused u16 BTREE_ITER_PREFETCH		= 1 << 3;
+static const __maybe_unused u16 BTREE_ITER_PREFETCH		= 1 << 2;
 /*
  * Used in bch2_btree_iter_traverse(), to indicate whether we're searching for
  * @pos or the first key strictly greater than @pos
  */
-static const __maybe_unused u16 BTREE_ITER_IS_EXTENTS		= 1 << 4;
-static const __maybe_unused u16 BTREE_ITER_NOT_EXTENTS		= 1 << 5;
-static const __maybe_unused u16 BTREE_ITER_CACHED		= 1 << 6;
-static const __maybe_unused u16 BTREE_ITER_WITH_KEY_CACHE	= 1 << 7;
-static const __maybe_unused u16 BTREE_ITER_WITH_UPDATES		= 1 << 8;
-static const __maybe_unused u16 BTREE_ITER_WITH_JOURNAL		= 1 << 9;
-static const __maybe_unused u16 __BTREE_ITER_ALL_SNAPSHOTS	= 1 << 10;
-static const __maybe_unused u16 BTREE_ITER_ALL_SNAPSHOTS	= 1 << 11;
-static const __maybe_unused u16 BTREE_ITER_FILTER_SNAPSHOTS	= 1 << 12;
-static const __maybe_unused u16 BTREE_ITER_NOPRESERVE		= 1 << 13;
-static const __maybe_unused u16 BTREE_ITER_CACHED_NOFILL	= 1 << 14;
-static const __maybe_unused u16 BTREE_ITER_KEY_CACHE_FILL	= 1 << 15;
-#define __BTREE_ITER_FLAGS_END					       16
+static const __maybe_unused u16 BTREE_ITER_IS_EXTENTS		= 1 << 3;
+static const __maybe_unused u16 BTREE_ITER_NOT_EXTENTS		= 1 << 4;
+static const __maybe_unused u16 BTREE_ITER_CACHED		= 1 << 5;
+static const __maybe_unused u16 BTREE_ITER_WITH_KEY_CACHE	= 1 << 6;
+static const __maybe_unused u16 BTREE_ITER_WITH_UPDATES		= 1 << 7;
+static const __maybe_unused u16 BTREE_ITER_WITH_JOURNAL		= 1 << 8;
+static const __maybe_unused u16 __BTREE_ITER_ALL_SNAPSHOTS	= 1 << 9;
+static const __maybe_unused u16 BTREE_ITER_ALL_SNAPSHOTS	= 1 << 10;
+static const __maybe_unused u16 BTREE_ITER_FILTER_SNAPSHOTS	= 1 << 11;
+static const __maybe_unused u16 BTREE_ITER_NOPRESERVE		= 1 << 12;
+static const __maybe_unused u16 BTREE_ITER_CACHED_NOFILL	= 1 << 13;
+static const __maybe_unused u16 BTREE_ITER_KEY_CACHE_FILL	= 1 << 14;
+#define __BTREE_ITER_FLAGS_END					       15
 
 enum btree_path_uptodate {
 	BTREE_ITER_UPTODATE		= 0,
@@ -312,31 +311,6 @@ struct btree_iter {
 #endif
 };
 
-struct btree_key_cache_freelist {
-	struct bkey_cached	*objs[16];
-	unsigned		nr;
-};
-
-struct btree_key_cache {
-	struct mutex		lock;
-	struct rhashtable	table;
-	bool			table_init_done;
-	struct list_head	freed_pcpu;
-	struct list_head	freed_nonpcpu;
-	struct shrinker		*shrink;
-	unsigned		shrink_iter;
-	struct btree_key_cache_freelist __percpu *pcpu_freed;
-
-	atomic_long_t		nr_freed;
-	atomic_long_t		nr_keys;
-	atomic_long_t		nr_dirty;
-};
-
-struct bkey_cached_key {
-	u32			btree_id;
-	struct bpos		pos;
-} __packed __aligned(4);
-
 #define BKEY_CACHED_ACCESSED		0
 #define BKEY_CACHED_DIRTY		1
 
@@ -352,7 +326,6 @@ struct bkey_cached {
 	struct rhash_head	hash;
 	struct list_head	list;
 
-	struct journal_preres	res;
 	struct journal_entry_pin journal;
 	u64			seq;
 
@@ -382,18 +355,13 @@ struct btree_insert_entry {
 	u8			old_btree_u64s;
 	struct bkey_i		*k;
 	struct btree_path	*path;
-	u64			seq;
 	/* key being overwritten: */
 	struct bkey		old_k;
 	const struct bch_val	*old_v;
 	unsigned long		ip_allocated;
 };
 
-#ifndef CONFIG_LOCKDEP
 #define BTREE_ITER_MAX		64
-#else
-#define BTREE_ITER_MAX		32
-#endif
 
 struct btree_trans_commit_hook;
 typedef int (btree_trans_commit_hook_fn)(struct btree_trans *, struct btree_trans_commit_hook *);
@@ -434,6 +402,7 @@ struct btree_trans {
 	bool			journal_transaction_names:1;
 	bool			journal_replay_not_finished:1;
 	bool			notrace_relock_fail:1;
+	bool			write_locked:1;
 	enum bch_errcode	restarted:16;
 	u32			restart_count;
 	unsigned long		last_begin_ip;
@@ -465,11 +434,9 @@ struct btree_trans {
 	struct journal_entry_pin *journal_pin;
 
 	struct journal_res	journal_res;
-	struct journal_preres	journal_preres;
 	u64			*journal_seq;
 	struct disk_reservation *disk_res;
 	unsigned		journal_u64s;
-	unsigned		journal_preres_u64s;
 	struct replicas_delta_list *fs_usage_deltas;
 };
 

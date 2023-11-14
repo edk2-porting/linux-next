@@ -76,14 +76,6 @@ struct journal_res {
 	u64			seq;
 };
 
-/*
- * For reserving space in the journal prior to getting a reservation on a
- * particular journal entry:
- */
-struct journal_preres {
-	unsigned		u64s;
-};
-
 union journal_res_state {
 	struct {
 		atomic64_t	counter;
@@ -101,22 +93,6 @@ union journal_res_state {
 				buf1_count:10,
 				buf2_count:10,
 				buf3_count:10;
-	};
-};
-
-union journal_preres_state {
-	struct {
-		atomic64_t	counter;
-	};
-
-	struct {
-		u64		v;
-	};
-
-	struct {
-		u64		waiting:1,
-				reserved:31,
-				remaining:32;
 	};
 };
 
@@ -179,8 +155,6 @@ struct journal {
 
 	union journal_res_state reservations;
 	enum bch_watermark	watermark;
-
-	union journal_preres_state prereserved;
 
 	} __aligned(SMP_CACHE_BYTES);
 
@@ -288,15 +262,18 @@ struct journal {
 
 	unsigned long		last_flush_write;
 
-	u64			res_get_blocked_start;
 	u64			write_start_time;
 
 	u64			nr_flush_writes;
 	u64			nr_noflush_writes;
+	u64			entry_bytes_written;
+
+	u64			low_on_space_start;
+	u64			low_on_pin_start;
+	u64			max_in_flight_start;
 
 	struct bch2_time_stats	*flush_write_time;
 	struct bch2_time_stats	*noflush_write_time;
-	struct bch2_time_stats	*blocked_time;
 	struct bch2_time_stats	*flush_seq_time;
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC

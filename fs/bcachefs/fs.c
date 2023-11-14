@@ -93,7 +93,7 @@ retry:
 				BTREE_ITER_INTENT) ?:
 		(set ? set(trans, inode, &inode_u, p) : 0) ?:
 		bch2_inode_write(trans, &iter, &inode_u) ?:
-		bch2_trans_commit(trans, NULL, NULL, BTREE_INSERT_NOFAIL);
+		bch2_trans_commit(trans, NULL, NULL, BCH_TRANS_COMMIT_no_enospc);
 
 	/*
 	 * the btree node lock protects inode->ei_inode, not ei_update_lock;
@@ -452,7 +452,7 @@ int __bch2_unlink(struct inode *vdir, struct dentry *dentry,
 	bch2_lock_inodes(INODE_UPDATE_LOCK, dir, inode);
 
 	ret = commit_do(trans, NULL, NULL,
-			BTREE_INSERT_NOFAIL,
+			BCH_TRANS_COMMIT_no_enospc,
 		bch2_unlink_trans(trans,
 				  inode_inum(dir), &dir_u,
 				  &inode_u, &dentry->d_name,
@@ -717,7 +717,7 @@ retry:
 
 	ret =   bch2_inode_write(trans, &inode_iter, &inode_u) ?:
 		bch2_trans_commit(trans, NULL, NULL,
-				  BTREE_INSERT_NOFAIL);
+				  BCH_TRANS_COMMIT_no_enospc);
 btree_err:
 	bch2_trans_iter_exit(trans, &inode_iter);
 
@@ -1922,10 +1922,7 @@ out:
 	return dget(sb->s_root);
 
 err_put_super:
-	sb->s_fs_info = NULL;
-	c->vfs_sb = NULL;
 	deactivate_locked_super(sb);
-	bch2_fs_stop(c);
 	return ERR_PTR(bch2_err_class(ret));
 }
 
@@ -1933,11 +1930,8 @@ static void bch2_kill_sb(struct super_block *sb)
 {
 	struct bch_fs *c = sb->s_fs_info;
 
-	if (c)
-		c->vfs_sb = NULL;
 	generic_shutdown_super(sb);
-	if (c)
-		bch2_fs_free(c);
+	bch2_fs_free(c);
 }
 
 static struct file_system_type bcache_fs_type = {
