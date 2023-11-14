@@ -5912,10 +5912,21 @@ next_op:
 		convert_extent_map(sr);
 		ret = sizeof(sr->sr_datalen);
 		*pbuf = (char *)&sr->sr_datalen;
-		sr->sr_state = CEPH_SPARSE_READ_DATA;
+		sr->sr_state = CEPH_SPARSE_READ_DATA_PRE;
 		break;
+	case CEPH_SPARSE_READ_DATA_PRE:
+		/* Convert sr_datalen to host-endian */
+		sr->sr_datalen = le32_to_cpu((__force __le32)sr->sr_datalen);
+		sr->sr_state = CEPH_SPARSE_READ_DATA;
+		fallthrough;
 	case CEPH_SPARSE_READ_DATA:
 		if (sr->sr_index >= count) {
+			if (sr->sr_datalen && count) {
+				pr_warn_ratelimited("%s: datalen mismatch, %u left\n",
+						    __func__, sr->sr_datalen);
+				return -EREMOTEIO;
+			}
+
 			sr->sr_state = CEPH_SPARSE_READ_HDR;
 			goto next_op;
 		}
@@ -5931,6 +5942,8 @@ next_op:
 			     elen);
 			return -EREMOTEIO;
 		}
+
+		sr->sr_datalen -= elen;
 
 		/* zero out anything from sr_pos to start of extent */
 		if (sr->sr_pos < eoff)
