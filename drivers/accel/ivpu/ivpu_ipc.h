@@ -47,8 +47,9 @@ struct ivpu_ipc_consumer {
 	u32 channel;
 	u32 tx_vpu_addr;
 	u32 request_id;
+	bool aborted;
 
-	spinlock_t rx_msg_lock; /* Protects rx_msg_list */
+	spinlock_t rx_msg_lock; /* Protects rx_msg_list and aborted */
 	struct list_head rx_msg_list;
 	wait_queue_head_t rx_msg_wq;
 };
@@ -85,9 +86,11 @@ int ivpu_ipc_receive(struct ivpu_device *vdev, struct ivpu_ipc_consumer *cons,
 		     struct ivpu_ipc_hdr *ipc_buf, struct vpu_jsm_msg *ipc_payload,
 		     unsigned long timeout_ms);
 
+int ivpu_ipc_send_receive_active(struct ivpu_device *vdev, struct vpu_jsm_msg *req,
+				 enum vpu_ipc_msg_type expected_resp, struct vpu_jsm_msg *resp,
+				 u32 channel, unsigned long timeout_ms);
 int ivpu_ipc_send_receive(struct ivpu_device *vdev, struct vpu_jsm_msg *req,
-			  enum vpu_ipc_msg_type expected_resp_type,
-			  struct vpu_jsm_msg *resp, u32 channel,
-			  unsigned long timeout_ms);
+			  enum vpu_ipc_msg_type expected_resp, struct vpu_jsm_msg *resp,
+			  u32 channel, unsigned long timeout_ms);
 
 #endif /* __IVPU_IPC_H__ */

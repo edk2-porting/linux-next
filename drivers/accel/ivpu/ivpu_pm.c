@@ -15,6 +15,7 @@
 #include "ivpu_fw.h"
 #include "ivpu_ipc.h"
 #include "ivpu_job.h"
+#include "ivpu_jsm_msg.h"
 #include "ivpu_mmu.h"
 #include "ivpu_pm.h"
 
@@ -69,27 +70,31 @@ retry:
 	ret = ivpu_hw_power_up(vdev);
 	if (ret) {
 		ivpu_err(vdev, "Failed to power up HW: %d\n", ret);
-		return ret;
+		goto err_power_down;
 	}
 
 	ret = ivpu_mmu_enable(vdev);
 	if (ret) {
 		ivpu_err(vdev, "Failed to resume MMU: %d\n", ret);
-		ivpu_hw_power_down(vdev);
-		return ret;
+		goto err_power_down;
 	}
 
 	ret = ivpu_boot(vdev);
-	if (ret) {
-		ivpu_mmu_disable(vdev);
-		ivpu_hw_power_down(vdev);
-		if (!ivpu_fw_is_cold_boot(vdev)) {
-			ivpu_warn(vdev, "Failed to resume the FW: %d. Retrying cold boot..\n", ret);
-			ivpu_pm_prepare_cold_boot(vdev);
-			goto retry;
-		} else {
-			ivpu_err(vdev, "Failed to resume the FW: %d\n", ret);
-		}
+	if (ret)
+		goto err_mmu_disable;
+
+	return 0;
+
+err_mmu_disable:
+	ivpu_mmu_disable(vdev);
+err_power_down:
+	ivpu_hw_power_down(vdev);
+
+	if (!ivpu_fw_is_cold_boot(vdev)) {
+		ivpu_pm_prepare_cold_boot(vdev);
+		goto retry;
+	} else {
+		ivpu_err(vdev, "Failed to resume the FW: %d\n", ret);
 	}
 
 	return ret;
@@ -153,6 +158,8 @@ int ivpu_pm_suspend_cb(struct device *dev)
 		}
 	}
 
+	ivpu_jsm_pwr_d0i3_enter(vdev);
+
 	ivpu_suspend(vdev);
 	ivpu_pm_prepare_warm_boot(vdev);
 
@@ -188,6 +195,7 @@ int ivpu_pm_runtime_suspend_cb(struct device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(dev);
 	struct ivpu_device *vdev = to_ivpu_device(drm);
+	bool hw_is_idle = true;
 	int ret;
 
 	ivpu_dbg(vdev, PM, "Runtime suspend..\n");
@@ -200,11 +208,16 @@ int ivpu_pm_runtime_suspend_cb(struct device *dev)
 		return -EAGAIN;
 	}
 
+	if (!vdev->pm->suspend_reschedule_counter)
+		hw_is_idle = false;
+	else if (ivpu_jsm_pwr_d0i3_enter(vdev))
+		hw_is_idle = false;
+
 	ret = ivpu_suspend(vdev);
 	if (ret)
 		ivpu_err(vdev, "Failed to set suspend VPU: %d\n", ret);
 
-	if (!vdev->pm->suspend_reschedule_counter) {
+	if (!hw_is_idle) {
 		ivpu_warn(vdev, "VPU failed to enter idle, force suspended.\n");
 		ivpu_pm_prepare_cold_boot(vdev);
 	} else {
@@ -249,9 +262,6 @@ int ivpu_rpm_get(struct ivpu_device *vdev)
 int ivpu_rpm_get_if_active(struct ivpu_device *vdev)
 {
 	int ret;
-
-	ivpu_dbg(vdev, RPM, "rpm_get_if_active count %d\n",
-		 atomic_read(&vdev->drm.dev->power.usage_count));
 
 	ret = pm_runtime_get_if_active(vdev->drm.dev, false);
 	drm_WARN_ON(&vdev->drm, ret < 0);

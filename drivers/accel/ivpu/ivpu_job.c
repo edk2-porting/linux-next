@@ -196,6 +196,8 @@ static int ivpu_cmdq_push_job(struct ivpu_cmdq *cmdq, struct ivpu_job *job)
 	entry->batch_buf_addr = job->cmd_buf_vpu_addr;
 	entry->job_id = job->job_id;
 	entry->flags = 0;
+	if (unlikely(ivpu_test_mode & IVPU_TEST_MODE_NULL_SUBMISSION))
+		entry->flags = VPU_JOB_FLAGS_NULL_SUBMISSION_MASK;
 	wmb(); /* Ensure that tail is updated after filling entry */
 	header->tail = next_entry;
 	wmb(); /* Flush WC buffer for jobq header */
@@ -264,7 +266,7 @@ static void job_release(struct kref *ref)
 
 	for (i = 0; i < job->bo_count; i++)
 		if (job->bos[i])
-			drm_gem_object_put(&job->bos[i]->base);
+			drm_gem_object_put(&job->bos[i]->base.base);
 
 	dma_fence_put(job->done_fence);
 	ivpu_file_priv_put(&job->file_priv);
@@ -402,7 +404,7 @@ static int ivpu_direct_job_submission(struct ivpu_job *job)
 		 job->job_id, job->cmd_buf_vpu_addr, file_priv->ctx.id,
 		 job->engine_idx, cmdq->jobq->header.tail);
 
-	if (ivpu_test_mode == IVPU_TEST_MODE_NULL_HW) {
+	if (ivpu_test_mode & IVPU_TEST_MODE_NULL_HW) {
 		ivpu_job_done(vdev, job->job_id, VPU_JSM_STATUS_SUCCESS);
 		cmdq->jobq->header.head = cmdq->jobq->header.tail;
 		wmb(); /* Flush WC buffer for jobq header */
@@ -448,7 +450,7 @@ ivpu_job_prepare_bos_for_submit(struct drm_file *file, struct ivpu_job *job, u32
 	}
 
 	bo = job->bos[CMD_BUF_IDX];
-	if (!dma_resv_test_signaled(bo->base.resv, DMA_RESV_USAGE_READ)) {
+	if (!dma_resv_test_signaled(bo->base.base.resv, DMA_RESV_USAGE_READ)) {
 		ivpu_warn(vdev, "Buffer is already in use\n");
 		return -EBUSY;
 	}
@@ -468,7 +470,7 @@ ivpu_job_prepare_bos_for_submit(struct drm_file *file, struct ivpu_job *job, u32
 	}
 
 	for (i = 0; i < buf_count; i++) {
-		ret = dma_resv_reserve_fences(job->bos[i]->base.resv, 1);
+		ret = dma_resv_reserve_fences(job->bos[i]->base.base.resv, 1);
 		if (ret) {
 			ivpu_warn(vdev, "Failed to reserve fences: %d\n", ret);
 			goto unlock_reservations;
@@ -477,7 +479,7 @@ ivpu_job_prepare_bos_for_submit(struct drm_file *file, struct ivpu_job *job, u32
 
 	for (i = 0; i < buf_count; i++) {
 		usage = (i == CMD_BUF_IDX) ? DMA_RESV_USAGE_WRITE : DMA_RESV_USAGE_BOOKKEEP;
-		dma_resv_add_fence(job->bos[i]->base.resv, job->done_fence, usage);
+		dma_resv_add_fence(job->bos[i]->base.base.resv, job->done_fence, usage);
 	}
 
 unlock_reservations:
@@ -576,6 +578,7 @@ static int ivpu_job_done_thread(void *arg)
 	ivpu_ipc_consumer_add(vdev, &cons, VPU_IPC_CHAN_JOB_RET);
 
 	while (!kthread_should_stop()) {
+		cons.aborted = false;
 		timeout = ivpu_tdr_timeout_ms ? ivpu_tdr_timeout_ms : vdev->timeout.tdr;
 		jobs_submitted = !xa_empty(&vdev->submitted_jobs_xa);
 		ret = ivpu_ipc_receive(vdev, &cons, NULL, &jsm_msg, timeout);
@@ -587,6 +590,11 @@ static int ivpu_job_done_thread(void *arg)
 				ivpu_hw_diagnose_failure(vdev);
 				ivpu_pm_schedule_recovery(vdev);
 			}
+		}
+		if (kthread_should_park()) {
+			ivpu_dbg(vdev, JOB, "Parked %s\n", __func__);
+			kthread_parkme();
+			ivpu_dbg(vdev, JOB, "Unparked %s\n", __func__);
 		}
 	}
 
@@ -608,9 +616,6 @@ int ivpu_job_done_thread_init(struct ivpu_device *vdev)
 		return -EIO;
 	}
 
-	get_task_struct(thread);
-	wake_up_process(thread);
-
 	vdev->job_done_thread = thread;
 
 	return 0;
@@ -618,5 +623,16 @@ int ivpu_job_done_thread_init(struct ivpu_device *vdev)
 
 void ivpu_job_done_thread_fini(struct ivpu_device *vdev)
 {
-	kthread_stop_put(vdev->job_done_thread);
+	kthread_unpark(vdev->job_done_thread);
+	kthread_stop(vdev->job_done_thread);
+}
+
+void ivpu_job_done_thread_disable(struct ivpu_device *vdev)
+{
+	kthread_park(vdev->job_done_thread);
+}
+
+void ivpu_job_done_thread_enable(struct ivpu_device *vdev)
+{
+	kthread_unpark(vdev->job_done_thread);
 }

@@ -39,6 +39,7 @@
 #define TIMEOUT_US		     (150 * USEC_PER_MSEC)
 #define PWR_ISLAND_STATUS_TIMEOUT_US (5 * USEC_PER_MSEC)
 #define PLL_TIMEOUT_US		     (1500 * USEC_PER_MSEC)
+#define IDLE_TIMEOUT_US		     (5 * USEC_PER_MSEC)
 
 #define WEIGHTS_DEFAULT              0xf711f711u
 #define WEIGHTS_ATS_DEFAULT          0x0000f711u
@@ -139,18 +140,21 @@ static void ivpu_hw_timeouts_init(struct ivpu_device *vdev)
 		vdev->timeout.tdr = 2000000;
 		vdev->timeout.reschedule_suspend = 1000;
 		vdev->timeout.autosuspend = -1;
+		vdev->timeout.d0i3_entry_msg = 500;
 	} else if (ivpu_is_simics(vdev)) {
 		vdev->timeout.boot = 50;
 		vdev->timeout.jsm = 500;
 		vdev->timeout.tdr = 10000;
 		vdev->timeout.reschedule_suspend = 10;
 		vdev->timeout.autosuspend = -1;
+		vdev->timeout.d0i3_entry_msg = 100;
 	} else {
 		vdev->timeout.boot = 1000;
 		vdev->timeout.jsm = 500;
 		vdev->timeout.tdr = 2000;
 		vdev->timeout.reschedule_suspend = 10;
 		vdev->timeout.autosuspend = 10;
+		vdev->timeout.d0i3_entry_msg = 5;
 	}
 }
 
@@ -824,12 +828,6 @@ static int ivpu_hw_40xx_power_up(struct ivpu_device *vdev)
 {
 	int ret;
 
-	ret = ivpu_hw_40xx_reset(vdev);
-	if (ret) {
-		ivpu_err(vdev, "Failed to reset HW: %d\n", ret);
-		return ret;
-	}
-
 	ret = ivpu_hw_40xx_d0i3_disable(vdev);
 	if (ret)
 		ivpu_warn(vdev, "Failed to disable D0I3: %d\n", ret);
@@ -898,9 +896,22 @@ static bool ivpu_hw_40xx_is_idle(struct ivpu_device *vdev)
 	       REG_TEST_FLD(VPU_40XX_BUTTRESS_VPU_STATUS, IDLE, val);
 }
 
+static int ivpu_hw_40xx_wait_for_idle(struct ivpu_device *vdev)
+{
+	return REGB_POLL_FLD(VPU_40XX_BUTTRESS_VPU_STATUS, IDLE, 0x1, IDLE_TIMEOUT_US);
+}
+
+static void ivpu_hw_40xx_save_d0i3_entry_timestamp(struct ivpu_device *vdev)
+{
+	vdev->hw->d0i3_entry_host_ts = ktime_get_boottime();
+	vdev->hw->d0i3_entry_vpu_ts = REGV_RD64(VPU_40XX_CPU_SS_TIM_PERF_EXT_FREE_CNT);
+}
+
 static int ivpu_hw_40xx_power_down(struct ivpu_device *vdev)
 {
 	int ret = 0;
+
+	ivpu_hw_40xx_save_d0i3_entry_timestamp(vdev);
 
 	if (!ivpu_hw_40xx_is_idle(vdev) && ivpu_hw_40xx_reset(vdev))
 		ivpu_warn(vdev, "Failed to reset the VPU\n");
@@ -931,6 +942,19 @@ static void ivpu_hw_40xx_wdt_disable(struct ivpu_device *vdev)
 	val = REGV_RD32(VPU_40XX_CPU_SS_TIM_GEN_CONFIG);
 	val = REG_CLR_FLD(VPU_40XX_CPU_SS_TIM_GEN_CONFIG, WDOG_TO_INT_CLR, val);
 	REGV_WR32(VPU_40XX_CPU_SS_TIM_GEN_CONFIG, val);
+}
+
+static u32 ivpu_hw_40xx_profiling_freq_get(struct ivpu_device *vdev)
+{
+	return vdev->hw->pll.profiling_freq;
+}
+
+static void ivpu_hw_40xx_profiling_freq_drive(struct ivpu_device *vdev, bool enable)
+{
+	if (enable)
+		vdev->hw->pll.profiling_freq = PLL_PROFILING_FREQ_HIGH;
+	else
+		vdev->hw->pll.profiling_freq = PLL_PROFILING_FREQ_DEFAULT;
 }
 
 /* Register indirect accesses */
@@ -1185,11 +1209,14 @@ const struct ivpu_hw_ops ivpu_hw_40xx_ops = {
 	.info_init = ivpu_hw_40xx_info_init,
 	.power_up = ivpu_hw_40xx_power_up,
 	.is_idle = ivpu_hw_40xx_is_idle,
+	.wait_for_idle = ivpu_hw_40xx_wait_for_idle,
 	.power_down = ivpu_hw_40xx_power_down,
 	.reset = ivpu_hw_40xx_reset,
 	.boot_fw = ivpu_hw_40xx_boot_fw,
 	.wdt_disable = ivpu_hw_40xx_wdt_disable,
 	.diagnose_failure = ivpu_hw_40xx_diagnose_failure,
+	.profiling_freq_get = ivpu_hw_40xx_profiling_freq_get,
+	.profiling_freq_drive = ivpu_hw_40xx_profiling_freq_drive,
 	.reg_pll_freq_get = ivpu_hw_40xx_reg_pll_freq_get,
 	.reg_telemetry_offset_get = ivpu_hw_40xx_reg_telemetry_offset_get,
 	.reg_telemetry_size_get = ivpu_hw_40xx_reg_telemetry_size_get,
