@@ -1866,7 +1866,6 @@ struct dentry *d_alloc_anon(struct super_block *sb)
 {
 	return __d_alloc(sb, NULL);
 }
-EXPORT_SYMBOL(d_alloc_anon);
 
 struct dentry *d_alloc_cursor(struct dentry * parent)
 {
@@ -2114,12 +2113,6 @@ static struct dentry *__d_instantiate_anon(struct dentry *dentry,
 	iput(inode);
 	return res;
 }
-
-struct dentry *d_instantiate_anon(struct dentry *dentry, struct inode *inode)
-{
-	return __d_instantiate_anon(dentry, inode, true);
-}
-EXPORT_SYMBOL(d_instantiate_anon);
 
 static struct dentry *__d_obtain_alias(struct inode *inode, bool disconnected)
 {
