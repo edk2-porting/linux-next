@@ -21,7 +21,6 @@
 #include "skl_scaler.h"
 #include "skl_universal_plane.h"
 #include "skl_watermark.h"
-#include "gt/intel_gt.h"
 #include "pxp/intel_pxp.h"
 
 static const u32 skl_plane_formats[] = {
@@ -1855,16 +1854,19 @@ static bool skl_fb_scalable(const struct drm_framebuffer *fb)
 	}
 }
 
-static bool bo_has_valid_encryption(struct drm_i915_gem_object *obj)
+static void check_protection(struct intel_plane_state *plane_state)
 {
-	struct drm_i915_private *i915 = to_i915(obj->base.dev);
+	struct intel_plane *plane = to_intel_plane(plane_state->uapi.plane);
+	struct drm_i915_private *i915 = to_i915(plane->base.dev);
+	const struct drm_framebuffer *fb = plane_state->hw.fb;
+	struct drm_i915_gem_object *obj = intel_fb_obj(fb);
 
-	return intel_pxp_key_check(i915->pxp, obj, false) == 0;
-}
+	if (DISPLAY_VER(i915) < 11)
+		return;
 
-static bool pxp_is_borked(struct drm_i915_gem_object *obj)
-{
-	return i915_gem_object_is_protected(obj) && !bo_has_valid_encryption(obj);
+	plane_state->decrypt = intel_pxp_key_check(i915->pxp, obj, false) == 0;
+	plane_state->force_black = i915_gem_object_is_protected(obj) &&
+		!plane_state->decrypt;
 }
 
 static int skl_plane_check(struct intel_crtc_state *crtc_state,
@@ -1911,10 +1913,7 @@ static int skl_plane_check(struct intel_crtc_state *crtc_state,
 	if (ret)
 		return ret;
 
-	if (DISPLAY_VER(dev_priv) >= 11) {
-		plane_state->decrypt = bo_has_valid_encryption(intel_fb_obj(fb));
-		plane_state->force_black = pxp_is_borked(intel_fb_obj(fb));
-	}
+	check_protection(plane_state);
 
 	/* HW only has 8 bits pixel precision, disable plane if invisible */
 	if (!(plane_state->hw.alpha >> 8))
@@ -2489,7 +2488,7 @@ skl_get_initial_plane_config(struct intel_crtc *crtc,
 		goto error;
 	}
 
-	if (!dev_priv->params.enable_dpt &&
+	if (!dev_priv->display.params.enable_dpt &&
 	    intel_fb_modifier_uses_dpt(dev_priv, fb->modifier)) {
 		drm_dbg_kms(&dev_priv->drm, "DPT disabled, skipping initial FB\n");
 		goto error;
