@@ -2,6 +2,7 @@
 
 # Enable support for device-tree overlays required on qcs8550-ayn-odin2.
 DTC_FLAGS_qcs8550-ayn-odin2-hypdtbo := -@
+DTC_FLAGS_qcs8550-ayn-odin2-sbc-hypdtbo := -@
 
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb
 
@@ -234,7 +235,10 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8450-qrd.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8450-sony-xperia-nagara-pdx223.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8450-sony-xperia-nagara-pdx224.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-ayn-odin2.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-ayn-odin2-sbc.dtb
 qcs8550-ayn-odin2-hypdtbo-dtbs	:= qcs8550-ayn-odin2.dtb qcs8550-ayn-odin2-hypdtbo.dtbo
+qcs8550-ayn-odin2-sbc-hypdtbo-dtbs	:= qcs8550-ayn-odin2-sbc.dtb qcs8550-ayn-odin2-sbc-hypdtbo.dtbo
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-ayn-odin2-hypdtbo.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-ayn-odin2-sbc-hypdtbo.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-qrd.dtb
