@@ -13,7 +13,7 @@
 
 import gdb
 
-from linux import utils
+from linux import utils, lists
 
 
 task_type = utils.CachedType("struct task_struct")
@@ -25,13 +25,9 @@ def task_lists():
     t = g = init_task
 
     while True:
-        while True:
-            yield t
-
-            t = utils.container_of(t['thread_group']['next'],
-                                   task_ptr_type, "thread_group")
-            if t == g:
-                break
+        thread_head = t['signal']['thread_head']
+        for thread in lists.list_for_each_entry(thread_head, task_ptr_type, 'thread_node'):
+            yield thread
 
         t = g = utils.container_of(g['tasks']['next'],
                                    task_ptr_type, "tasks")
