@@ -42,7 +42,7 @@ struct pvr_vm_context {
 	/** @mmu_ctx: The context for binding to physical memory. */
 	struct pvr_mmu_context *mmu_ctx;
 
-	/** @gpuva_mgr: GPUVA manager object associated with this context. */
+	/** @gpuvm_mgr: GPUVM object associated with this context. */
 	struct drm_gpuvm gpuvm_mgr;
 
 	/** @lock: Global lock on this VM. */
@@ -63,6 +63,12 @@ struct pvr_vm_context {
 	 */
 	struct drm_gem_object dummy_gem;
 };
+
+static inline
+struct pvr_vm_context *to_pvr_vm_context(struct drm_gpuvm *gpuvm)
+{
+	return container_of(gpuvm, struct pvr_vm_context, gpuvm_mgr);
+}
 
 struct pvr_vm_context *pvr_vm_context_get(struct pvr_vm_context *vm_ctx)
 {
@@ -224,6 +230,7 @@ pvr_vm_bind_op_map_init(struct pvr_vm_bind_op *bind_op,
 			struct pvr_gem_object *pvr_obj, u64 offset,
 			u64 device_addr, u64 size)
 {
+	struct drm_gem_object *obj = gem_from_pvr_gem(pvr_obj);
 	const bool is_user = vm_ctx == vm_ctx->pvr_dev->kernel_vm_ctx;
 	const u64 pvr_obj_size = pvr_gem_object_size(pvr_obj);
 	struct sg_table *sgt;
@@ -238,17 +245,18 @@ pvr_vm_bind_op_map_init(struct pvr_vm_bind_op *bind_op,
 		return -EINVAL;
 	}
 
-	if (!pvr_device_addr_and_size_are_valid(device_addr, size) ||
+	if (!pvr_device_addr_and_size_are_valid(vm_ctx, device_addr, size) ||
 	    offset & ~PAGE_MASK || size & ~PAGE_MASK ||
 	    offset >= pvr_obj_size || offset_plus_size > pvr_obj_size)
 		return -EINVAL;
 
 	bind_op->type = PVR_VM_BIND_TYPE_MAP;
 
-	bind_op->gpuvm_bo = drm_gpuvm_bo_create(&vm_ctx->gpuvm_mgr,
-						gem_from_pvr_gem(pvr_obj));
-	if (!bind_op->gpuvm_bo)
-		return -ENOMEM;
+	dma_resv_lock(obj->resv, NULL);
+	bind_op->gpuvm_bo = drm_gpuvm_bo_obtain(&vm_ctx->gpuvm_mgr, obj);
+	dma_resv_unlock(obj->resv);
+	if (IS_ERR(bind_op->gpuvm_bo))
+		return PTR_ERR(bind_op->gpuvm_bo);
 
 	bind_op->new_va = kzalloc(sizeof(*bind_op->new_va), GFP_KERNEL);
 	bind_op->prev_va = kzalloc(sizeof(*bind_op->prev_va), GFP_KERNEL);
@@ -293,7 +301,7 @@ pvr_vm_bind_op_unmap_init(struct pvr_vm_bind_op *bind_op,
 {
 	int err;
 
-	if (!pvr_device_addr_and_size_are_valid(device_addr, size))
+	if (!pvr_device_addr_and_size_are_valid(vm_ctx, device_addr, size))
 		return -EINVAL;
 
 	bind_op->type = PVR_VM_BIND_TYPE_UNMAP;
@@ -503,6 +511,7 @@ pvr_device_addr_is_valid(u64 device_addr)
 /**
  * pvr_device_addr_and_size_are_valid() - Tests whether a device-virtual
  * address and associated size are both valid.
+ * @vm_ctx: Target VM context.
  * @device_addr: Virtual device address to test.
  * @size: Size of the range based at @device_addr to test.
  *
@@ -521,16 +530,18 @@ pvr_device_addr_is_valid(u64 device_addr)
  *  * %false otherwise.
  */
 bool
-pvr_device_addr_and_size_are_valid(u64 device_addr, u64 size)
+pvr_device_addr_and_size_are_valid(struct pvr_vm_context *vm_ctx,
+				   u64 device_addr, u64 size)
 {
 	return pvr_device_addr_is_valid(device_addr) &&
+	       drm_gpuvm_range_valid(&vm_ctx->gpuvm_mgr, device_addr, size) &&
 	       size != 0 && (size & ~PVR_DEVICE_PAGE_MASK) == 0 &&
 	       (device_addr + size <= PVR_PAGE_TABLE_ADDR_SPACE_SIZE);
 }
 
 void pvr_gpuvm_free(struct drm_gpuvm *gpuvm)
 {
-
+	kfree(to_pvr_vm_context(gpuvm));
 }
 
 static const struct drm_gpuvm_ops pvr_vm_gpuva_ops = {
@@ -650,12 +661,11 @@ pvr_vm_context_release(struct kref *ref_count)
 	WARN_ON(pvr_vm_unmap(vm_ctx, vm_ctx->gpuvm_mgr.mm_start,
 			     vm_ctx->gpuvm_mgr.mm_range));
 
-	drm_gpuvm_put(&vm_ctx->gpuvm_mgr);
 	pvr_mmu_context_destroy(vm_ctx->mmu_ctx);
 	drm_gem_private_object_fini(&vm_ctx->dummy_gem);
 	mutex_destroy(&vm_ctx->lock);
 
-	kfree(vm_ctx);
+	drm_gpuvm_put(&vm_ctx->gpuvm_mgr);
 }
 
 /**
