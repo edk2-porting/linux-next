@@ -168,6 +168,14 @@ struct kmemleak_object {
 	char comm[TASK_COMM_LEN];	/* executable name */
 };
 
+/*
+ * A percpu address to be submitted to a workqueue for being freed.
+ */
+struct kmemleak_percpu_addr {
+	struct work_struct work;
+	const void __percpu *ptr;
+};
+
 /* flag representing the memory block allocation status */
 #define OBJECT_ALLOCATED	(1 << 0)
 /* flag set after the first reporting of an unreference object */
@@ -355,16 +363,14 @@ static void print_unreferenced(struct seq_file *seq,
 	int i;
 	unsigned long *entries;
 	unsigned int nr_entries;
-	unsigned int msecs_age = jiffies_to_msecs(jiffies - object->jiffies);
 
 	nr_entries = stack_depot_fetch(object->trace_handle, &entries);
 	warn_or_seq_printf(seq, "unreferenced object 0x%08lx (size %zu):\n",
 			  object->pointer, object->size);
-	warn_or_seq_printf(seq, "  comm \"%s\", pid %d, jiffies %lu (age %d.%03ds)\n",
-			   object->comm, object->pid, object->jiffies,
-			   msecs_age / 1000, msecs_age % 1000);
+	warn_or_seq_printf(seq, "  comm \"%s\", pid %d, jiffies %lu\n",
+			   object->comm, object->pid, object->jiffies);
 	hex_dump_object(seq, object);
-	warn_or_seq_printf(seq, "  backtrace:\n");
+	warn_or_seq_printf(seq, "  backtrace (crc %x):\n", object->checksum);
 
 	for (i = 0; i < nr_entries; i++) {
 		void *ptr = (void *)entries[i];
@@ -1122,23 +1128,60 @@ void __ref kmemleak_free_part(const void *ptr, size_t size)
 }
 EXPORT_SYMBOL_GPL(kmemleak_free_part);
 
+static void __kmemleak_free_percpu(const void __percpu *ptr)
+{
+	unsigned int cpu;
+
+	for_each_possible_cpu(cpu) {
+		delete_object_full((unsigned long)per_cpu_ptr(ptr, cpu));
+		if (in_task())
+			cond_resched();
+	}
+}
+
+/*
+ * Work function for deferred freeing of kmemleak objects associated with
+ * a freed percpu memory block.
+ */
+static void kmemleak_free_percpu_workfn(struct work_struct *work)
+{
+	struct kmemleak_percpu_addr *addr;
+
+	addr = container_of(work, struct kmemleak_percpu_addr, work);
+	__kmemleak_free_percpu(addr->ptr);
+	kfree(addr);
+}
+
 /**
  * kmemleak_free_percpu - unregister a previously registered __percpu object
  * @ptr:	__percpu pointer to beginning of the object
  *
  * This function is called from the kernel percpu allocator when an object
- * (memory block) is freed (free_percpu).
+ * (memory block) is freed (free_percpu). Since this function is inherently
+ * slow especially on systems with a large number of CPUs, defer the actual
+ * removal of kmemleak objects associated with the percpu pointer to a
+ * workqueue if it is not in a task context.
  */
 void __ref kmemleak_free_percpu(const void __percpu *ptr)
 {
-	unsigned int cpu;
-
 	pr_debug("%s(0x%px)\n", __func__, ptr);
 
-	if (kmemleak_free_enabled && ptr && !IS_ERR(ptr))
-		for_each_possible_cpu(cpu)
-			delete_object_full((unsigned long)per_cpu_ptr(ptr,
-								      cpu));
+	if (!kmemleak_free_enabled || !ptr || IS_ERR(ptr))
+		return;
+
+	if (!in_task()) {
+		struct kmemleak_percpu_addr *addr;
+
+		addr = kzalloc(sizeof(*addr), GFP_ATOMIC);
+		if (addr) {
+			INIT_WORK(&addr->work, kmemleak_free_percpu_workfn);
+			addr->ptr = ptr;
+			queue_work(system_long_wq, &addr->work);
+			return;
+		}
+		/* Fallback to do direct deletion */
+	}
+	__kmemleak_free_percpu(ptr);
 }
 EXPORT_SYMBOL_GPL(kmemleak_free_percpu);
 

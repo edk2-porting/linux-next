@@ -6783,6 +6783,10 @@ static ssize_t memory_max_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+/*
+ * Note: don't forget to update the 'samples/cgroup/memcg_event_listener'
+ * if any new events become available.
+ */
 static void __memory_events_show(struct seq_file *m, atomic_long_t *events)
 {
 	seq_printf(m, "low %lu\n", atomic_long_read(&events[MEMCG_LOW]));
@@ -7864,6 +7868,14 @@ long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 				      READ_ONCE(memcg->swap.max) -
 				      page_counter_read(&memcg->swap));
 	return nr_swap_pages;
+}
+
+long mem_cgroup_get_nr_swapcache_pages(struct mem_cgroup *memcg)
+{
+	if (mem_cgroup_disabled())
+		return total_swapcache_pages();
+
+	return memcg_page_state(memcg, NR_SWAPCACHE);
 }
 
 bool mem_cgroup_swap_full(struct folio *folio)
