@@ -91,7 +91,7 @@ static int bch2_bucket_is_movable(struct btree_trans *trans,
 
 	a = bch2_alloc_to_v4(k, &_a);
 	b->k.gen	= a->gen;
-	b->sectors	= a->dirty_sectors;
+	b->sectors	= bch2_bucket_sectors_dirty(*a);
 
 	ret = data_type_movable(a->data_type) &&
 		a->fragmentation_lru &&
@@ -153,8 +153,11 @@ static int bch2_copygc_get_buckets(struct moving_context *ctxt,
 
 	move_buckets_wait(ctxt, buckets_in_flight, false);
 
-	ret = bch2_btree_write_buffer_flush(trans);
-	if (bch2_fs_fatal_err_on(ret, c, "%s: error %s from bch2_btree_write_buffer_flush()",
+	ret = bch2_btree_write_buffer_tryflush(trans);
+	if (bch2_err_matches(ret, EROFS))
+		return ret;
+
+	if (bch2_fs_fatal_err_on(ret, c, "%s: error %s from bch2_btree_write_buffer_tryflush()",
 				 __func__, bch2_err_str(ret)))
 		return ret;
 

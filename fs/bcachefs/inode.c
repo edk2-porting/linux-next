@@ -830,7 +830,7 @@ static int bch2_inode_delete_keys(struct btree_trans *trans,
 
 		ret = bch2_trans_update(trans, &iter, &delete, 0) ?:
 		      bch2_trans_commit(trans, NULL, NULL,
-					BTREE_INSERT_NOFAIL);
+					BCH_TRANS_COMMIT_no_enospc);
 err:
 		if (ret && !bch2_err_matches(ret, BCH_ERR_transaction_restart))
 			break;
@@ -893,7 +893,7 @@ retry:
 
 	ret   = bch2_trans_update(trans, &iter, &delete.k_i, 0) ?:
 		bch2_trans_commit(trans, NULL, NULL,
-				BTREE_INSERT_NOFAIL);
+				BCH_TRANS_COMMIT_no_enospc);
 err:
 	bch2_trans_iter_exit(trans, &iter);
 	if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
@@ -1057,7 +1057,7 @@ retry:
 
 	ret   = bch2_trans_update(trans, &iter, &delete.k_i, 0) ?:
 		bch2_trans_commit(trans, NULL, NULL,
-				BTREE_INSERT_NOFAIL);
+				BCH_TRANS_COMMIT_no_enospc);
 err:
 	bch2_trans_iter_exit(trans, &iter);
 	if (bch2_err_matches(ret, BCH_ERR_transaction_restart))
@@ -1157,10 +1157,6 @@ int bch2_delete_dead_inodes(struct bch_fs *c)
 again:
 	need_another_pass = false;
 
-	ret = bch2_btree_write_buffer_flush_sync(trans);
-	if (ret)
-		goto err;
-
 	/*
 	 * Weird transaction restart handling here because on successful delete,
 	 * bch2_inode_rm_snapshot() will return a nested transaction restart,
@@ -1170,14 +1166,14 @@ again:
 	for_each_btree_key(trans, iter, BTREE_ID_deleted_inodes, POS_MIN,
 			   BTREE_ITER_PREFETCH|BTREE_ITER_ALL_SNAPSHOTS, k, ret) {
 		ret = commit_do(trans, NULL, NULL,
-				BTREE_INSERT_NOFAIL|
-				BTREE_INSERT_LAZY_RW,
+				BCH_TRANS_COMMIT_no_enospc|
+				BCH_TRANS_COMMIT_lazy_rw,
 			may_delete_deleted_inode(trans, &iter, k.k->p, &need_another_pass));
 		if (ret < 0)
 			break;
 
 		if (ret) {
-			if (!test_bit(BCH_FS_RW, &c->flags)) {
+			if (!test_bit(BCH_FS_rw, &c->flags)) {
 				bch2_trans_unlock(trans);
 				bch2_fs_lazy_rw(c);
 			}
@@ -1191,8 +1187,12 @@ again:
 	}
 	bch2_trans_iter_exit(trans, &iter);
 
-	if (!ret && need_another_pass)
+	if (!ret && need_another_pass) {
+		ret = bch2_btree_write_buffer_flush_sync(trans);
+		if (ret)
+			goto err;
 		goto again;
+	}
 err:
 	bch2_trans_put(trans);
 
