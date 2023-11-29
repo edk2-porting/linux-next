@@ -267,7 +267,7 @@ static void rtllib_tx_query_agg_cap(struct rtllib_device *ieee,
 				    struct cb_desc *tcb_desc)
 {
 	struct rt_hi_throughput *ht_info = ieee->ht_info;
-	struct tx_ts_record *pTxTs = NULL;
+	struct tx_ts_record *ts = NULL;
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 
 	if (rtllib_act_scanning(ieee, false))
@@ -288,26 +288,26 @@ static void rtllib_tx_query_agg_cap(struct rtllib_device *ieee,
 
 	if (!ieee->GetNmodeSupportBySecCfg(ieee->dev))
 		return;
-	if (ht_info->bCurrentAMPDUEnable) {
-		if (!rtllib_get_ts(ieee, (struct ts_common_info **)(&pTxTs), hdr->addr1,
+	if (ht_info->current_ampdu_enable) {
+		if (!rtllib_get_ts(ieee, (struct ts_common_info **)(&ts), hdr->addr1,
 			   skb->priority, TX_DIR, true)) {
 			netdev_info(ieee->dev, "%s: can't get TS\n", __func__);
 			return;
 		}
-		if (!pTxTs->TxAdmittedBARecord.b_valid) {
+		if (!ts->tx_admitted_ba_record.b_valid) {
 			if (ieee->wpa_ie_len && (ieee->pairwise_key_type ==
 			    KEY_TYPE_NA)) {
 				;
 			} else if (tcb_desc->bdhcp == 1) {
 				;
-			} else if (!pTxTs->bDisable_AddBa) {
-				TsStartAddBaProcess(ieee, pTxTs);
+			} else if (!ts->disable_add_ba) {
+				TsStartAddBaProcess(ieee, ts);
 			}
 			goto FORCED_AGG_SETTING;
-		} else if (!pTxTs->bUsingBa) {
-			if (SN_LESS(pTxTs->TxAdmittedBARecord.ba_start_seq_ctrl.field.seq_num,
-				    (pTxTs->TxCurSeq + 1) % 4096))
-				pTxTs->bUsingBa = true;
+		} else if (!ts->using_ba) {
+			if (SN_LESS(ts->tx_admitted_ba_record.ba_start_seq_ctrl.field.seq_num,
+				    (ts->tx_cur_seq + 1) % 4096))
+				ts->using_ba = true;
 			else
 				goto FORCED_AGG_SETTING;
 		}
@@ -500,8 +500,8 @@ static u16 rtllib_query_seqnum(struct rtllib_device *ieee, struct sk_buff *skb,
 		if (!rtllib_get_ts(ieee, (struct ts_common_info **)(&ts), dst,
 			   skb->priority, TX_DIR, true))
 			return 0;
-		seqnum = ts->TxCurSeq;
-		ts->TxCurSeq = (ts->TxCurSeq + 1) % 4096;
+		seqnum = ts->tx_cur_seq;
+		ts->tx_cur_seq = (ts->tx_cur_seq + 1) % 4096;
 		return seqnum;
 	}
 	return 0;
