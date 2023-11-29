@@ -13,6 +13,7 @@
 #define pr_fmt(fmt) "pinctrl core: " fmt
 
 #include <linux/array_size.h>
+#include <linux/cleanup.h>
 #include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/err.h>
@@ -23,16 +24,13 @@
 #include <linux/seq_file.h>
 #include <linux/slab.h>
 
+#include <linux/gpio.h>
 #include <linux/gpio/driver.h>
 
 #include <linux/pinctrl/consumer.h>
 #include <linux/pinctrl/devinfo.h>
 #include <linux/pinctrl/machine.h>
 #include <linux/pinctrl/pinctrl.h>
-
-#ifdef CONFIG_GPIOLIB
-#include "../gpio/gpiolib.h"
-#endif
 
 #include "core.h"
 #include "devicetree.h"
@@ -1262,17 +1260,17 @@ static void pinctrl_link_add(struct pinctrl_dev *pctldev,
 static int pinctrl_commit_state(struct pinctrl *p, struct pinctrl_state *state)
 {
 	struct pinctrl_setting *setting, *setting2;
-	struct pinctrl_state *old_state = p->state;
+	struct pinctrl_state *old_state = READ_ONCE(p->state);
 	int ret;
 
-	if (p->state) {
+	if (old_state) {
 		/*
 		 * For each pinmux setting in the old state, forget SW's record
 		 * of mux owner for that pingroup. Any pingroups which are
 		 * still owned by the new state will be re-acquired by the call
 		 * to pinmux_enable_setting() in the loop below.
 		 */
-		list_for_each_entry(setting, &p->state->settings, node) {
+		list_for_each_entry(setting, &old_state->settings, node) {
 			if (setting->type != PIN_MAP_TYPE_MUX_GROUP)
 				continue;
 			pinmux_disable_setting(setting);
@@ -1649,8 +1647,8 @@ static int pinctrl_pins_show(struct seq_file *s, void *what)
 	const struct pinctrl_ops *ops = pctldev->desc->pctlops;
 	unsigned i, pin;
 #ifdef CONFIG_GPIOLIB
+	struct gpio_device *gdev __free(gpio_device_put) = NULL;
 	struct pinctrl_gpio_range *range;
-	struct gpio_chip *chip;
 	int gpio_num;
 #endif
 
@@ -1685,11 +1683,11 @@ static int pinctrl_pins_show(struct seq_file *s, void *what)
 			 * we need to get rid of the range->base eventually and
 			 * get the descriptor directly from the gpio_chip.
 			 */
-			chip = gpiod_to_chip(gpio_to_desc(gpio_num));
-		else
-			chip = NULL;
-		if (chip)
-			seq_printf(s, "%u:%s ", gpio_num - chip->gpiodev->base, chip->label);
+			gdev = gpiod_to_gpio_device(gpio_to_desc(gpio_num));
+		if (gdev)
+			seq_printf(s, "%u:%s ",
+				   gpio_num - gpio_device_get_base(gdev),
+				   gpio_device_get_label(gdev));
 		else
 			seq_puts(s, "0:? ");
 #endif
