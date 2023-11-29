@@ -93,10 +93,10 @@ static void gamepad_input_handler(struct gamepad_device *dev, struct gamepad_dat
 
     input_report_abs(indev, ABS_HAT1X, 0x755 - (data->data[2] | (data->data[3] << 8)));
     input_report_abs(indev, ABS_HAT1Y, 0x755 - (data->data[4] | (data->data[5] << 8)));
-    input_report_abs(indev, ABS_X, (int16_t)(data->data[6] | (data->data[7] << 8)));
-    input_report_abs(indev, ABS_Y, (int16_t)(data->data[8] | (data->data[9] << 8)));
-    input_report_abs(indev, ABS_RX, (int16_t)(data->data[10] | (data->data[11] << 8)));
-    input_report_abs(indev, ABS_RY, (int16_t)(data->data[12] | (data->data[13] << 8)));
+    input_report_abs(indev, ABS_X, -(int16_t)(data->data[6] | (data->data[7] << 8)));
+    input_report_abs(indev, ABS_Y, -(int16_t)(data->data[8] | (data->data[9] << 8)));
+    input_report_abs(indev, ABS_RX, -(int16_t)(data->data[10] | (data->data[11] << 8)));
+    input_report_abs(indev, ABS_RY, -(int16_t)(data->data[12] | (data->data[13] << 8)));
 
     input_sync(indev);
     prev_states = keys;
