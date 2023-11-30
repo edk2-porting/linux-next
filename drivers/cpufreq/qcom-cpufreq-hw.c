@@ -617,6 +617,7 @@ static struct cpufreq_driver cpufreq_qcom_hw_driver = {
 	.name		= "qcom-cpufreq-hw",
 	.attr		= qcom_cpufreq_hw_attr,
 	.ready		= qcom_cpufreq_ready,
+	.boost_enabled	= true,
 };
 
 static unsigned long qcom_cpufreq_hw_recalc_rate(struct clk_hw *hw, unsigned long parent_rate)
