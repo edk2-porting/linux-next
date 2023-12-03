@@ -207,7 +207,7 @@ struct ctl_table_root {
 	void (*set_ownership)(struct ctl_table_header *head,
 			      const struct ctl_table *table,
 			      kuid_t *uid, kgid_t *gid);
-	int (*permissions)(struct ctl_table_header *head, struct ctl_table *table);
+	int (*permissions)(struct ctl_table_header *head, const struct ctl_table *table);
 };
 
 /* struct ctl_path describes where in the hierarchy a table is added */
