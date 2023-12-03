@@ -2413,8 +2413,8 @@ static void audit_actions_logged(u32 actions_logged, u32 old_actions_logged,
 	return audit_seccomp_actions_logged(new, old, !ret);
 }
 
-static int seccomp_actions_logged_handler(struct ctl_table *ro_table, int write,
-					  void *buffer, size_t *lenp,
+static int seccomp_actions_logged_handler(const struct ctl_table *ro_table,
+					  int write, void *buffer, size_t *lenp,
 					  loff_t *ppos)
 {
 	int ret;
