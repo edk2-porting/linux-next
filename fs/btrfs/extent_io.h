@@ -28,7 +28,8 @@ enum {
 	EXTENT_BUFFER_IN_TREE,
 	/* write IO error */
 	EXTENT_BUFFER_WRITE_ERR,
-	EXTENT_BUFFER_NO_CHECK,
+	/* Indicate the extent buffer is written zeroed out (for zoned) */
+	EXTENT_BUFFER_ZONED_ZEROOUT,
 	/* Indicate that extent buffer pages a being read */
 	EXTENT_BUFFER_READING,
 };
@@ -43,10 +44,10 @@ enum {
 };
 
 /*
- * page->private values.  Every page that is controlled by the extent
- * map has page->private set to one.
+ * Folio private values.  Every page that is controlled by the extent map has
+ * folio private set to this value.
  */
-#define EXTENT_PAGE_PRIVATE 1
+#define EXTENT_FOLIO_PRIVATE			1
 
 /*
  * The extent buffer bitmap operations are done with byte granularity instead of
@@ -77,6 +78,13 @@ struct extent_buffer {
 	unsigned long len;
 	unsigned long bflags;
 	struct btrfs_fs_info *fs_info;
+
+	/*
+	 * The address where the eb can be accessed without any cross-page handling.
+	 * This can be NULL if not possible.
+	 */
+	void *addr;
+
 	spinlock_t refs_lock;
 	atomic_t refs;
 	int read_mirror;
@@ -294,7 +302,8 @@ int extent_invalidate_folio(struct extent_io_tree *tree,
 void btrfs_clear_buffer_dirty(struct btrfs_trans_handle *trans,
 			      struct extent_buffer *buf);
 
-int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array);
+int btrfs_alloc_page_array(unsigned int nr_pages, struct page **page_array,
+			   gfp_t extra_gfp);
 
 #ifdef CONFIG_BTRFS_FS_RUN_SANITY_TESTS
 bool find_lock_delalloc_range(struct inode *inode,
