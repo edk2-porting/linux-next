@@ -80,7 +80,7 @@ svc_rdma_get_rw_ctxt(struct svcxprt_rdma *rdma, unsigned int sges)
 out_free:
 	kfree(ctxt);
 out_noctx:
-	trace_svcrdma_no_rwctx_err(rdma, sges);
+	trace_svcrdma_rwctx_empty(rdma, sges);
 	return NULL;
 }
 
@@ -135,8 +135,9 @@ static int svc_rdma_rw_ctx_init(struct svcxprt_rdma *rdma,
 			       ctxt->rw_sg_table.sgl, ctxt->rw_nents,
 			       0, offset, handle, direction);
 	if (unlikely(ret < 0)) {
+		trace_svcrdma_dma_map_rw_err(rdma, offset, handle,
+					     ctxt->rw_nents, ret);
 		svc_rdma_put_rw_ctxt(rdma, ctxt);
-		trace_svcrdma_dma_map_rw_err(rdma, ctxt->rw_nents, ret);
 	}
 	return ret;
 }
@@ -227,6 +228,7 @@ struct svc_rdma_write_info {
 	unsigned int		wi_next_off;
 
 	struct svc_rdma_chunk_ctxt	wi_cc;
+	struct work_struct	wi_work;
 };
 
 static struct svc_rdma_write_info *
@@ -248,10 +250,19 @@ svc_rdma_write_info_alloc(struct svcxprt_rdma *rdma,
 	return info;
 }
 
-static void svc_rdma_write_info_free(struct svc_rdma_write_info *info)
+static void svc_rdma_write_info_free_async(struct work_struct *work)
 {
+	struct svc_rdma_write_info *info;
+
+	info = container_of(work, struct svc_rdma_write_info, wi_work);
 	svc_rdma_cc_release(&info->wi_cc, DMA_TO_DEVICE);
 	kfree(info);
+}
+
+static void svc_rdma_write_info_free(struct svc_rdma_write_info *info)
+{
+	INIT_WORK(&info->wi_work, svc_rdma_write_info_free_async);
+	queue_work(svcrdma_wq, &info->wi_work);
 }
 
 /**
@@ -272,7 +283,7 @@ static void svc_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc)
 
 	switch (wc->status) {
 	case IB_WC_SUCCESS:
-		trace_svcrdma_wc_write(wc, &cc->cc_cid);
+		trace_svcrdma_wc_write(&cc->cc_cid);
 		break;
 	case IB_WC_WR_FLUSH_ERR:
 		trace_svcrdma_wc_write_flush(wc, &cc->cc_cid);
@@ -396,14 +407,14 @@ static int svc_rdma_post_chunk_ctxt(struct svc_rdma_chunk_ctxt *cc)
 		}
 
 		percpu_counter_inc(&svcrdma_stat_sq_starve);
-		trace_svcrdma_sq_full(rdma);
+		trace_svcrdma_sq_full(rdma, &cc->cc_cid);
 		atomic_add(cc->cc_sqecount, &rdma->sc_sq_avail);
 		wait_event(rdma->sc_send_wait,
 			   atomic_read(&rdma->sc_sq_avail) > cc->cc_sqecount);
-		trace_svcrdma_sq_retry(rdma);
+		trace_svcrdma_sq_retry(rdma, &cc->cc_cid);
 	} while (1);
 
-	trace_svcrdma_sq_post_err(rdma, ret);
+	trace_svcrdma_sq_post_err(rdma, &cc->cc_cid, ret);
 	svc_xprt_deferred_close(&rdma->sc_xprt);
 
 	/* If even one was posted, there will be a completion. */
@@ -516,7 +527,7 @@ svc_rdma_build_writes(struct svc_rdma_write_info *info,
 	return 0;
 
 out_overflow:
-	trace_svcrdma_small_wrch_err(rdma, remaining, info->wi_seg_no,
+	trace_svcrdma_small_wrch_err(&cc->cc_cid, remaining, info->wi_seg_no,
 				     info->wi_chunk->ch_segcount);
 	return -E2BIG;
 }
@@ -756,7 +767,7 @@ static int svc_rdma_build_read_segment(struct svc_rdma_read_info *info,
 	return 0;
 
 out_overrun:
-	trace_svcrdma_page_overrun_err(cc->cc_rdma, rqstp, info->ri_pageno);
+	trace_svcrdma_page_overrun_err(&cc->cc_cid, info->ri_pageno);
 	return -EINVAL;
 }
 
