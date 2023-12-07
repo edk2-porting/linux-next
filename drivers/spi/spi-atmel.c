@@ -233,9 +233,6 @@
  */
 #define DMA_MIN_BYTES	16
 
-#define SPI_DMA_MIN_TIMEOUT	(msecs_to_jiffies(1000))
-#define SPI_DMA_TIMEOUT_PER_10K	(msecs_to_jiffies(4))
-
 #define AUTOSUSPEND_TIMEOUT	2000
 
 struct atmel_spi_caps {
@@ -1336,12 +1333,10 @@ static int atmel_spi_one_transfer(struct spi_controller *host,
 		}
 
 		dma_timeout = msecs_to_jiffies(spi_controller_xfer_timeout(host, xfer));
-		ret_timeout = wait_for_completion_interruptible_timeout(&as->xfer_completion,
-									dma_timeout);
-		if (ret_timeout <= 0) {
-			dev_err(&spi->dev, "spi transfer %s\n",
-				!ret_timeout ? "timeout" : "canceled");
-			as->done_status = ret_timeout < 0 ? ret_timeout : -EIO;
+		ret_timeout = wait_for_completion_timeout(&as->xfer_completion, dma_timeout);
+		if (!ret_timeout) {
+			dev_err(&spi->dev, "spi transfer timeout\n");
+			as->done_status = -EIO;
 		}
 
 		if (as->done_status)
