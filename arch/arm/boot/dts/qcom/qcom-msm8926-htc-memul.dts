@@ -1,97 +1,151 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2022, Luca Weiss <luca@z3ntu.xyz>
+ * Copyright (c) 2023, Luca Weiss <luca@z3ntu.xyz>
  */
 
 /dts-v1/;
 
 #include "qcom-msm8226.dtsi"
 #include "pm8226.dtsi"
-#include <dt-bindings/input/ti-drv260x.h>
 
 /delete-node/ &adsp_region;
+/delete-node/ &smem_region;
 
 / {
-	model = "Huawei Watch";
-	compatible = "huawei,sturgeon", "qcom,apq8026";
-	chassis-type = "watch";
-	qcom,msm-id = <199 0x20000>;
-	qcom,board-id = <8 4>;
+	model = "HTC One Mini 2";
+	compatible = "htc,memul", "qcom,msm8926", "qcom,msm8226";
+	chassis-type = "handset";
 
-	reserved-memory {
-		sbl_region: sbl@2f00000 {
-			reg = <0x02f00000 0x100000>;
-			no-map;
+	aliases {
+		mmc1 = &sdhc_2; /* SDC2 SD card slot */
+	};
+
+	gpio-keys {
+		compatible = "gpio-keys";
+
+		key-power {
+			label = "Power";
+			gpios = <&tlmm 106 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_POWER>;
+			debounce-interval = <15>;
 		};
 
-		external_image_region: external-image@3100000 {
-			reg = <0x3100000 0x200000>;
-			no-map;
+		key-volume-down {
+			label = "Volume Down";
+			gpios = <&tlmm 107 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEDOWN>;
+			debounce-interval = <15>;
 		};
 
-		peripheral_region: peripheral@3300000 {
-			reg = <0x3300000 0x600000>;
-			no-map;
-		};
-
-		adsp_region: adsp@3900000 {
-			reg = <0x3900000 0x1400000>;
-			no-map;
-		};
-
-		modem_region: modem@4d00000 {
-			reg = <0x4d00000 0x1b00000>;
-			no-map;
-		};
-
-		modem_efs_region: modem-efs@7f00000 {
-			reg = <0x7f00000 0x100000>;
-			no-map;
+		key-volume-up {
+			label = "Volume Up";
+			gpios = <&tlmm 108 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_VOLUMEUP>;
+			debounce-interval = <15>;
 		};
 	};
 
-	vreg_wlan: wlan-regulator {
-		compatible = "regulator-fixed";
+	reserved-memory {
+		unknown@5b00000 {
+			reg = <0x05b00000 0x200000>;
+			no-map;
+		};
 
-		regulator-name = "wl-reg";
-		regulator-min-microvolt = <2950000>;
-		regulator-max-microvolt = <2950000>;
+		unknown@7500000 {
+			reg = <0x07500000 0xb00000>;
+			no-map;
+		};
 
-		gpio = <&tlmm 110 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
+		mpss_region: mpss@8000000 {
+			reg = <0x08000000 0x4f00000>;
+			no-map;
+		};
 
-		pinctrl-names = "default";
-		pinctrl-0 = <&wlan_regulator_default_state>;
+		unknown@cf00000 {
+			reg = <0x0cf00000 0x200000>;
+			no-map;
+		};
+
+		mba_region: mba@d100000 {
+			reg = <0x0d100000 0x3a000>;
+			no-map;
+		};
+
+		unknown@d13a000 {
+			reg = <0x0d13a000 0xc6000>;
+			no-map;
+		};
+
+		wcnss_region: wcnss@d200000 {
+			reg = <0x0d200000 0x650000>;
+			no-map;
+		};
+
+		unknown@d850000 {
+			reg = <0x0d850000 0x3b0000>;
+			no-map;
+		};
+
+		adsp_region: adsp@dc00000 {
+			reg = <0x0dc00000 0x1400000>;
+			no-map;
+		};
+
+		unknown@f000000 {
+			reg = <0x0f000000 0x500000>;
+			no-map;
+		};
+
+		venus_region: venus@f500000 {
+			reg = <0x0f500000 0x500000>;
+			no-map;
+		};
+
+		smem_region: smem@fa00000 {
+			reg = <0x0fa00000 0x100000>;
+			no-map;
+		};
+
+		unknown@fb00000 {
+			reg = <0x0fb00000 0x1b00000>;
+			no-map;
+		};
 	};
 };
 
 &adsp {
+	firmware-name = "qcom/msm8926/memul/adsp.mbn";
 	status = "okay";
 };
 
 &blsp1_i2c2 {
-	clock-frequency = <384000>;
-
 	status = "okay";
 
-	vibrator@5a {
-		compatible = "ti,drv2605";
-		reg = <0x5a>;
-		enable-gpios = <&tlmm 60 GPIO_ACTIVE_HIGH>;
+	magnetometer@d {
+		compatible = "asahi-kasei,ak8963";
+		reg = <0x0d>;
+		interrupts-extended = <&tlmm 66 IRQ_TYPE_EDGE_RISING>;
+		vdd-supply = <&pm8226_l19>;
+		vid-supply = <&pm8226_l28>;
+	};
 
-		mode = <DRV260X_ERM_MODE>;
-		library-sel = <DRV260X_ERM_LIB_D>;
-		vib-rated-mv = <2765>;
-		vib-overdrive-mv = <3525>;
-
-		pinctrl-0 = <&vibrator_default_state>;
-		pinctrl-names = "default";
+	accelerometer@18 {
+		compatible = "bosch,bma250e";
+		reg = <0x18>;
+		interrupts-extended = <&tlmm 63 IRQ_TYPE_EDGE_RISING>;
+		vdd-supply = <&pm8226_l19>;
+		vddio-supply = <&pm8226_l28>;
 	};
 };
 
-&blsp1_i2c5 {
-	clock-frequency = <384000>;
+&blsp1_i2c4 {
+	status = "okay";
 
+	/* TFA9887 @ 34 */
+	/* TFA9887 @ 35 */
+};
+
+&blsp1_i2c5 {
 	status = "okay";
 
 	touchscreen@20 {
@@ -100,10 +154,6 @@
 
 		interrupts-extended = <&tlmm 17 IRQ_TYPE_EDGE_FALLING>;
 		vdd-supply = <&pm8226_l19>;
-		vio-supply = <&pm8226_lvs1>;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&touch_default_state>;
 
 		syna,startup-delay-ms = <160>;
 
@@ -122,23 +172,16 @@
 	};
 };
 
-&blsp1_uart4 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&blsp1_uart4_default_state>;
-
+&blsp1_i2c6 {
 	status = "okay";
 
-	bluetooth {
-		compatible = "brcm,bcm43430a0-bt";
-		max-speed = <3000000>;
+	/* NCP6924 Camera Regulators @ 10 */
+	/* PN544 NFC @ 28 */
+	/* TPS61310 Flash/Torch @ 33 */
+};
 
-		pinctrl-names = "default";
-		pinctrl-0 = <&bluetooth_default_state>;
-
-		host-wakeup-gpios = <&tlmm 64 GPIO_ACTIVE_HIGH>;
-		device-wakeup-gpios = <&tlmm 63 GPIO_ACTIVE_HIGH>;
-		shutdown-gpios = <&tlmm 67 GPIO_ACTIVE_HIGH>;
-	};
+&pm8226_vib {
+	status = "okay";
 };
 
 &rpm_requests {
@@ -147,7 +190,7 @@
 
 		pm8226_s3: s3 {
 			regulator-min-microvolt = <1200000>;
-			regulator-max-microvolt = <1300000>;
+			regulator-max-microvolt = <1350000>;
 		};
 
 		pm8226_s4: s4 {
@@ -221,8 +264,8 @@
 		};
 
 		pm8226_l15: l15 {
-			regulator-min-microvolt = <2800000>;
-			regulator-max-microvolt = <2800000>;
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
 		};
 
 		pm8226_l16: l16 {
@@ -253,6 +296,7 @@
 		pm8226_l21: l21 {
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <2950000>;
+			regulator-allow-set-load;
 		};
 
 		pm8226_l22: l22 {
@@ -262,7 +306,7 @@
 
 		pm8226_l23: l23 {
 			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <2950000>;
+			regulator-max-microvolt = <3000000>;
 		};
 
 		pm8226_l24: l24 {
@@ -287,107 +331,30 @@
 
 		pm8226_l28: l28 {
 			regulator-min-microvolt = <1800000>;
-			regulator-max-microvolt = <2950000>;
+			regulator-max-microvolt = <1800000>;
 		};
 
 		pm8226_lvs1: lvs1 {};
 	};
 };
 
-&sdhc_1 {
-	vmmc-supply = <&pm8226_l17>;
-	vqmmc-supply = <&pm8226_l6>;
+&sdhc_2 {
+	vmmc-supply = <&pm8226_l18>;
+	vqmmc-supply = <&pm8226_l21>;
 
-	bus-width = <8>;
-	non-removable;
-
-	status = "okay";
-};
-
-&sdhc_3 {
-	max-frequency = <100000000>;
-	non-removable;
-
-	vmmc-supply = <&vreg_wlan>;
-	vqmmc-supply = <&pm8226_l6>;
-
-	#address-cells = <1>;
-	#size-cells = <0>;
+	bus-width = <4>;
+	cd-gpios = <&tlmm 38 GPIO_ACTIVE_LOW>;
 
 	status = "okay";
-
-	wifi@1 {
-		compatible = "brcm,bcm43430a0-fmac", "brcm,bcm4329-fmac";
-		reg = <1>;
-
-		interrupts-extended = <&tlmm 66 IRQ_TYPE_EDGE_FALLING>;
-		interrupt-names = "host-wake";
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&wlan_hostwake_default_state>;
-	};
 };
 
 &smbb {
-	qcom,fast-charge-safe-voltage = <4370000>;
+	qcom,fast-charge-safe-current = <1750000>;
+	qcom,fast-charge-current-limit = <1750000>;
+	qcom,fast-charge-safe-voltage = <4360000>;
 	qcom,fast-charge-high-threshold-voltage = <4350000>;
-	qcom,minimum-input-voltage = <4350000>;
-	qcom,fast-charge-current-limit = <300000>;
-	qcom,fast-charge-safe-current = <600000>;
-	qcom,auto-recharge-threshold-voltage = <4240000>;
-};
-
-&tlmm {
-	blsp1_uart4_default_state: blsp1-uart4-default-state {
-		pins = "gpio12", "gpio13", "gpio14", "gpio15";
-		function = "blsp_uart4";
-		drive-strength = <8>;
-		bias-disable;
-	};
-
-	bluetooth_default_state: bluetooth-default-state {
-		pins = "gpio63", "gpio64";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-down;
-	};
-
-	touch_default_state: touch-default-state {
-		irq-pins {
-			pins = "gpio17";
-			function = "gpio";
-			drive-strength = <8>;
-			bias-pull-up;
-		};
-
-		reset-pins {
-			pins = "gpio16";
-			function = "gpio";
-			drive-strength = <6>;
-			bias-pull-up;
-		};
-	};
-
-	vibrator_default_state: vibrator-default-state {
-		pins = "gpio59", "gpio60";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-down;
-	};
-
-	wlan_hostwake_default_state: wlan-hostwake-default-state {
-		pins = "gpio66";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-disable;
-	};
-
-	wlan_regulator_default_state: wlan-regulator-default-state {
-		pins = "gpio110";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-down;
-	};
+	qcom,auto-recharge-threshold-voltage = <4300000>;
+	qcom,minimum-input-voltage = <4300000>;
 };
 
 &usb {

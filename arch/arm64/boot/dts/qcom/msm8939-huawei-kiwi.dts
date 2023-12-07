@@ -2,29 +2,17 @@
 
 /dts-v1/;
 
-#include "msm8916-pm8916.dtsi"
-
+#include "msm8939-pm8916.dtsi"
 #include <dt-bindings/gpio/gpio.h>
-#include <dt-bindings/input/input.h>
-#include <dt-bindings/interrupt-controller/irq.h>
-#include <dt-bindings/leds/common.h>
-
-/*
- * NOTE: The original firmware from Acer can only boot 32-bit kernels.
- * To boot this device tree using arm64 it is necessary to flash 64-bit
- * TZ/HYP firmware (e.g. taken from the DragonBoard 410c).
- * See https://wiki.postmarketos.org/wiki/Acer_Iconia_Talk_S_(acer-a1-724)
- * for suggested installation instructions.
- */
 
 / {
-	model = "Acer Iconia Talk S A1-724";
-	compatible = "acer,a1-724", "qcom,msm8916";
-	chassis-type = "tablet";
+	model = "Huawei Honor 5X / GR5 (2016)";
+	compatible = "huawei,kiwi", "qcom,msm8939";
+	chassis-type = "handset";
 
 	aliases {
-		mmc0 = &sdhc_1; /* eMMC */
-		mmc1 = &sdhc_2; /* SD card */
+		mmc0 = &sdhc_1; /* SDC1 eMMC slot */
+		mmc1 = &sdhc_2; /* SDC2 SD card slot */
 		serial0 = &blsp_uart2;
 	};
 
@@ -32,11 +20,35 @@
 		stdout-path = "serial0";
 	};
 
+	reserved-memory {
+		qseecom_mem: qseecom@84a00000 {
+			reg = <0x0 0x84a00000 0x0 0x1600000>;
+			no-map;
+		};
+	};
+
+	gpio-hall-sensor {
+		compatible = "gpio-keys";
+
+		pinctrl-0 = <&gpio_hall_sensor_default>;
+		pinctrl-names = "default";
+
+		label = "GPIO Hall Effect Sensor";
+
+		event-hall-sensor {
+			label = "Hall Effect Sensor";
+			gpios = <&tlmm 69 GPIO_ACTIVE_LOW>;
+			linux,input-type = <EV_SW>;
+			linux,code = <SW_LID>;
+			linux,can-disable;
+		};
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 
-		pinctrl-names = "default";
 		pinctrl-0 = <&gpio_keys_default>;
+		pinctrl-names = "default";
 
 		label = "GPIO Buttons";
 
@@ -50,89 +62,76 @@
 	usb_id: usb-id {
 		compatible = "linux,extcon-usb-gpio";
 		id-gpios = <&tlmm 110 GPIO_ACTIVE_HIGH>;
-		pinctrl-names = "default";
 		pinctrl-0 = <&usb_id_default>;
+		pinctrl-names = "default";
 	};
 };
 
 &blsp_i2c2 {
 	status = "okay";
 
-	accelerometer@10 {
-		compatible = "bosch,bmc150_accel";
-		reg = <0x10>;
-		interrupt-parent = <&tlmm>;
-		interrupts = <115 IRQ_TYPE_EDGE_RISING>;
+	accelerometer@1e {
+		compatible = "kionix,kx023-1025";
+		reg = <0x1e>;
 
 		vdd-supply = <&pm8916_l17>;
 		vddio-supply = <&pm8916_l6>;
-
-		pinctrl-names = "default";
 		pinctrl-0 = <&accel_int_default>;
-
-		mount-matrix = "0", "-1", "0",
-			       "-1", "0", "0",
+		pinctrl-names = "default";
+		mount-matrix = "-1", "0", "0",
+			       "0", "1", "0",
 			       "0", "0", "1";
 	};
 
-	magnetometer@12 {
-		compatible = "bosch,bmc150_magn";
-		reg = <0x12>;
+	proximity@39 {
+		compatible = "avago,apds9930";
+		reg = <0x39>;
+
+		interrupt-parent = <&tlmm>;
+		interrupts = <113 IRQ_TYPE_EDGE_FALLING>;
 
 		vdd-supply = <&pm8916_l17>;
 		vddio-supply = <&pm8916_l6>;
-	};
-};
 
-&blsp_i2c4 {
-	status = "okay";
+		led-max-microamp = <25000>;
+		amstaos,proximity-diodes = <0>;
 
-	led-controller@30 {
-		compatible = "kinetic,ktd2026";
-		reg = <0x30>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		led@0 {
-			reg = <0>;
-			function = LED_FUNCTION_STATUS;
-			color = <LED_COLOR_ID_RED>;
-		};
-
-		led@1 {
-			reg = <1>;
-			function = LED_FUNCTION_STATUS;
-			color = <LED_COLOR_ID_GREEN>;
-		};
+		pinctrl-0 = <&prox_irq_default>;
+		pinctrl-names = "default";
 	};
 };
 
 &blsp_i2c5 {
 	status = "okay";
 
-	touchscreen@38 {
-		/* Actually ft5446 */
-		compatible = "edt,edt-ft5406";
-		reg = <0x38>;
+	touchscreen@1c {
+		compatible = "cypress,tt21000";
 
+		reg = <0x1c>;
 		interrupt-parent = <&tlmm>;
-		interrupts = <13 IRQ_TYPE_LEVEL_LOW>;
+		interrupts = <13 IRQ_TYPE_EDGE_FALLING>;
 
 		reset-gpios = <&tlmm 12 GPIO_ACTIVE_LOW>;
 
-		vcc-supply = <&pm8916_l16>;
-		iovcc-supply = <&pm8916_l6>;
+		/*
+		 * NOTE: vdd is not directly supplied by pm8916_l16, it seems to be a
+		 * fixed regulator that is automatically enabled by pm8916_l16.
+		 */
+		vdd-supply = <&pm8916_l16>;
+		vddio-supply = <&pm8916_l16>;
 
-		touchscreen-size-x = <720>;
-		touchscreen-size-y = <1280>;
-
-		pinctrl-names = "default";
 		pinctrl-0 = <&touchscreen_default>;
+		pinctrl-names = "default";
 	};
 };
 
 &blsp_uart2 {
 	status = "okay";
+};
+
+&pm8916_l8 {
+	regulator-min-microvolt = <2950000>;
+	regulator-max-microvolt = <2950000>;
 };
 
 &pm8916_resin {
@@ -142,8 +141,8 @@
 
 &pm8916_rpm_regulators {
 	pm8916_l16: l16 {
-		regulator-min-microvolt = <2900000>;
-		regulator-max-microvolt = <2900000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
 	};
 
 	pm8916_l17: l17 {
@@ -161,9 +160,9 @@
 };
 
 &sdhc_2 {
-	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&sdc2_default &sdc2_cd_default>;
 	pinctrl-1 = <&sdc2_sleep &sdc2_cd_default>;
+	pinctrl-names = "default", "sleep";
 
 	cd-gpios = <&tlmm 38 GPIO_ACTIVE_HIGH>;
 
@@ -177,14 +176,6 @@
 
 &usb_hs_phy {
 	extcon = <&usb_id>;
-};
-
-&venus {
-	status = "okay";
-};
-
-&venus_mem {
-	status = "okay";
 };
 
 &wcnss {
@@ -203,7 +194,13 @@
 	accel_int_default: accel-int-default-state {
 		pins = "gpio115";
 		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
 
+	gpio_hall_sensor_default: gpio-hall-sensor-default-state {
+		pins = "gpio69";
+		function = "gpio";
 		drive-strength = <2>;
 		bias-disable;
 	};
@@ -211,9 +208,15 @@
 	gpio_keys_default: gpio-keys-default-state {
 		pins = "gpio107";
 		function = "gpio";
-
 		drive-strength = <2>;
 		bias-pull-up;
+	};
+
+	prox_irq_default: prox-irq-default-state {
+		pins = "gpio113";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
 	};
 
 	sdc2_cd_default: sdc2-cd-default-state {
@@ -224,25 +227,15 @@
 	};
 
 	touchscreen_default: touchscreen-default-state {
-		reset-pins {
-			pins = "gpio12";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-disable;
-		};
-
-		touchscreen-pins {
-			pins = "gpio13";
-			function = "gpio";
-			drive-strength = <2>;
-			bias-pull-up;
-		};
+		pins = "gpio12", "gpio13";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
 	};
 
 	usb_id_default: usb-id-default-state {
 		pins = "gpio110";
 		function = "gpio";
-
 		drive-strength = <8>;
 		bias-pull-up;
 	};
