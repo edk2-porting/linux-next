@@ -685,8 +685,6 @@ static void journal_entry_dev_usage_to_text(struct printbuf *out, struct bch_fs 
 		       le64_to_cpu(u->d[i].sectors),
 		       le64_to_cpu(u->d[i].fragmented));
 	}
-
-	prt_printf(out, " buckets_ec: %llu", le64_to_cpu(u->buckets_ec));
 }
 
 static int journal_entry_log_validate(struct bch_fs *c,
@@ -1601,6 +1599,9 @@ static CLOSURE_CALLBACK(journal_write_done)
 
 	bch2_journal_space_available(j);
 
+	track_event_change(&c->times[BCH_TIME_blocked_journal_max_in_flight],
+			   &j->max_in_flight_start, false);
+
 	closure_wake_up(&w->wait);
 	journal_wake(j);
 
@@ -1844,7 +1845,7 @@ static int bch2_journal_write_pick_flush(struct journal *j, struct journal_buf *
 	    (!w->must_flush &&
 	     (jiffies - j->last_flush_write) < msecs_to_jiffies(c->opts.journal_flush_delay) &&
 	     test_bit(JOURNAL_MAY_SKIP_FLUSH, &j->flags))) {
-		     w->noflush = true;
+		w->noflush = true;
 		SET_JSET_NO_FLUSH(w->data, true);
 		w->data->last_seq	= 0;
 		w->last_seq		= 0;
@@ -1886,6 +1887,8 @@ CLOSURE_CALLBACK(bch2_journal_write)
 	ret = bch2_journal_write_prep(j, w);
 	if (ret)
 		goto err;
+
+	j->entry_bytes_written += vstruct_bytes(w->data);
 
 	while (1) {
 		spin_lock(&j->lock);

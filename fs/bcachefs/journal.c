@@ -184,6 +184,8 @@ static void __journal_entry_close(struct journal *j, unsigned closed_val)
 	/* Close out old buffer: */
 	buf->data->u64s		= cpu_to_le32(old.cur_entry_offset);
 
+	trace_journal_entry_close(c, vstruct_bytes(buf->data));
+
 	sectors = vstruct_blocks_plus(buf->data, c->block_bits,
 				      buf->u64s_reserved) << c->block_bits;
 	BUG_ON(sectors > buf->sectors);
@@ -363,11 +365,6 @@ static int journal_entry_open(struct journal *j)
 	} while ((v = atomic64_cmpxchg(&j->reservations.counter,
 				       old.v, new.v)) != old.v);
 
-	if (j->res_get_blocked_start)
-		bch2_time_stats_update(j->blocked_time,
-				       j->res_get_blocked_start);
-	j->res_get_blocked_start = 0;
-
 	mod_delayed_work(c->io_complete_wq,
 			 &j->write_work,
 			 msecs_to_jiffies(c->opts.journal_flush_delay));
@@ -467,15 +464,12 @@ retry:
 	__journal_entry_close(j, JOURNAL_ENTRY_CLOSED_VAL);
 	ret = journal_entry_open(j);
 
-	if (ret == JOURNAL_ERR_max_in_flight)
+	if (ret == JOURNAL_ERR_max_in_flight) {
+		track_event_change(&c->times[BCH_TIME_blocked_journal_max_in_flight],
+				   &j->max_in_flight_start, true);
 		trace_and_count(c, journal_entry_full, c);
-unlock:
-	if ((ret && ret != JOURNAL_ERR_insufficient_devices) &&
-	    !j->res_get_blocked_start) {
-		j->res_get_blocked_start = local_clock() ?: 1;
-		trace_and_count(c, journal_full, c);
 	}
-
+unlock:
 	can_discard = j->can_discard;
 	spin_unlock(&j->lock);
 
@@ -1262,6 +1256,7 @@ void __bch2_journal_debug_to_text(struct printbuf *out, struct journal *j)
 	union journal_res_state s;
 	struct bch_dev *ca;
 	unsigned long now = jiffies;
+	u64 nr_writes = j->nr_flush_writes + j->nr_noflush_writes;
 	u64 seq;
 	unsigned i;
 
@@ -1275,20 +1270,23 @@ void __bch2_journal_debug_to_text(struct printbuf *out, struct journal *j)
 	prt_printf(out, "dirty journal entries:\t%llu/%llu\n",	fifo_used(&j->pin), j->pin.size);
 	prt_printf(out, "seq:\t\t\t%llu\n",			journal_cur_seq(j));
 	prt_printf(out, "seq_ondisk:\t\t%llu\n",		j->seq_ondisk);
-	prt_printf(out, "last_seq:\t\t%llu\n",		journal_last_seq(j));
+	prt_printf(out, "last_seq:\t\t%llu\n",			journal_last_seq(j));
 	prt_printf(out, "last_seq_ondisk:\t%llu\n",		j->last_seq_ondisk);
-	prt_printf(out, "flushed_seq_ondisk:\t%llu\n",	j->flushed_seq_ondisk);
-	prt_printf(out, "watermark:\t\t%s\n",		bch2_watermarks[j->watermark]);
-	prt_printf(out, "each entry reserved:\t%u\n",	j->entry_u64s_reserved);
+	prt_printf(out, "flushed_seq_ondisk:\t%llu\n",		j->flushed_seq_ondisk);
+	prt_printf(out, "watermark:\t\t%s\n",			bch2_watermarks[j->watermark]);
+	prt_printf(out, "each entry reserved:\t%u\n",		j->entry_u64s_reserved);
 	prt_printf(out, "nr flush writes:\t%llu\n",		j->nr_flush_writes);
-	prt_printf(out, "nr noflush writes:\t%llu\n",	j->nr_noflush_writes);
-	prt_printf(out, "nr direct reclaim:\t%llu\n",	j->nr_direct_reclaim);
+	prt_printf(out, "nr noflush writes:\t%llu\n",		j->nr_noflush_writes);
+	prt_printf(out, "average write size:\t");
+	prt_human_readable_u64(out, nr_writes ? div64_u64(j->entry_bytes_written, nr_writes) : 0);
+	prt_newline(out);
+	prt_printf(out, "nr direct reclaim:\t%llu\n",		j->nr_direct_reclaim);
 	prt_printf(out, "nr background reclaim:\t%llu\n",	j->nr_background_reclaim);
 	prt_printf(out, "reclaim kicked:\t\t%u\n",		j->reclaim_kicked);
-	prt_printf(out, "reclaim runs in:\t%u ms\n",	time_after(j->next_reclaim, now)
+	prt_printf(out, "reclaim runs in:\t%u ms\n",		time_after(j->next_reclaim, now)
 	       ? jiffies_to_msecs(j->next_reclaim - jiffies) : 0);
-	prt_printf(out, "current entry sectors:\t%u\n",	j->cur_entry_sectors);
-	prt_printf(out, "current entry error:\t%s\n",	bch2_journal_errors[j->cur_entry_error]);
+	prt_printf(out, "current entry sectors:\t%u\n",		j->cur_entry_sectors);
+	prt_printf(out, "current entry error:\t%s\n",		bch2_journal_errors[j->cur_entry_error]);
 	prt_printf(out, "current entry:\t\t");
 
 	switch (s.cur_entry_offset) {

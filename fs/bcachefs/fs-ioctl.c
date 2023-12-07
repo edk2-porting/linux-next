@@ -287,34 +287,26 @@ static int bch2_ioc_goingdown(struct bch_fs *c, u32 __user *arg)
 
 	bch_notice(c, "shutdown by ioctl type %u", flags);
 
-	down_write(&c->vfs_sb->s_umount);
-
 	switch (flags) {
 	case FSOP_GOING_FLAGS_DEFAULT:
 		ret = freeze_bdev(c->vfs_sb->s_bdev);
 		if (ret)
-			goto err;
-
+			break;
 		bch2_journal_flush(&c->journal);
-		c->vfs_sb->s_flags |= SB_RDONLY;
 		bch2_fs_emergency_read_only(c);
 		thaw_bdev(c->vfs_sb->s_bdev);
 		break;
-
 	case FSOP_GOING_FLAGS_LOGFLUSH:
 		bch2_journal_flush(&c->journal);
 		fallthrough;
-
 	case FSOP_GOING_FLAGS_NOLOGFLUSH:
-		c->vfs_sb->s_flags |= SB_RDONLY;
 		bch2_fs_emergency_read_only(c);
 		break;
 	default:
 		ret = -EINVAL;
 		break;
 	}
-err:
-	up_write(&c->vfs_sb->s_umount);
+
 	return ret;
 }
 
@@ -413,7 +405,7 @@ retry:
 
 	if ((arg.flags & BCH_SUBVOL_SNAPSHOT_CREATE) &&
 	    !arg.src_ptr)
-		snapshot_src.subvol = to_bch_ei(dir)->ei_inode.bi_subvol;
+		snapshot_src.subvol = inode_inum(to_bch_ei(dir)).subvol;
 
 	inode = __bch2_create(file_mnt_idmap(filp), to_bch_ei(dir),
 			      dst_dentry, arg.mode|S_IFDIR,

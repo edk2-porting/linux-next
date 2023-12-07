@@ -73,7 +73,6 @@
 	x(ENOMEM,			ENOMEM_fsck_add_nlink)			\
 	x(ENOMEM,			ENOMEM_journal_key_insert)		\
 	x(ENOMEM,			ENOMEM_journal_keys_sort)		\
-	x(ENOMEM,			ENOMEM_journal_replay)			\
 	x(ENOMEM,			ENOMEM_read_superblock_clean)		\
 	x(ENOMEM,			ENOMEM_fs_alloc)			\
 	x(ENOMEM,			ENOMEM_fs_name_alloc)			\
@@ -175,6 +174,7 @@
 	x(EINVAL,			insufficient_devices_to_start)		\
 	x(EINVAL,			invalid)				\
 	x(EINVAL,			internal_fsck_err)			\
+	x(EINVAL,			opt_parse_error)			\
 	x(EROFS,			erofs_trans_commit)			\
 	x(EROFS,			erofs_no_writes)			\
 	x(EROFS,			erofs_journal_err)			\
