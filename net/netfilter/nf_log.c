@@ -403,7 +403,7 @@ static struct ctl_table nf_log_sysctl_ftable[] = {
 	{ }
 };
 
-static int nf_log_proc_dostring(struct ctl_table *table, int write,
+static int nf_log_proc_dostring(const struct ctl_table *table, int write,
 			 void *buffer, size_t *lenp, loff_t *ppos)
 {
 	const struct nf_logger *logger;
@@ -508,7 +508,7 @@ err_alloc:
 
 static void netfilter_log_sysctl_exit(struct net *net)
 {
-	struct ctl_table *table;
+	const struct ctl_table *table;
 
 	table = net->nf.nf_log_dir_header->ctl_table_arg;
 	unregister_net_sysctl_table(net->nf.nf_log_dir_header);
