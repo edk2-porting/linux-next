@@ -9,14 +9,28 @@
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 #include "sm8550.dtsi"
-// #include "pm8010.dtsi"
 #include "pm8550.dtsi"
 #include "pm8550b.dtsi"
 #include "pm8550ve.dtsi"
 #include "pm8550vs.dtsi"
 #include "pmk8550.dtsi"
-// #include "pmr735d_a.dtsi"
-// #include "pmr735d_b.dtsi"
+
+/delete-node/ &mpss_mem;
+/delete-node/ &q6_mpss_dtb_mem;
+/delete-node/ &mpss_dsm_mem;
+/delete-node/ &camera_mem;
+/delete-node/ &trust_ui_vm_mem;
+/delete-node/ &trust_ui_vm_dump;
+/delete-node/ &trust_ui_vm_qrtr;
+/delete-node/ &trust_ui_vm_vblk0_ring;
+/delete-node/ &trust_ui_vm_vblk1_ring;
+/delete-node/ &trust_ui_vm_swiotlb;
+/delete-node/ &oem_vm_mem;
+/delete-node/ &oem_vm_vblk0_ring;
+/delete-node/ &oem_vm_swiotlb;
+/delete-node/ &hyp_ext_tags_mem;
+/delete-node/ &hyp_ext_reserved_mem;
+/delete-node/ &remoteproc_mpss;
 
 / {
 	model = "AYN Odin 2";
@@ -155,13 +169,6 @@
 		};
 	};
 
-	reserved-memory {
-		cont_splash_mem: cont-splash@b8000000 {
-			reg = <0x0 0xb8000000 0x0 0x2b00000>;
-			no-map;
-		};
-	};
-
 	fan_pwr: fan-pwr-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "fan_pwr";
@@ -197,6 +204,85 @@
 		regulator-always-on;
 		regulator-boot-on;
 		enable-active-high;
+	};
+
+	sound {
+		compatible = "qcom,sm8550-sndcard", "qcom,sm8450-sndcard";
+		model = "QCS8550-AYN-ODIN2";
+		audio-routing = "IN1_HPHL", "HPHL_OUT",
+				"IN2_HPHR", "HPHR_OUT",
+				"AMIC2", "MIC BIAS2",
+				"VA DMIC0", "MIC BIAS1",
+				"VA DMIC1", "MIC BIAS1",
+				"VA DMIC2", "MIC BIAS3",
+				"TX DMIC0", "MIC BIAS1",
+				"TX DMIC1", "MIC BIAS2",
+				"TX DMIC2", "MIC BIAS3",
+				"TX SWR_ADC1", "ADC2_OUTPUT";
+
+		wcd-playback-dai-link {
+			link-name = "WCD Playback";
+
+			cpu {
+				sound-dai = <&q6apmbedai RX_CODEC_DMA_RX_0>;
+			};
+
+			codec {
+				sound-dai = <&wcd938x 0>, <&swr1 0>, <&lpass_rxmacro 0>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+
+		wcd-capture-dai-link {
+			link-name = "WCD Capture";
+
+			cpu {
+				sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+			};
+
+			codec {
+				sound-dai = <&wcd938x 1>, <&swr2 0>, <&lpass_txmacro 0>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
+
+		// wsa-dai-link {
+		// 	link-name = "WSA Playback";
+
+		// 	cpu {
+		// 		sound-dai = <&q6apmbedai WSA_CODEC_DMA_RX_0>;
+		// 	};
+
+		// 	codec {
+		// 		sound-dai = <&north_spkr>, <&south_spkr>, <&swr0 0>, <&lpass_wsamacro 0>;
+		// 	};
+
+		// 	platform {
+		// 		sound-dai = <&q6apm>;
+		// 	};
+		// };
+
+		va-dai-link {
+			link-name = "VA Capture";
+
+			cpu {
+				sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+			};
+
+			codec {
+				sound-dai = <&lpass_vamacro 0>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
 	};
 
 	usb0-sbu-mux {
@@ -243,7 +329,6 @@
 		vin4-supply = <&vreg_s6g_1p86>;		// vdd-wlan-rfa1
 		vin5-supply = <&vreg_s4g_1p25>;		// vdd-wlan-rfa2
 	};
-
 };
 
 &apps_rsc {
@@ -753,14 +838,17 @@
 	// };
 };
 
-&lpass_vamacro {
+// &lpass_vamacro {
+	/* For recording I guess */
 	// pinctrl-0 = <&dmic01_default>, <&dmic02_default>;
 	// pinctrl-names = "default";
 	// vdd-micb-supply = <&vreg_s10b_1p8>;
-	qcom,dmic-sample-rate = <600000>;
+	// qcom,dmic-sample-rate = <4800000>;
+// };
 
-	status = "okay";
-};
+// &lpass_wsamacro {
+// 	status = "disabled";
+// };
 
 &mdss {
 	status = "okay";

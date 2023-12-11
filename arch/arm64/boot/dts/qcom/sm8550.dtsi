@@ -79,7 +79,7 @@
 			power-domains = <&CPU_PD0>;
 			power-domain-names = "psci";
 			qcom,freq-domain = <&cpufreq_hw 0>;
-			capacity-dmips-mhz = <1024>;
+			capacity-dmips-mhz = <820>;
 			dynamic-power-coefficient = <100>;
 			#cooling-cells = <2>;
 			L2_0: l2-cache {
@@ -105,7 +105,7 @@
 			power-domains = <&CPU_PD1>;
 			power-domain-names = "psci";
 			qcom,freq-domain = <&cpufreq_hw 0>;
-			capacity-dmips-mhz = <1024>;
+			capacity-dmips-mhz = <820>;
 			dynamic-power-coefficient = <100>;
 			#cooling-cells = <2>;
 			L2_100: l2-cache {
@@ -126,7 +126,7 @@
 			power-domains = <&CPU_PD2>;
 			power-domain-names = "psci";
 			qcom,freq-domain = <&cpufreq_hw 0>;
-			capacity-dmips-mhz = <1024>;
+			capacity-dmips-mhz = <820>;
 			dynamic-power-coefficient = <100>;
 			#cooling-cells = <2>;
 			L2_200: l2-cache {
@@ -2232,7 +2232,7 @@
 			interrupts = <GIC_SPI 496 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 520 IRQ_TYPE_LEVEL_HIGH>;
 			interrupt-names = "core", "wakeup";
-			clocks = <&lpass_vamacro>;
+			clocks = <&lpass_txmacro>;
 			clock-names = "iface";
 			label = "TX";
 
