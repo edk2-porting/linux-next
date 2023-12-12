@@ -1584,16 +1584,6 @@ static bool has_useable_gicv3_cpuif(const struct arm64_cpu_capabilities *entry, 
 	return has_sre;
 }
 
-static bool has_no_hw_prefetch(const struct arm64_cpu_capabilities *entry, int __unused)
-{
-	u32 midr = read_cpuid_id();
-
-	/* Cavium ThunderX pass 1.x and 2.x */
-	return midr_is_cpu_model_range(midr, MIDR_THUNDERX,
-		MIDR_CPU_VAR_REV(0, 0),
-		MIDR_CPU_VAR_REV(1, MIDR_REVISION_MASK));
-}
-
 static bool has_cache_idc(const struct arm64_cpu_capabilities *entry,
 			  int scope)
 {
@@ -1767,6 +1757,39 @@ static bool unmap_kernel_at_el0(const struct arm64_cpu_capabilities *entry,
 
 	return !meltdown_safe;
 }
+
+#if defined(ID_AA64MMFR0_EL1_TGRAN_LPA2) && defined(ID_AA64MMFR0_EL1_TGRAN_2_SUPPORTED_LPA2)
+static bool has_lpa2_at_stage1(u64 mmfr0)
+{
+	unsigned int tgran;
+
+	tgran = cpuid_feature_extract_unsigned_field(mmfr0,
+					ID_AA64MMFR0_EL1_TGRAN_SHIFT);
+	return tgran == ID_AA64MMFR0_EL1_TGRAN_LPA2;
+}
+
+static bool has_lpa2_at_stage2(u64 mmfr0)
+{
+	unsigned int tgran;
+
+	tgran = cpuid_feature_extract_unsigned_field(mmfr0,
+					ID_AA64MMFR0_EL1_TGRAN_2_SHIFT);
+	return tgran == ID_AA64MMFR0_EL1_TGRAN_2_SUPPORTED_LPA2;
+}
+
+static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope)
+{
+	u64 mmfr0;
+
+	mmfr0 = read_sanitised_ftr_reg(SYS_ID_AA64MMFR0_EL1);
+	return has_lpa2_at_stage1(mmfr0) && has_lpa2_at_stage2(mmfr0);
+}
+#else
+static bool has_lpa2(const struct arm64_cpu_capabilities *entry, int scope)
+{
+	return false;
+}
+#endif
 
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 #define KPTI_NG_TEMP_VA		(-(1UL << PMD_SHIFT))
@@ -2326,12 +2349,6 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 	},
 #endif /* CONFIG_ARM64_LSE_ATOMICS */
 	{
-		.desc = "Software prefetching using PRFM",
-		.capability = ARM64_HAS_NO_HW_PREFETCH,
-		.type = ARM64_CPUCAP_WEAK_LOCAL_CPU_FEATURE,
-		.matches = has_no_hw_prefetch,
-	},
-	{
 		.desc = "Virtualization Host Extensions",
 		.capability = ARM64_HAS_VIRT_HOST_EXTN,
 		.type = ARM64_CPUCAP_STRICT_BOOT_CPU_FEATURE,
@@ -2734,6 +2751,12 @@ static const struct arm64_cpu_capabilities arm64_features[] = {
 		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
 		.matches = has_cpuid_feature,
 		ARM64_CPUID_FIELDS(ID_AA64MMFR2_EL1, EVT, IMP)
+	},
+	{
+		.desc = "52-bit Virtual Addressing for KVM (LPA2)",
+		.capability = ARM64_HAS_LPA2,
+		.type = ARM64_CPUCAP_SYSTEM_FEATURE,
+		.matches = has_lpa2,
 	},
 	{},
 };
