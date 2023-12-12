@@ -32,13 +32,14 @@ struct six_lock_count bch2_btree_node_lock_counts(struct btree_trans *trans,
 {
 	struct btree_path *path;
 	struct six_lock_count ret;
+	unsigned i;
 
 	memset(&ret, 0, sizeof(ret));
 
 	if (IS_ERR_OR_NULL(b))
 		return ret;
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		if (path != skip && &path->l[level].b->c == b) {
 			int t = btree_node_locked_type(path, level);
 
@@ -142,10 +143,28 @@ static bool lock_graph_remove_non_waiters(struct lock_graph *g)
 	return false;
 }
 
+static void trace_would_deadlock(struct lock_graph *g, struct btree_trans *trans,
+				 unsigned long ip)
+{
+	struct bch_fs *c = trans->c;
+
+	count_event(c, trans_restart_would_deadlock);
+
+	if (trace_trans_restart_would_deadlock_enabled()) {
+		struct printbuf buf = PRINTBUF;
+
+		buf.atomic++;
+		print_cycle(&buf, g);
+
+		trace_trans_restart_would_deadlock(trans, ip, buf.buf);
+		printbuf_exit(&buf);
+	}
+}
+
 static int abort_lock(struct lock_graph *g, struct trans_waiting_for_lock *i)
 {
 	if (i == g->g) {
-		trace_and_count(i->trans->c, trans_restart_would_deadlock, i->trans, _RET_IP_);
+		trace_would_deadlock(g, i->trans, _RET_IP_);
 		return btree_trans_restart(i->trans, BCH_ERR_transaction_restart_would_deadlock);
 	} else {
 		i->trans->lock_must_abort = true;
@@ -266,15 +285,16 @@ int bch2_check_for_deadlock(struct btree_trans *trans, struct printbuf *cycle)
 	unsigned path_idx;
 	int ret;
 
+	g.nr = 0;
+
 	if (trans->lock_must_abort) {
 		if (cycle)
 			return -1;
 
-		trace_and_count(trans->c, trans_restart_would_deadlock, trans, _RET_IP_);
+		trace_would_deadlock(&g, trans, _RET_IP_);
 		return btree_trans_restart(trans, BCH_ERR_transaction_restart_would_deadlock);
 	}
 
-	g.nr = 0;
 	lock_graph_down(&g, trans);
 next:
 	if (!g.nr)
@@ -282,7 +302,7 @@ next:
 
 	top = &g.g[g.nr - 1];
 
-	trans_for_each_path_safe_from(top->trans, path, path_idx, top->path_idx) {
+	trans_for_each_path_from(top->trans, path, path_idx, top->path_idx) {
 		if (!path->nodes_locked)
 			continue;
 
@@ -398,7 +418,7 @@ void bch2_btree_node_lock_write_nofail(struct btree_trans *trans,
 				       struct btree_bkey_cached_common *b)
 {
 	struct btree_path *linked;
-	unsigned i;
+	unsigned i, iter;
 	int ret;
 
 	/*
@@ -412,7 +432,7 @@ void bch2_btree_node_lock_write_nofail(struct btree_trans *trans,
 	 * already taken are no longer needed:
 	 */
 
-	trans_for_each_path(trans, linked) {
+	trans_for_each_path(trans, linked, iter) {
 		if (!linked->nodes_locked)
 			continue;
 
@@ -624,8 +644,6 @@ bool __bch2_btree_path_upgrade(struct btree_trans *trans,
 			       unsigned new_locks_want,
 			       struct get_locks_fail *f)
 {
-	struct btree_path *linked;
-
 	if (bch2_btree_path_upgrade_noupgrade_sibs(trans, path, new_locks_want, f))
 		return true;
 
@@ -648,8 +666,11 @@ bool __bch2_btree_path_upgrade(struct btree_trans *trans,
 	 * before interior nodes - now that's handled by
 	 * bch2_btree_path_traverse_all().
 	 */
-	if (!path->cached && !trans->in_traverse_all)
-		trans_for_each_path(trans, linked)
+	if (!path->cached && !trans->in_traverse_all) {
+		struct btree_path *linked;
+		unsigned i;
+
+		trans_for_each_path(trans, linked, i)
 			if (linked != path &&
 			    linked->cached == path->cached &&
 			    linked->btree_id == path->btree_id &&
@@ -657,6 +678,7 @@ bool __bch2_btree_path_upgrade(struct btree_trans *trans,
 				linked->locks_want = new_locks_want;
 				btree_path_get_locks(trans, linked, true, NULL);
 			}
+	}
 
 	return false;
 }
@@ -665,7 +687,7 @@ void __bch2_btree_path_downgrade(struct btree_trans *trans,
 				 struct btree_path *path,
 				 unsigned new_locks_want)
 {
-	unsigned l;
+	unsigned l, old_locks_want = path->locks_want;
 
 	if (trans->restarted)
 		return;
@@ -689,8 +711,7 @@ void __bch2_btree_path_downgrade(struct btree_trans *trans,
 
 	bch2_btree_path_verify_locks(path);
 
-	path->downgrade_seq++;
-	trace_path_downgrade(trans, _RET_IP_, path);
+	trace_path_downgrade(trans, _RET_IP_, path, old_locks_want);
 }
 
 /* Btree transaction locking: */
@@ -698,22 +719,24 @@ void __bch2_btree_path_downgrade(struct btree_trans *trans,
 void bch2_trans_downgrade(struct btree_trans *trans)
 {
 	struct btree_path *path;
+	unsigned i;
 
 	if (trans->restarted)
 		return;
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		bch2_btree_path_downgrade(trans, path);
 }
 
 int bch2_trans_relock(struct btree_trans *trans)
 {
 	struct btree_path *path;
+	unsigned i;
 
 	if (unlikely(trans->restarted))
 		return -((int) trans->restarted);
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		if (path->should_be_locked &&
 		    !bch2_btree_path_relock_norestart(trans, path, _RET_IP_)) {
 			trace_and_count(trans->c, trans_restart_relock, trans, _RET_IP_, path);
@@ -725,11 +748,12 @@ int bch2_trans_relock(struct btree_trans *trans)
 int bch2_trans_relock_notrace(struct btree_trans *trans)
 {
 	struct btree_path *path;
+	unsigned i;
 
 	if (unlikely(trans->restarted))
 		return -((int) trans->restarted);
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		if (path->should_be_locked &&
 		    !bch2_btree_path_relock_norestart(trans, path, _RET_IP_)) {
 			return btree_trans_restart(trans, BCH_ERR_transaction_restart_relock);
@@ -740,16 +764,18 @@ int bch2_trans_relock_notrace(struct btree_trans *trans)
 void bch2_trans_unlock_noassert(struct btree_trans *trans)
 {
 	struct btree_path *path;
+	unsigned i;
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		__bch2_btree_path_unlock(trans, path);
 }
 
 void bch2_trans_unlock(struct btree_trans *trans)
 {
 	struct btree_path *path;
+	unsigned i;
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		__bch2_btree_path_unlock(trans, path);
 }
 
@@ -762,8 +788,9 @@ void bch2_trans_unlock_long(struct btree_trans *trans)
 bool bch2_trans_locked(struct btree_trans *trans)
 {
 	struct btree_path *path;
+	unsigned i;
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		if (path->nodes_locked)
 			return true;
 	return false;
@@ -809,8 +836,9 @@ void bch2_btree_path_verify_locks(struct btree_path *path)
 void bch2_trans_verify_locks(struct btree_trans *trans)
 {
 	struct btree_path *path;
+	unsigned i;
 
-	trans_for_each_path(trans, path)
+	trans_for_each_path(trans, path, i)
 		bch2_btree_path_verify_locks(path);
 }
 
