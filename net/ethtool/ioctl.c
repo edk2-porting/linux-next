@@ -58,6 +58,9 @@ static struct devlink *netdev_to_devlink_get(struct net_device *dev)
 
 u32 ethtool_op_get_link(struct net_device *dev)
 {
+	/* Synchronize carrier state with link watch, see also rtnl_getlink() */
+	linkwatch_sync_dev(dev);
+
 	return netif_carrier_ok(dev) ? 1 : 0;
 }
 EXPORT_SYMBOL(ethtool_op_get_link);
@@ -1990,6 +1993,13 @@ __printf(2, 3) void ethtool_sprintf(u8 **data, const char *fmt, ...)
 	*data += ETH_GSTRING_LEN;
 }
 EXPORT_SYMBOL(ethtool_sprintf);
+
+void ethtool_puts(u8 **data, const char *str)
+{
+	strscpy(*data, str, ETH_GSTRING_LEN);
+	*data += ETH_GSTRING_LEN;
+}
+EXPORT_SYMBOL(ethtool_puts);
 
 static int ethtool_phys_id(struct net_device *dev, void __user *useraddr)
 {
