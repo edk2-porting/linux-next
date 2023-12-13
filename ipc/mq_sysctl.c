@@ -78,7 +78,7 @@ static int set_is_seen(struct ctl_table_set *set)
 }
 
 static void mq_set_ownership(struct ctl_table_header *head,
-			     struct ctl_table *table,
+			     const struct ctl_table *table,
 			     kuid_t *uid, kgid_t *gid)
 {
 	struct ipc_namespace *ns =
@@ -91,7 +91,7 @@ static void mq_set_ownership(struct ctl_table_header *head,
 	*gid = gid_valid(ns_root_gid) ? ns_root_gid : GLOBAL_ROOT_GID;
 }
 
-static int mq_permissions(struct ctl_table_header *head, struct ctl_table *table)
+static int mq_permissions(struct ctl_table_header *head, const struct ctl_table *table)
 {
 	int mode = table->mode;
 	kuid_t ns_root_uid;
@@ -160,7 +160,7 @@ bool setup_mq_sysctls(struct ipc_namespace *ns)
 
 void retire_mq_sysctls(struct ipc_namespace *ns)
 {
-	struct ctl_table *tbl;
+	const struct ctl_table *tbl;
 
 	tbl = ns->mq_sysctls->ctl_table_arg;
 	unregister_sysctl_table(ns->mq_sysctls);

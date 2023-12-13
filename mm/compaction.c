@@ -2864,8 +2864,8 @@ static void compact_nodes(void)
 		compact_node(nid);
 }
 
-static int compaction_proactiveness_sysctl_handler(struct ctl_table *table, int write,
-		void *buffer, size_t *length, loff_t *ppos)
+static int compaction_proactiveness_sysctl_handler(const struct ctl_table *table,
+		int write, void *buffer, size_t *length, loff_t *ppos)
 {
 	int rc, nid;
 
@@ -2894,7 +2894,7 @@ static int compaction_proactiveness_sysctl_handler(struct ctl_table *table, int 
  * This is the entry point for compacting all nodes via
  * /proc/sys/vm/compact_memory
  */
-static int sysctl_compaction_handler(struct ctl_table *table, int write,
+static int sysctl_compaction_handler(const struct ctl_table *table, int write,
 			void *buffer, size_t *length, loff_t *ppos)
 {
 	int ret;
@@ -3205,7 +3205,7 @@ static int kcompactd_cpu_online(unsigned int cpu)
 	return 0;
 }
 
-static int proc_dointvec_minmax_warn_RT_change(struct ctl_table *table,
+static int proc_dointvec_minmax_warn_RT_change(const struct ctl_table *table,
 		int write, void *buffer, size_t *lenp, loff_t *ppos)
 {
 	int ret, old;
