@@ -32,6 +32,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_plane.h>
 #include "link_service_types.h"
+#include <drm/drm_writeback.h>
 
 /*
  * This file contains the definition for amdgpu_display_manager
@@ -54,6 +55,9 @@
 #define HDMI_AMD_VENDOR_SPECIFIC_DATA_BLOCK_IEEE_REGISTRATION_ID 0x00001A
 #define AMD_VSDB_VERSION_3_FEATURECAP_REPLAYMODE 0x40
 #define HDMI_AMD_VENDOR_SPECIFIC_DATA_BLOCK_VERSION_3 0x3
+
+#define AMDGPU_HDR_MULT_DEFAULT (0x100000000LL)
+
 /*
 #include "include/amdgpu_dal_power_if.h"
 #include "amdgpu_dm_irq.h"
@@ -714,11 +718,72 @@ static inline void amdgpu_dm_set_mst_status(uint8_t *status,
 
 #define to_amdgpu_dm_connector(x) container_of(x, struct amdgpu_dm_connector, base)
 
+struct amdgpu_dm_wb_connector {
+	struct drm_writeback_connector base;
+	struct dc_link *link;
+};
+
+#define to_amdgpu_dm_wb_connector(x) container_of(x, struct amdgpu_dm_wb_connector, base)
+
 extern const struct amdgpu_ip_block_version dm_ip_block;
+
+/* enum amdgpu_transfer_function: pre-defined transfer function supported by AMD.
+ *
+ * It includes standardized transfer functions and pure power functions. The
+ * transfer function coefficients are available at modules/color/color_gamma.c
+ */
+enum amdgpu_transfer_function {
+	AMDGPU_TRANSFER_FUNCTION_DEFAULT,
+	AMDGPU_TRANSFER_FUNCTION_SRGB_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_BT709_INV_OETF,
+	AMDGPU_TRANSFER_FUNCTION_PQ_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_IDENTITY,
+	AMDGPU_TRANSFER_FUNCTION_GAMMA22_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_GAMMA24_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_GAMMA26_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_SRGB_INV_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_BT709_OETF,
+	AMDGPU_TRANSFER_FUNCTION_PQ_INV_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_GAMMA22_INV_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_GAMMA24_INV_EOTF,
+	AMDGPU_TRANSFER_FUNCTION_GAMMA26_INV_EOTF,
+        AMDGPU_TRANSFER_FUNCTION_COUNT
+};
 
 struct dm_plane_state {
 	struct drm_plane_state base;
 	struct dc_plane_state *dc_state;
+
+	/* Plane color mgmt */
+	/**
+	 * @degamma_lut:
+	 *
+	 * 1D LUT for mapping framebuffer/plane pixel data before sampling or
+	 * blending operations. It's usually applied to linearize input space.
+	 * The blob (if not NULL) is an array of &struct drm_color_lut.
+	 */
+	struct drm_property_blob *degamma_lut;
+	/**
+	 * @degamma_tf:
+	 *
+	 * Predefined transfer function to tell DC driver the input space to
+	 * linearize.
+	 */
+	enum amdgpu_transfer_function degamma_tf;
+	/**
+	 * @hdr_mult:
+	 *
+	 * Multiplier to 'gain' the plane.  When PQ is decoded using the fixed
+	 * func transfer function to the internal FP16 fb, 1.0 -> 80 nits (on
+	 * AMD at least). When sRGB is decoded, 1.0 -> 1.0, obviously.
+	 * Therefore, 1.0 multiplier = 80 nits for SDR content.  So if you
+	 * want, 203 nits for SDR content, pass in (203.0 / 80.0).  Format is
+	 * S31.32 sign-magnitude.
+	 *
+	 * HDR multiplier can wide range beyond [0.0, 1.0]. This means that PQ
+	 * TF is needed for any subsequent linear-to-non-linear transforms.
+	 */
+	__u64 hdr_mult;
 };
 
 struct dm_crtc_state {
@@ -809,6 +874,7 @@ void amdgpu_dm_trigger_timing_sync(struct drm_device *dev);
 #define MAX_COLOR_LEGACY_LUT_ENTRIES 256
 
 void amdgpu_dm_init_color_mod(void);
+int amdgpu_dm_create_color_properties(struct amdgpu_device *adev);
 int amdgpu_dm_verify_lut_sizes(const struct drm_crtc_state *crtc_state);
 int amdgpu_dm_update_crtc_color_mgmt(struct dm_crtc_state *crtc);
 int amdgpu_dm_update_plane_color_mgmt(struct dm_crtc_state *crtc,
@@ -834,7 +900,7 @@ struct dc_stream_state *
 int dm_atomic_get_state(struct drm_atomic_state *state,
 			struct dm_atomic_state **dm_state);
 
-struct amdgpu_dm_connector *
+struct drm_connector *
 amdgpu_dm_find_first_crtc_matching_connector(struct drm_atomic_state *state,
 					     struct drm_crtc *crtc);
 
