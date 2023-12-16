@@ -23,7 +23,7 @@
 		};
 
 		spi@3270000 {
-			status = "okay";
+			status = "disabled";
 
 			flash@0 {
 				compatible = "jedec,spi-nor";
@@ -40,7 +40,7 @@
 		 * doesn't exist.
 		 */
 		mmc@3400000 {
-			status = "okay";
+			status = "disabled";
 			bus-width = <4>;
 			cd-gpios = <&gpio TEGRA234_MAIN_GPIO(G, 7) GPIO_ACTIVE_LOW>;
 			disable-wp;

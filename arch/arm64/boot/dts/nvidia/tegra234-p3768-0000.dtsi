@@ -3,13 +3,13 @@
 / {
 	compatible = "nvidia,p3768-0000";
 
-	aliases {
-		serial0 = &tcu;
-	};
+	// aliases {
+	// 	serial0 = &tcu;
+	// };
 
-	chosen {
-		stdout-path = "serial0:115200n8";
-	};
+	// chosen {
+	// 	stdout-path = "serial0:115200n8";
+	// };
 
 	bus@0 {
 		i2c@3160000 {
@@ -136,7 +136,7 @@
 
 		/* C8 - Ethernet */
 		pcie@140a0000 {
-			status = "okay";
+			status = "disabled";
 
 			num-lanes = <2>;
 
@@ -149,7 +149,7 @@
 
 		/* C1 - M.2 Key-E */
 		pcie@14100000 {
-			status = "okay";
+			status = "disabled";
 
 			vddio-pex-ctl-supply = <&vdd_1v8_ao>;
 
@@ -159,7 +159,7 @@
 
 		/* C4 - M.2 Key-M */
 		pcie@14160000 {
-			status = "okay";
+			status = "disabled";
 
 			vddio-pex-ctl-supply = <&vdd_1v8_ao>;
 
@@ -170,7 +170,7 @@
 
 		/* C7 - M.2 Key-M */
 		pcie@141e0000 {
-			status = "okay";
+			status = "disabled";
 
 			vddio-pex-ctl-supply = <&vdd_1v8_ao>;
 
@@ -236,6 +236,8 @@
 		regulator-max-microvolt = <3300000>;
 		gpio = <&gpio_aon TEGRA234_AON_GPIO(AA, 5) GPIO_ACTIVE_HIGH>;
 		enable-active-high;
+		regulator-always-on;
+		regulator-boot-on;
 	};
 
 	serial {

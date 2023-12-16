@@ -1802,6 +1802,14 @@
 			status = "disabled";
 		};
 
+		uartc: serial@c280000 {
+			compatible = "nvidia,tegra194-uart", "nvidia,tegra20-uart";
+			reg = <0x0 0x0c280000 0x0 0x10000>;
+			interrupts = <GIC_SPI 114 IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&bpmp TEGRA234_CLK_UARTC>;
+			resets = <&bpmp TEGRA234_RESET_UARTC>;
+		};
+
 		rtc@c2a0000 {
 			compatible = "nvidia,tegra234-rtc", "nvidia,tegra20-rtc";
 			reg = <0x0 0x0c2a0000 0x0 0x10000>;
@@ -2306,6 +2314,36 @@
 			};
 		};
 
+
+		pcie@3530000000 {
+			compatible = "pci-host-ecam-generic";
+			reg = <0x35 0x30000000 0x0 0x10000000>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+
+			// msi-parent = <&its>;
+
+			device_type = "pci";
+
+			// msi-map = <0 &its 0x17 0xe>;
+
+			bus-range = <0x0 0xff>;
+			ranges = <0x43000000 0x32 0x40000000 0x32 0x40000000 0x2 0xe8000000>, /* prefetchable memory (11904 MB) */
+				 <0x02000000 0x0  0x40000000 0x35 0x28000000 0x0 0x08000000>, /* non-prefetchable memory (128 MB) */
+				 <0x01000000 0x0  0x2a100000 0x00 0x2a100000 0x0 0x00100000>; /* downstream I/O (1 MB) */
+
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 0 &gic GIC_SPI 356 IRQ_TYPE_LEVEL_HIGH>;
+
+			// interconnects = <&mc TEGRA234_MEMORY_CLIENT_PCIE8AR &emc>,
+			// 		<&mc TEGRA234_MEMORY_CLIENT_PCIE8AW &emc>;
+			// interconnect-names = "dma-mem", "write";
+			iommu-map = <0x0 &smmu_niso1 TEGRA234_SID_PCIE8 0x1000>;
+			iommu-map-mask = <0x0>;
+			dma-coherent;
+		};
+
 		pcie@140a0000 {
 			compatible = "nvidia,tegra234-pcie";
 			power-domains = <&bpmp TEGRA234_POWER_DOMAIN_PCIEX4CA>;
@@ -2506,6 +2544,38 @@
 			status = "disabled";
 		};
 
+
+
+
+
+
+
+
+
+
+
+		pcie@20b0000000 {
+			compatible = "pci-host-ecam-generic";
+			reg = <0x20 0xb0000000 0x0 0x10000000>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+
+			device_type = "pci";
+
+			bus-range = <0x0 0xff>;
+			ranges = <0x43000000 0x20 0x80000000 0x20 0x80000000 0x0 0x28000000>, /* prefetchable memory (640 MB) */
+				 <0x02000000 0x0  0x40000000 0x20 0xa8000000 0x0 0x08000000>, /* non-prefetchable memory (128 MB) */
+				 <0x01000000 0x0  0x30100000 0x00 0x30100000 0x0 0x00100000>; /* downstream I/O (1 MB) */
+
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 0 &gic GIC_SPI 45 IRQ_TYPE_LEVEL_HIGH>;
+
+			iommu-map = <0x0 &smmu_niso1 TEGRA234_SID_PCIE1 0x1000>;
+			iommu-map-mask = <0x0>;
+			dma-coherent;
+		};
+
 		pcie@14100000 {
 			compatible = "nvidia,tegra234-pcie";
 			power-domains = <&bpmp TEGRA234_POWER_DOMAIN_PCIEX1A>;
@@ -2668,6 +2738,37 @@
 			status = "disabled";
 		};
 
+
+
+		pcie@2430000000 {
+			compatible = "pci-host-ecam-generic";
+			reg = <0x24 0x30000000 0x0 0x10000000>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+
+			// msi-parent = <&its>;
+
+			device_type = "pci";
+
+			// msi-map = <0 &its 0x17 0xe>;
+
+			bus-range = <0x0 0xff>;
+			ranges = <0x43000000 0x21 0x40000000 0x21 0x40000000 0x2 0xe8000000>, /* prefetchable memory (11904 MB) */
+				 <0x02000000 0x0  0x40000000 0x24 0x28000000 0x0 0x08000000>, /* non-prefetchable memory (128 MB) */
+				 <0x01000000 0x0  0x36100000 0x00 0x36100000 0x0 0x00100000>; /* downstream I/O (1 MB) */
+
+			#interrupt-cells = <1>;
+			interrupt-map-mask = <0 0 0 0>;
+			interrupt-map = <0 0 0 0 &gic GIC_SPI 51 IRQ_TYPE_LEVEL_HIGH>;
+
+			// interconnects = <&mc TEGRA234_MEMORY_CLIENT_PCIE4R &emc>,
+			// 		<&mc TEGRA234_MEMORY_CLIENT_PCIE4W &emc>;
+			// interconnect-names = "dma-mem", "write";
+			iommu-map = <0x0 &smmu_niso0 TEGRA234_SID_PCIE4 0x1000>;
+			iommu-map-mask = <0x0>;
+			dma-coherent;
+		};
+
 		pcie@14160000 {
 			compatible = "nvidia,tegra234-pcie";
 			power-domains = <&bpmp TEGRA234_POWER_DOMAIN_PCIEX4BB>;
@@ -2721,6 +2822,17 @@
 
 			status = "disabled";
 		};
+
+
+
+
+
+
+
+
+
+
+
 
 		pcie@14180000 {
 			compatible = "nvidia,tegra234-pcie";
@@ -3184,43 +3296,43 @@
 			next-level-cache = <&l2c0_3>;
 		};
 
-		cpu1_0: cpu@10000 {
-			compatible = "arm,cortex-a78";
-			device_type = "cpu";
-			reg = <0x10000>;
+		// cpu1_0: cpu@10000 {
+		// 	compatible = "arm,cortex-a78";
+		// 	device_type = "cpu";
+		// 	reg = <0x10000>;
 
-			enable-method = "psci";
+		// 	enable-method = "psci";
 
-			operating-points-v2 = <&cl1_opp_tbl>;
-			interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER1 &emc>;
+		// 	operating-points-v2 = <&cl1_opp_tbl>;
+		// 	interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER1 &emc>;
 
-			i-cache-size = <65536>;
-			i-cache-line-size = <64>;
-			i-cache-sets = <256>;
-			d-cache-size = <65536>;
-			d-cache-line-size = <64>;
-			d-cache-sets = <256>;
-			next-level-cache = <&l2c1_0>;
-		};
+		// 	i-cache-size = <65536>;
+		// 	i-cache-line-size = <64>;
+		// 	i-cache-sets = <256>;
+		// 	d-cache-size = <65536>;
+		// 	d-cache-line-size = <64>;
+		// 	d-cache-sets = <256>;
+		// 	next-level-cache = <&l2c1_0>;
+		// };
 
-		cpu1_1: cpu@10100 {
-			compatible = "arm,cortex-a78";
-			device_type = "cpu";
-			reg = <0x10100>;
+		// cpu1_1: cpu@10100 {
+		// 	compatible = "arm,cortex-a78";
+		// 	device_type = "cpu";
+		// 	reg = <0x10100>;
 
-			enable-method = "psci";
+		// 	enable-method = "psci";
 
-			operating-points-v2 = <&cl1_opp_tbl>;
-			interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER1 &emc>;
+		// 	operating-points-v2 = <&cl1_opp_tbl>;
+		// 	interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER1 &emc>;
 
-			i-cache-size = <65536>;
-			i-cache-line-size = <64>;
-			i-cache-sets = <256>;
-			d-cache-size = <65536>;
-			d-cache-line-size = <64>;
-			d-cache-sets = <256>;
-			next-level-cache = <&l2c1_1>;
-		};
+		// 	i-cache-size = <65536>;
+		// 	i-cache-line-size = <64>;
+		// 	i-cache-sets = <256>;
+		// 	d-cache-size = <65536>;
+		// 	d-cache-line-size = <64>;
+		// 	d-cache-sets = <256>;
+		// 	next-level-cache = <&l2c1_1>;
+		// };
 
 		cpu1_2: cpu@10200 {
 			compatible = "arm,cortex-a78";
@@ -3260,137 +3372,137 @@
 			next-level-cache = <&l2c1_3>;
 		};
 
-		cpu2_0: cpu@20000 {
-			compatible = "arm,cortex-a78";
-			device_type = "cpu";
-			reg = <0x20000>;
+		// cpu2_0: cpu@20000 {
+		// 	compatible = "arm,cortex-a78";
+		// 	device_type = "cpu";
+		// 	reg = <0x20000>;
 
-			enable-method = "psci";
+		// 	enable-method = "psci";
 
-			operating-points-v2 = <&cl2_opp_tbl>;
-			interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
+		// 	operating-points-v2 = <&cl2_opp_tbl>;
+		// 	interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
 
-			i-cache-size = <65536>;
-			i-cache-line-size = <64>;
-			i-cache-sets = <256>;
-			d-cache-size = <65536>;
-			d-cache-line-size = <64>;
-			d-cache-sets = <256>;
-			next-level-cache = <&l2c2_0>;
-		};
+		// 	i-cache-size = <65536>;
+		// 	i-cache-line-size = <64>;
+		// 	i-cache-sets = <256>;
+		// 	d-cache-size = <65536>;
+		// 	d-cache-line-size = <64>;
+		// 	d-cache-sets = <256>;
+		// 	next-level-cache = <&l2c2_0>;
+		// };
 
-		cpu2_1: cpu@20100 {
-			compatible = "arm,cortex-a78";
-			device_type = "cpu";
-			reg = <0x20100>;
+		// cpu2_1: cpu@20100 {
+		// 	compatible = "arm,cortex-a78";
+		// 	device_type = "cpu";
+		// 	reg = <0x20100>;
 
-			enable-method = "psci";
+		// 	enable-method = "psci";
 
-			operating-points-v2 = <&cl2_opp_tbl>;
-			interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
+		// 	operating-points-v2 = <&cl2_opp_tbl>;
+		// 	interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
 
-			i-cache-size = <65536>;
-			i-cache-line-size = <64>;
-			i-cache-sets = <256>;
-			d-cache-size = <65536>;
-			d-cache-line-size = <64>;
-			d-cache-sets = <256>;
-			next-level-cache = <&l2c2_1>;
-		};
+		// 	i-cache-size = <65536>;
+		// 	i-cache-line-size = <64>;
+		// 	i-cache-sets = <256>;
+		// 	d-cache-size = <65536>;
+		// 	d-cache-line-size = <64>;
+		// 	d-cache-sets = <256>;
+		// 	next-level-cache = <&l2c2_1>;
+		// };
 
-		cpu2_2: cpu@20200 {
-			compatible = "arm,cortex-a78";
-			device_type = "cpu";
-			reg = <0x20200>;
+		// cpu2_2: cpu@20200 {
+		// 	compatible = "arm,cortex-a78";
+		// 	device_type = "cpu";
+		// 	reg = <0x20200>;
 
-			enable-method = "psci";
+		// 	enable-method = "psci";
 
-			operating-points-v2 = <&cl2_opp_tbl>;
-			interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
+		// 	operating-points-v2 = <&cl2_opp_tbl>;
+		// 	interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
 
-			i-cache-size = <65536>;
-			i-cache-line-size = <64>;
-			i-cache-sets = <256>;
-			d-cache-size = <65536>;
-			d-cache-line-size = <64>;
-			d-cache-sets = <256>;
-			next-level-cache = <&l2c2_2>;
-		};
+		// 	i-cache-size = <65536>;
+		// 	i-cache-line-size = <64>;
+		// 	i-cache-sets = <256>;
+		// 	d-cache-size = <65536>;
+		// 	d-cache-line-size = <64>;
+		// 	d-cache-sets = <256>;
+		// 	next-level-cache = <&l2c2_2>;
+		// };
 
-		cpu2_3: cpu@20300 {
-			compatible = "arm,cortex-a78";
-			device_type = "cpu";
-			reg = <0x20300>;
+		// cpu2_3: cpu@20300 {
+		// 	compatible = "arm,cortex-a78";
+		// 	device_type = "cpu";
+		// 	reg = <0x20300>;
 
-			enable-method = "psci";
+		// 	enable-method = "psci";
 
-			operating-points-v2 = <&cl2_opp_tbl>;
-			interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
+		// 	operating-points-v2 = <&cl2_opp_tbl>;
+		// 	interconnects = <&mc TEGRA_ICC_MC_CPU_CLUSTER2 &emc>;
 
-			i-cache-size = <65536>;
-			i-cache-line-size = <64>;
-			i-cache-sets = <256>;
-			d-cache-size = <65536>;
-			d-cache-line-size = <64>;
-			d-cache-sets = <256>;
-			next-level-cache = <&l2c2_3>;
-		};
+		// 	i-cache-size = <65536>;
+		// 	i-cache-line-size = <64>;
+		// 	i-cache-sets = <256>;
+		// 	d-cache-size = <65536>;
+		// 	d-cache-line-size = <64>;
+		// 	d-cache-sets = <256>;
+		// 	next-level-cache = <&l2c2_3>;
+		// };
 
-		cpu-map {
-			cluster0 {
-				core0 {
-					cpu = <&cpu0_0>;
-				};
+		// cpu-map {
+		// 	cluster0 {
+		// 		core0 {
+		// 			cpu = <&cpu0_0>;
+		// 		};
 
-				core1 {
-					cpu = <&cpu0_1>;
-				};
+		// 		core1 {
+		// 			cpu = <&cpu0_1>;
+		// 		};
 
-				core2 {
-					cpu = <&cpu0_2>;
-				};
+		// 		core2 {
+		// 			cpu = <&cpu0_2>;
+		// 		};
 
-				core3 {
-					cpu = <&cpu0_3>;
-				};
-			};
+		// 		core3 {
+		// 			cpu = <&cpu0_3>;
+		// 		};
+		// 	};
 
-			cluster1 {
-				core0 {
-					cpu = <&cpu1_0>;
-				};
+		// 	cluster1 {
+		// 		core0 {
+		// 			cpu = <&cpu1_0>;
+		// 		};
 
-				core1 {
-					cpu = <&cpu1_1>;
-				};
+		// 		core1 {
+		// 			cpu = <&cpu1_1>;
+		// 		};
 
-				core2 {
-					cpu = <&cpu1_2>;
-				};
+		// 		core2 {
+		// 			cpu = <&cpu1_2>;
+		// 		};
 
-				core3 {
-					cpu = <&cpu1_3>;
-				};
-			};
+		// 		core3 {
+		// 			cpu = <&cpu1_3>;
+		// 		};
+		// 	};
 
-			cluster2 {
-				core0 {
-					cpu = <&cpu2_0>;
-				};
+		// 	cluster2 {
+		// 		core0 {
+		// 			cpu = <&cpu2_0>;
+		// 		};
 
-				core1 {
-					cpu = <&cpu2_1>;
-				};
+		// 		core1 {
+		// 			cpu = <&cpu2_1>;
+		// 		};
 
-				core2 {
-					cpu = <&cpu2_2>;
-				};
+		// 		core2 {
+		// 			cpu = <&cpu2_2>;
+		// 		};
 
-				core3 {
-					cpu = <&cpu2_3>;
-				};
-			};
-		};
+		// 		core3 {
+		// 			cpu = <&cpu2_3>;
+		// 		};
+		// 	};
+		// };
 
 		l2c0_0: l2-cache00 {
 			compatible = "cache";
@@ -3432,25 +3544,25 @@
 			next-level-cache = <&l3c0>;
 		};
 
-		l2c1_0: l2-cache10 {
-			compatible = "cache";
-			cache-size = <262144>;
-			cache-line-size = <64>;
-			cache-sets = <512>;
-			cache-unified;
-			cache-level = <2>;
-			next-level-cache = <&l3c1>;
-		};
+		// l2c1_0: l2-cache10 {
+		// 	compatible = "cache";
+		// 	cache-size = <262144>;
+		// 	cache-line-size = <64>;
+		// 	cache-sets = <512>;
+		// 	cache-unified;
+		// 	cache-level = <2>;
+		// 	next-level-cache = <&l3c1>;
+		// };
 
-		l2c1_1: l2-cache11 {
-			compatible = "cache";
-			cache-size = <262144>;
-			cache-line-size = <64>;
-			cache-sets = <512>;
-			cache-unified;
-			cache-level = <2>;
-			next-level-cache = <&l3c1>;
-		};
+		// l2c1_1: l2-cache11 {
+		// 	compatible = "cache";
+		// 	cache-size = <262144>;
+		// 	cache-line-size = <64>;
+		// 	cache-sets = <512>;
+		// 	cache-unified;
+		// 	cache-level = <2>;
+		// 	next-level-cache = <&l3c1>;
+		// };
 
 		l2c1_2: l2-cache12 {
 			compatible = "cache";
@@ -3472,45 +3584,45 @@
 			next-level-cache = <&l3c1>;
 		};
 
-		l2c2_0: l2-cache20 {
-			compatible = "cache";
-			cache-size = <262144>;
-			cache-line-size = <64>;
-			cache-sets = <512>;
-			cache-unified;
-			cache-level = <2>;
-			next-level-cache = <&l3c2>;
-		};
+		// l2c2_0: l2-cache20 {
+		// 	compatible = "cache";
+		// 	cache-size = <262144>;
+		// 	cache-line-size = <64>;
+		// 	cache-sets = <512>;
+		// 	cache-unified;
+		// 	cache-level = <2>;
+		// 	next-level-cache = <&l3c2>;
+		// };
 
-		l2c2_1: l2-cache21 {
-			compatible = "cache";
-			cache-size = <262144>;
-			cache-line-size = <64>;
-			cache-sets = <512>;
-			cache-unified;
-			cache-level = <2>;
-			next-level-cache = <&l3c2>;
-		};
+		// l2c2_1: l2-cache21 {
+		// 	compatible = "cache";
+		// 	cache-size = <262144>;
+		// 	cache-line-size = <64>;
+		// 	cache-sets = <512>;
+		// 	cache-unified;
+		// 	cache-level = <2>;
+		// 	next-level-cache = <&l3c2>;
+		// };
 
-		l2c2_2: l2-cache22 {
-			compatible = "cache";
-			cache-size = <262144>;
-			cache-line-size = <64>;
-			cache-sets = <512>;
-			cache-unified;
-			cache-level = <2>;
-			next-level-cache = <&l3c2>;
-		};
+		// l2c2_2: l2-cache22 {
+		// 	compatible = "cache";
+		// 	cache-size = <262144>;
+		// 	cache-line-size = <64>;
+		// 	cache-sets = <512>;
+		// 	cache-unified;
+		// 	cache-level = <2>;
+		// 	next-level-cache = <&l3c2>;
+		// };
 
-		l2c2_3: l2-cache23 {
-			compatible = "cache";
-			cache-size = <262144>;
-			cache-line-size = <64>;
-			cache-sets = <512>;
-			cache-unified;
-			cache-level = <2>;
-			next-level-cache = <&l3c2>;
-		};
+		// l2c2_3: l2-cache23 {
+		// 	compatible = "cache";
+		// 	cache-size = <262144>;
+		// 	cache-line-size = <64>;
+		// 	cache-sets = <512>;
+		// 	cache-unified;
+		// 	cache-level = <2>;
+		// 	next-level-cache = <&l3c2>;
+		// };
 
 		l3c0: l3-cache0 {
 			compatible = "cache";
@@ -3530,14 +3642,14 @@
 			cache-level = <3>;
 		};
 
-		l3c2: l3-cache2 {
-			compatible = "cache";
-			cache-unified;
-			cache-size = <2097152>;
-			cache-line-size = <64>;
-			cache-sets = <2048>;
-			cache-level = <3>;
-		};
+		// l3c2: l3-cache2 {
+		// 	compatible = "cache";
+		// 	cache-unified;
+		// 	cache-size = <2097152>;
+		// 	cache-line-size = <64>;
+		// 	cache-sets = <2048>;
+		// 	cache-level = <3>;
+		// };
 	};
 
 	dsu-pmu0 {
@@ -3549,14 +3661,14 @@
 	dsu-pmu1 {
 		compatible = "arm,dsu-pmu";
 		interrupts = <GIC_SPI 548 IRQ_TYPE_LEVEL_HIGH>;
-		cpus = <&cpu1_0>, <&cpu1_1>, <&cpu1_2>, <&cpu1_3>;
+		cpus = <&cpu1_2>, <&cpu1_3>;
 	};
 
-	dsu-pmu2 {
-		compatible = "arm,dsu-pmu";
-		interrupts = <GIC_SPI 549 IRQ_TYPE_LEVEL_HIGH>;
-		cpus = <&cpu2_0>, <&cpu2_1>, <&cpu2_2>, <&cpu2_3>;
-	};
+	// dsu-pmu2 {
+	// 	compatible = "arm,dsu-pmu";
+	// 	interrupts = <GIC_SPI 549 IRQ_TYPE_LEVEL_HIGH>;
+	// 	cpus = <&cpu2_0>, <&cpu2_1>, <&cpu2_2>, <&cpu2_3>;
+	// };
 
 	pmu {
 		compatible = "arm,cortex-a78-pmu";
@@ -3949,153 +4061,153 @@
 		};
 	};
 
-	cl2_opp_tbl: opp-table-cluster2 {
-		compatible = "operating-points-v2";
-		opp-shared;
+	// cl2_opp_tbl: opp-table-cluster2 {
+	// 	compatible = "operating-points-v2";
+	// 	opp-shared;
 
-		cl2_ch1_opp1: opp-115200000 {
-			  opp-hz = /bits/ 64 <115200000>;
-			  opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp1: opp-115200000 {
+	// 		  opp-hz = /bits/ 64 <115200000>;
+	// 		  opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp2: opp-192000000 {
-			opp-hz = /bits/ 64 <192000000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp2: opp-192000000 {
+	// 		opp-hz = /bits/ 64 <192000000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp3: opp-268800000 {
-			opp-hz = /bits/ 64 <268800000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp3: opp-268800000 {
+	// 		opp-hz = /bits/ 64 <268800000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp4: opp-345600000 {
-			opp-hz = /bits/ 64 <345600000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp4: opp-345600000 {
+	// 		opp-hz = /bits/ 64 <345600000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp5: opp-422400000 {
-			opp-hz = /bits/ 64 <422400000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp5: opp-422400000 {
+	// 		opp-hz = /bits/ 64 <422400000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp6: opp-499200000 {
-			opp-hz = /bits/ 64 <499200000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp6: opp-499200000 {
+	// 		opp-hz = /bits/ 64 <499200000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp7: opp-576000000 {
-			opp-hz = /bits/ 64 <576000000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp7: opp-576000000 {
+	// 		opp-hz = /bits/ 64 <576000000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp8: opp-652800000 {
-			opp-hz = /bits/ 64 <652800000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp8: opp-652800000 {
+	// 		opp-hz = /bits/ 64 <652800000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp9: opp-729600000 {
-			opp-hz = /bits/ 64 <729600000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp9: opp-729600000 {
+	// 		opp-hz = /bits/ 64 <729600000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp10: opp-806400000 {
-			opp-hz = /bits/ 64 <806400000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp10: opp-806400000 {
+	// 		opp-hz = /bits/ 64 <806400000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp11: opp-883200000 {
-			opp-hz = /bits/ 64 <883200000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp11: opp-883200000 {
+	// 		opp-hz = /bits/ 64 <883200000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp12: opp-960000000 {
-			opp-hz = /bits/ 64 <960000000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp12: opp-960000000 {
+	// 		opp-hz = /bits/ 64 <960000000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp13: opp-1036800000 {
-			opp-hz = /bits/ 64 <1036800000>;
-			opp-peak-kBps = <816000>;
-		};
+	// 	cl2_ch1_opp13: opp-1036800000 {
+	// 		opp-hz = /bits/ 64 <1036800000>;
+	// 		opp-peak-kBps = <816000>;
+	// 	};
 
-		cl2_ch1_opp14: opp-1113600000 {
-			opp-hz = /bits/ 64 <1113600000>;
-			opp-peak-kBps = <1632000>;
-		};
+	// 	cl2_ch1_opp14: opp-1113600000 {
+	// 		opp-hz = /bits/ 64 <1113600000>;
+	// 		opp-peak-kBps = <1632000>;
+	// 	};
 
-		cl2_ch1_opp15: opp-1190400000 {
-			opp-hz = /bits/ 64 <1190400000>;
-			opp-peak-kBps = <1632000>;
-		};
+	// 	cl2_ch1_opp15: opp-1190400000 {
+	// 		opp-hz = /bits/ 64 <1190400000>;
+	// 		opp-peak-kBps = <1632000>;
+	// 	};
 
-		cl2_ch1_opp16: opp-1267200000 {
-			opp-hz = /bits/ 64 <1267200000>;
-			opp-peak-kBps = <1632000>;
-		};
+	// 	cl2_ch1_opp16: opp-1267200000 {
+	// 		opp-hz = /bits/ 64 <1267200000>;
+	// 		opp-peak-kBps = <1632000>;
+	// 	};
 
-		cl2_ch1_opp17: opp-1344000000 {
-			opp-hz = /bits/ 64 <1344000000>;
-			opp-peak-kBps = <1632000>;
-		};
+	// 	cl2_ch1_opp17: opp-1344000000 {
+	// 		opp-hz = /bits/ 64 <1344000000>;
+	// 		opp-peak-kBps = <1632000>;
+	// 	};
 
-		cl2_ch1_opp18: opp-1420800000 {
-			opp-hz = /bits/ 64 <1420800000>;
-			opp-peak-kBps = <1632000>;
-		};
+	// 	cl2_ch1_opp18: opp-1420800000 {
+	// 		opp-hz = /bits/ 64 <1420800000>;
+	// 		opp-peak-kBps = <1632000>;
+	// 	};
 
-		cl2_ch1_opp19: opp-1497600000 {
-			opp-hz = /bits/ 64 <1497600000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp19: opp-1497600000 {
+	// 		opp-hz = /bits/ 64 <1497600000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp20: opp-1574400000 {
-			opp-hz = /bits/ 64 <1574400000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp20: opp-1574400000 {
+	// 		opp-hz = /bits/ 64 <1574400000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp21: opp-1651200000 {
-			opp-hz = /bits/ 64 <1651200000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp21: opp-1651200000 {
+	// 		opp-hz = /bits/ 64 <1651200000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp22: opp-1728000000 {
-			opp-hz = /bits/ 64 <1728000000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp22: opp-1728000000 {
+	// 		opp-hz = /bits/ 64 <1728000000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp23: opp-1804800000 {
-			opp-hz = /bits/ 64 <1804800000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp23: opp-1804800000 {
+	// 		opp-hz = /bits/ 64 <1804800000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp24: opp-1881600000 {
-			opp-hz = /bits/ 64 <1881600000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp24: opp-1881600000 {
+	// 		opp-hz = /bits/ 64 <1881600000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp25: opp-1958400000 {
-			opp-hz = /bits/ 64 <1958400000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp25: opp-1958400000 {
+	// 		opp-hz = /bits/ 64 <1958400000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp26: opp-2035200000 {
-			opp-hz = /bits/ 64 <2035200000>;
-			opp-peak-kBps = <3200000>;
-		};
+	// 	cl2_ch1_opp26: opp-2035200000 {
+	// 		opp-hz = /bits/ 64 <2035200000>;
+	// 		opp-peak-kBps = <3200000>;
+	// 	};
 
-		cl2_ch1_opp27: opp-2112000000 {
-			opp-hz = /bits/ 64 <2112000000>;
-			opp-peak-kBps = <6400000>;
-		};
+	// 	cl2_ch1_opp27: opp-2112000000 {
+	// 		opp-hz = /bits/ 64 <2112000000>;
+	// 		opp-peak-kBps = <6400000>;
+	// 	};
 
-		cl2_ch1_opp28: opp-2188800000 {
-			opp-hz = /bits/ 64 <2188800000>;
-			opp-peak-kBps = <6400000>;
-		};
+	// 	cl2_ch1_opp28: opp-2188800000 {
+	// 		opp-hz = /bits/ 64 <2188800000>;
+	// 		opp-peak-kBps = <6400000>;
+	// 	};
 
-		cl2_ch1_opp29: opp-2201600000 {
-			opp-hz = /bits/ 64 <2201600000>;
-			opp-peak-kBps = <6400000>;
-		};
-	};
+	// 	cl2_ch1_opp29: opp-2201600000 {
+	// 		opp-hz = /bits/ 64 <2201600000>;
+	// 		opp-peak-kBps = <6400000>;
+	// 	};
+	// };
 };
