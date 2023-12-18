@@ -282,10 +282,6 @@ int crash_setup_memmap_entries(struct kimage *image, struct boot_params *params)
 	struct crash_memmap_data cmd;
 	struct crash_mem *cmem;
 
-	cmem = vzalloc(struct_size(cmem, ranges, 1));
-	if (!cmem)
-		return -ENOMEM;
-
 	memset(&cmd, 0, sizeof(struct crash_memmap_data));
 	cmd.params = params;
 
@@ -321,6 +317,11 @@ int crash_setup_memmap_entries(struct kimage *image, struct boot_params *params)
 	}
 
 	/* Exclude some ranges from crashk_res and add rest to memmap */
+	cmem = vzalloc(struct_size(cmem, ranges, 1));
+	if (!cmem)
+		return -ENOMEM;
+	cmem->max_nr_ranges = 1;
+
 	ret = memmap_exclude_ranges(image, cmem, crashk_res.start, crashk_res.end);
 	if (ret)
 		goto out;
