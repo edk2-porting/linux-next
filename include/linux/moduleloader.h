@@ -115,6 +115,8 @@ int module_finalize(const Elf_Ehdr *hdr,
 		    const Elf_Shdr *sechdrs,
 		    struct module *mod);
 
+void flush_module_init_free_work(void);
+
 /* Any cleanup needed when module leaves. */
 void module_arch_cleanup(struct module *mod);
 
