@@ -575,8 +575,11 @@ int crash_exclude_mem_range(struct crash_mem *mem,
 		p_start = mstart;
 		p_end = mend;
 
-		if (p_start > end || p_end < start)
+		if (p_start > end)
 			continue;
+
+		if (p_end < start)
+			break;
 
 		/* Truncate any area outside of range */
 		if (p_start < start)
