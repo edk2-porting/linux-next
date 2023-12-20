@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _ARM_SMMU_QCOM_H
@@ -24,7 +24,11 @@ struct qcom_smmu_config {
 	const u32 *reg_offset;
 };
 
+struct actlr_config;
+
 struct qcom_smmu_match_data {
+	const struct actlr_config *actlrcfg;
+	const struct actlr_config *actlrcfg_gfx;
 	const struct qcom_smmu_config *cfg;
 	const struct arm_smmu_impl *impl;
 	const struct arm_smmu_impl *adreno_impl;
