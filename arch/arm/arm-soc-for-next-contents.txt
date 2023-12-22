@@ -1,4 +1,14 @@
 soc/arm
+	omap/maintainer
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v6.8/maintainers-signed
+	at91/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-soc-6.8
+	imx/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-6.8
+	mvebu/soc
+		git://git.kernel.org/pub/scm/linux/kernel/git/gclement/mvebu tags/mvebu-arm-6.8-1
+	patch
+		ARM: Delete ARM11MPCore (ARM11 ARMv6K SMP) support
 
 soc/dt
 	renesas/dt
@@ -55,18 +65,75 @@ soc/dt
 		https://git.kernel.org/pub/scm/linux/kernel/git/amlogic/linux tags/amlogic-arm64-dt-for-v6.8
 	riscv/dt
 		https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux tags/riscv-dt-for-v6.8
+	qcom/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-for-6.8
+		contains qcom/dt-2
 
 soc/drivers
 	asahi/soc
 		https://github.com/AsahiLinux/linux tags/asahi-soc-mailbox-6.8
 	drivers/bus-cleanup
 		https://git.pengutronix.de/git/ukl/linux tags/bus-platform-remove-void
+	hisi/drivers
+		https://github.com/hisilicon/linux-hisi tags/hisi-drivers-for-6.8
+	optee/system-thread
+		https://git.linaro.org/people/jens.wiklander/linux-tee tags/system-thread-for-v6.8
+	optee/ffa-notification
+		https://git.linaro.org/people/jens.wiklander/linux-tee tags/ffa-notif-for-v6.8
+	optee/shmem
+		https://git.linaro.org/people/jens.wiklander/linux-tee tags/kern-priv-shm-for-v6.8
+	fsl/cpm1
+		https://github.com//hcodina/linux tags/fsl_qmc_tsa_v6.8
+	mediatek/soc-drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/mediatek/linux tags/mtk-soc-for-v6.8
+	renesas/soc-drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-drivers-for-v6.8-tag1
+	imx/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-6.8
+	zymqmp/soc-drivers
+		https://github.com/Xilinx/linux-xlnx tags/zynqmp-soc-for-6.8
+	k3/soc-driver
+		https://git.kernel.org/pub/scm/linux/kernel/git/ti/linux tags/ti-driver-soc-for-v6.8
+	qcom/soc-drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-6.8
+	samsung/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-6.8
+	mvebu/drivers
+		git://git.kernel.org/pub/scm/linux/kernel/git/gclement/mvebu tags/mvebu-drivers-6.8-1
+	amlogic/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/amlogic/linux tags/amlogic-drivers-for-v6.8
+	riscv/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux tags/riscv-soc-drivers-for-v6.8
+	riscv/cache-drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux tags/riscv-cache-for-v6.8
+	drivers/memory
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux-mem-ctrl tags/memory-controller-drv-6.8
+	drivers/memory-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux-mem-ctrl tags/memory-controller-drv-6.8-2
+	firmware/scmi
+		git://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scmi-updates-6.8
+	drivers/reset
+		git://git.pengutronix.de/pza/linux tags/reset-for-v6.8
+	optee/cleanup
+		https://git.linaro.org/people/jens.wiklander/linux-tee tags/optee-cleanup-for-v6.8
+	tee/shmem
+		https://git.linaro.org/people/jens.wiklander/linux-tee tags/tee-iov-iter-for-v6.8
 
 soc/defconfig
 	patch
 		ARM: multi_v7_defconfig: Add SCMI reset support
 	renesas/defconfig
 		git://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-defconfig-for-v6.8-tag1
+	omap/defconfig
+		git://git.kernel.org/pub/scm/linux/kernel/git/tmlind/linux-omap tags/omap-for-v6.8/defconfig-signed
+	mediatek/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/mediatek/linux tags/mtk-defconfig-for-v6.8
+	k3/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/ti/linux tags/ti-k3-config-for-v6.8
+	qcom/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-defconfig-for-6.8
+	patch
+		ARM: multi_v7_defconfig: enable STM32 DCMIPP media support
 
 soc/late
 
