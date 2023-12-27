@@ -503,7 +503,7 @@ void kasan_init_object_meta(struct kmem_cache *cache, const void *object)
 	 */
 }
 
-void release_alloc_meta(struct kasan_alloc_meta *meta)
+static void release_alloc_meta(struct kasan_alloc_meta *meta)
 {
 	/* Evict the stack traces from stack depot. */
 	stack_depot_put(meta->alloc_track.stack);
@@ -514,7 +514,7 @@ void release_alloc_meta(struct kasan_alloc_meta *meta)
 	__memset(meta, 0, sizeof(*meta));
 }
 
-void release_free_meta(const void *object, struct kasan_free_meta *meta)
+static void release_free_meta(const void *object, struct kasan_free_meta *meta)
 {
 	/* Check if free meta is valid. */
 	if (*(u8 *)kasan_mem_to_shadow(object) != KASAN_SLAB_FREE_META)
