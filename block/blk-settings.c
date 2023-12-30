@@ -48,7 +48,7 @@ void blk_set_default_limits(struct queue_limits *lim)
 	lim->max_discard_sectors = 0;
 	lim->max_hw_discard_sectors = 0;
 	lim->max_secure_erase_sectors = 0;
-	lim->discard_granularity = 0;
+	lim->discard_granularity = 512;
 	lim->discard_alignment = 0;
 	lim->discard_misaligned = 0;
 	lim->logical_block_size = lim->physical_block_size = lim->io_min = 512;
@@ -139,7 +139,7 @@ void blk_queue_max_hw_sectors(struct request_queue *q, unsigned int max_hw_secto
 	if (limits->max_user_sectors)
 		max_sectors = min(max_sectors, limits->max_user_sectors);
 	else
-		max_sectors = min(max_sectors, BLK_DEF_MAX_SECTORS);
+		max_sectors = min(max_sectors, BLK_DEF_MAX_SECTORS_CAP);
 
 	max_sectors = round_down(max_sectors,
 				 limits->logical_block_size >> SECTOR_SHIFT);
@@ -308,6 +308,9 @@ void blk_queue_logical_block_size(struct request_queue *q, unsigned int size)
 	struct queue_limits *limits = &q->limits;
 
 	limits->logical_block_size = size;
+
+	if (limits->discard_granularity < limits->logical_block_size)
+		limits->discard_granularity = limits->logical_block_size;
 
 	if (limits->physical_block_size < size)
 		limits->physical_block_size = size;
