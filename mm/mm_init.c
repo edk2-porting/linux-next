@@ -796,6 +796,7 @@ overlap_memmap_init(unsigned long zone, unsigned long *pfn)
  * - physical memory bank size is not necessarily the exact multiple of the
  *   arbitrary section size
  * - early reserved memory may not be listed in memblock.memory
+ * - non-memory regions covered by the contigious flatmem mapping
  * - memory layouts defined with memmap= kernel parameter may not align
  *   nicely with memmap sections
  *
@@ -826,7 +827,7 @@ static void __init init_unavailable_range(unsigned long spfn,
 	}
 
 	if (pgcnt)
-		pr_info("On node %d, zone %s: %lld pages in unavailable ranges",
+		pr_info("On node %d, zone %s: %lld pages in unavailable ranges\n",
 			node, zone_names[zone], pgcnt);
 }
 
@@ -1466,8 +1467,7 @@ void __init set_pageblock_order(void)
 
 	/*
 	 * Assume the largest contiguous order of interest is a huge page.
-	 * This value may be variable depending on boot parameters on IA64 and
-	 * powerpc.
+	 * This value may be variable depending on boot parameters on powerpc.
 	 */
 	pageblock_order = order;
 }
@@ -1628,8 +1628,8 @@ void __init *memmap_alloc(phys_addr_t size, phys_addr_t align,
 #ifdef CONFIG_FLATMEM
 static void __init alloc_node_mem_map(struct pglist_data *pgdat)
 {
-	unsigned long __maybe_unused start = 0;
-	unsigned long __maybe_unused offset = 0;
+	unsigned long start, offset, size, end;
+	struct page *map;
 
 	/* Skip empty nodes */
 	if (!pgdat->node_spanned_pages)
@@ -1637,33 +1637,24 @@ static void __init alloc_node_mem_map(struct pglist_data *pgdat)
 
 	start = pgdat->node_start_pfn & ~(MAX_ORDER_NR_PAGES - 1);
 	offset = pgdat->node_start_pfn - start;
-	/* ia64 gets its own node_mem_map, before this, without bootmem */
-	if (!pgdat->node_mem_map) {
-		unsigned long size, end;
-		struct page *map;
-
-		/*
-		 * The zone's endpoints aren't required to be MAX_ORDER
-		 * aligned but the node_mem_map endpoints must be in order
-		 * for the buddy allocator to function correctly.
-		 */
-		end = pgdat_end_pfn(pgdat);
-		end = ALIGN(end, MAX_ORDER_NR_PAGES);
-		size =  (end - start) * sizeof(struct page);
-		map = memmap_alloc(size, SMP_CACHE_BYTES, MEMBLOCK_LOW_LIMIT,
-				   pgdat->node_id, false);
-		if (!map)
-			panic("Failed to allocate %ld bytes for node %d memory map\n",
-			      size, pgdat->node_id);
-		pgdat->node_mem_map = map + offset;
-	}
-	pr_debug("%s: node %d, pgdat %08lx, node_mem_map %08lx\n",
-				__func__, pgdat->node_id, (unsigned long)pgdat,
-				(unsigned long)pgdat->node_mem_map);
-#ifndef CONFIG_NUMA
 	/*
-	 * With no DISCONTIG, the global mem_map is just set as node 0's
+	 * The zone's endpoints aren't required to be MAX_ORDER
+	 * aligned but the node_mem_map endpoints must be in order
+	 * for the buddy allocator to function correctly.
 	 */
+	end = ALIGN(pgdat_end_pfn(pgdat), MAX_ORDER_NR_PAGES);
+	size =  (end - start) * sizeof(struct page);
+	map = memmap_alloc(size, SMP_CACHE_BYTES, MEMBLOCK_LOW_LIMIT,
+			   pgdat->node_id, false);
+	if (!map)
+		panic("Failed to allocate %ld bytes for node %d memory map\n",
+		      size, pgdat->node_id);
+	pgdat->node_mem_map = map + offset;
+	pr_debug("%s: node %d, pgdat %08lx, node_mem_map %08lx\n",
+		 __func__, pgdat->node_id, (unsigned long)pgdat,
+		 (unsigned long)pgdat->node_mem_map);
+#ifndef CONFIG_NUMA
+	/* the global mem_map is just set as node 0's */
 	if (pgdat == NODE_DATA(0)) {
 		mem_map = NODE_DATA(0)->node_mem_map;
 		if (page_to_pfn(mem_map) != pgdat->node_start_pfn)
