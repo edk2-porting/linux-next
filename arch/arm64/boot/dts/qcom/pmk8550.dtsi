@@ -73,5 +73,13 @@
 			interrupt-controller;
 			#interrupt-cells = <2>;
 		};
+
+		pmk8550_sdam_46: nvram@9d00 {
+			compatible = "qcom,spmi-sdam";
+			reg = <0x9d00>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+			ranges = <0 0x9d00 0x100>;
+		};
 	};
 };
