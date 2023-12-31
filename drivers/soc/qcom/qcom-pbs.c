@@ -52,6 +52,52 @@ static int qcom_pbs_wait_for_ack(struct pbs_dev *pbs, u8 bit_pos)
 }
 
 /**
+ * qcom_pbs_trigger_single_event - trigger PBS sequence which is connected
+ * directly to SW_TRIGGER bit without using bitmap.
+ *
+ * Returns = 0 enable SW_TRIGGER in PBS client successfully.
+ *
+ * Returns < 0 for errors.
+ *
+ * This function is used to trigger the PBS that is hooked on the
+ * SW_TRIGGER directly in PBS client.
+ */
+int qcom_pbs_trigger_single_event(struct device_node *dev_node)
+{
+    struct platform_device *pdev;
+	struct pbs_dev *pbs;
+	int rc;
+
+	if (!dev_node)
+		return -EINVAL;
+
+    pdev = of_find_device_by_node(dev_node);
+	if (!pdev) {
+		pr_err("Unable to find PBS dev_node\n");
+		return -EPROBE_DEFER;
+	}
+
+	pbs = platform_get_drvdata(pdev);
+	if (!pbs) {
+		pr_err("Cannot get pbs instance from %s\n", dev_name(&pdev->dev));
+		platform_device_put(pdev);
+		return -EPROBE_DEFER;
+	}
+
+	mutex_lock(&pbs->lock);
+	rc = regmap_update_bits(pbs->regmap, pbs->base +
+				PBS_CLIENT_TRIG_CTL, PBS_CLIENT_SW_TRIG_BIT,
+				PBS_CLIENT_SW_TRIG_BIT);
+	if (rc < 0)
+		pr_err("Failed to write register %x rc=%d\n",
+				PBS_CLIENT_TRIG_CTL, rc);
+	mutex_unlock(&pbs->lock);
+
+	return rc;
+}
+EXPORT_SYMBOL(qcom_pbs_trigger_single_event);
+
+/**
  * qcom_pbs_trigger_event() - Trigger the PBS RAM sequence
  * @pbs: Pointer to PBS device
  * @bitmap: bitmap
