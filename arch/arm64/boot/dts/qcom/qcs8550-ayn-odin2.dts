@@ -773,40 +773,6 @@
 &i2c_hub_2 {
 	status = "okay";
 
-	/* Does this exist? */
-
-	// typec-retimer@1c {
-	// 	compatible = "onnn,nb7vpq904m";
-	// 	reg = <0x1c>;
-
-	// 	vcc-supply = <&vreg_l15b_1p8>;
-
-	// 	retimer-switch;
-	// 	orientation-switch;
-
-	// 	ports {
-	// 		#address-cells = <1>;
-	// 		#size-cells = <0>;
-
-	// 		port@0 {
-	// 			reg = <0>;
-
-	// 			redriver_ss_out: endpoint {
-	// 				remote-endpoint = <&pmic_glink_ss_in>;
-	// 			};
-	// 		};
-
-	// 		port@1 {
-	// 			reg = <1>;
-
-	// 			redriver_ss_in: endpoint {
-	// 				data-lanes = <3 2 1 0>;
-	// 				remote-endpoint = <&usb_dp_qmpphy_out>;
-	// 			};
-	// 		};
-	// 	};
-	// };
-
 	/* No driver. aw883xx chip id = 2066 */
 
 	// audio-codec@34 {
@@ -917,8 +883,10 @@
 };
 
 &mdss_dp0_out {
+	// data-lanes = <0 1 2 3>;
 	data-lanes = <0 1>;
 	remote-endpoint = <&usb_dp_qmpphy_dp_in>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
 };
 
 &pcie0 {
@@ -941,7 +909,6 @@
 
 	status = "okay";
 };
-
 
 &pm8550_gpios {
 	volume_up_n: volume-up-n-state {
@@ -978,6 +945,12 @@
 &pm8550b_eusb2_repeater {
 	vdd18-supply = <&vreg_l15b_1p8>;
 	vdd3-supply = <&vreg_l5b_3p1>;
+};
+
+&pm8550b_haptics {
+	nvmem-names = "hap_cfg_sdam";
+	nvmem = <&pmk8550_sdam_46>;
+	status = "okay";
 };
 
 &pmk8550_gpios {
@@ -1026,7 +999,6 @@
 
 &pon_resin {
 	linux,code = <KEY_VOLUMEDOWN>;
-
 	status = "okay";
 };
 
