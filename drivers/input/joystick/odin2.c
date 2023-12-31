@@ -48,7 +48,7 @@ struct gamepad_device {
 
 static u8 gamepad_data_checksum(const u8 *data, size_t count)
 {
-    u8 *ptr = data;
+    const u8 *ptr = data;
     u8 ret = data[4];
     for (int i = 5; i < count - 1; i++) {
         ret ^= ptr[i];
@@ -91,8 +91,8 @@ static void gamepad_input_handler(struct gamepad_device *dev, struct gamepad_dat
         input_report_key(indev, keymap[i], (current_states & BIT(i)));
     }
 
-    input_report_abs(indev, ABS_HAT1X, 0x755 - (data->data[2] | (data->data[3] << 8)));
-    input_report_abs(indev, ABS_HAT1Y, 0x755 - (data->data[4] | (data->data[5] << 8)));
+    input_report_abs(indev, ABS_HAT2X, 0x755 - (data->data[2] | (data->data[3] << 8)));
+    input_report_abs(indev, ABS_HAT2Y, 0x755 - (data->data[4] | (data->data[5] << 8)));
     input_report_abs(indev, ABS_X, -(int16_t)(data->data[6] | (data->data[7] << 8)));
     input_report_abs(indev, ABS_Y, -(int16_t)(data->data[8] | (data->data[9] << 8)));
     input_report_abs(indev, ABS_RX, -(int16_t)(data->data[10] | (data->data[11] << 8)));
@@ -206,8 +206,8 @@ static int gamepad_mcu_uart_probe(struct serdev_device *serdev)
     for (int i = ABS_X; i <= ABS_RZ; i++)
         input_set_abs_params(gamepad_dev->dev_input, i, -0x580, 0x580, 0, 0);
 
-    input_set_abs_params(gamepad_dev->dev_input, ABS_HAT1X, 0, 0x750, 0, 30);
-    input_set_abs_params(gamepad_dev->dev_input, ABS_HAT1Y, 0, 0x750, 0, 30);
+    input_set_abs_params(gamepad_dev->dev_input, ABS_HAT2X, 0, 1830, 0, 30);
+    input_set_abs_params(gamepad_dev->dev_input, ABS_HAT2Y, 0, 1830, 0, 30);
 
     ret = input_register_device(gamepad_dev->dev_input);
 	if (ret) {
