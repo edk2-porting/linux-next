@@ -10,10 +10,6 @@
     status = "disabled";
 };
 
-&mcu_3v3 {
-    status = "disabled";
-};
-
 &fan_pwr {
     status = "disabled";
 };
