@@ -32,7 +32,7 @@
 #include <linux/workqueue.h>
 #include <linux/soc/qcom/qcom-pbs.h>
 
-#include <linux/soc/qcom/battery_charger.h>
+// #include <linux/soc/qcom/battery_charger.h>
 
 #define CREATE_TRACE_POINTS
 #include "qcom-hv-haptics-trace.h"
