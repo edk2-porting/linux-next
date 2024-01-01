@@ -446,7 +446,8 @@ void khugepaged_enter_vma(struct vm_area_struct *vma,
 {
 	if (!test_bit(MMF_VM_HUGEPAGE, &vma->vm_mm->flags) &&
 	    hugepage_flags_enabled()) {
-		if (hugepage_vma_check(vma, vm_flags, false, false, true))
+		if (thp_vma_allowable_order(vma, vm_flags, false, false, true,
+					    PMD_ORDER))
 			__khugepaged_enter(vma->vm_mm);
 	}
 }
@@ -491,11 +492,6 @@ static void release_pte_folio(struct folio *folio)
 			-folio_nr_pages(folio));
 	folio_unlock(folio);
 	folio_putback_lru(folio);
-}
-
-static void release_pte_page(struct page *page)
-{
-	release_pte_folio(page_folio(page));
 }
 
 static void release_pte_pages(pte_t *pte, pte_t *_pte,
@@ -686,6 +682,7 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 						spinlock_t *ptl,
 						struct list_head *compound_pagelist)
 {
+	struct folio *src_folio;
 	struct page *src_page;
 	struct page *tmp;
 	pte_t *_pte;
@@ -707,16 +704,17 @@ static void __collapse_huge_page_copy_succeeded(pte_t *pte,
 			}
 		} else {
 			src_page = pte_page(pteval);
-			if (!PageCompound(src_page))
-				release_pte_page(src_page);
+			src_folio = page_folio(src_page);
+			if (!folio_test_large(src_folio))
+				release_pte_folio(src_folio);
 			/*
 			 * ptl mostly unnecessary, but preempt has to
 			 * be disabled to update the per-cpu stats
-			 * inside page_remove_rmap().
+			 * inside folio_remove_rmap_pte().
 			 */
 			spin_lock(ptl);
 			ptep_clear(vma->vm_mm, address, _pte);
-			page_remove_rmap(src_page, vma, false);
+			folio_remove_rmap_pte(src_folio, src_page, vma);
 			spin_unlock(ptl);
 			free_page_and_swap_cache(src_page);
 		}
@@ -922,16 +920,16 @@ static int hugepage_vma_revalidate(struct mm_struct *mm, unsigned long address,
 	if (!vma)
 		return SCAN_VMA_NULL;
 
-	if (!transhuge_vma_suitable(vma, address))
+	if (!thp_vma_suitable_order(vma, address, PMD_ORDER))
 		return SCAN_ADDRESS_RANGE;
-	if (!hugepage_vma_check(vma, vma->vm_flags, false, false,
-				cc->is_khugepaged))
+	if (!thp_vma_allowable_order(vma, vma->vm_flags, false, false,
+				     cc->is_khugepaged, PMD_ORDER))
 		return SCAN_VMA_CHECK;
 	/*
 	 * Anon VMA expected, the address may be unmapped then
 	 * remapped to file after khugepaged reaquired the mmap_lock.
 	 *
-	 * hugepage_vma_check may return true for qualified file
+	 * thp_vma_allowable_order may return true for qualified file
 	 * vmas.
 	 */
 	if (expect_anon && (!(*vmap)->anon_vma || !vma_is_anonymous(*vmap)))
@@ -1089,6 +1087,7 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	pmd_t *pmd, _pmd;
 	pte_t *pte;
 	pgtable_t pgtable;
+	struct folio *folio;
 	struct page *hpage;
 	spinlock_t *pmd_ptl, *pte_ptl;
 	int result = SCAN_FAIL;
@@ -1139,6 +1138,9 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	 * Prevent all access to pagetables with the exception of
 	 * gup_fast later handled by the ptep_clear_flush and the VM
 	 * handled by the anon_vma lock + PG_lock.
+	 *
+	 * UFFDIO_MOVE is prevented to race as well thanks to the
+	 * mmap_lock.
 	 */
 	mmap_write_lock(mm);
 	result = hugepage_vma_revalidate(mm, address, true, &vma, cc);
@@ -1208,13 +1210,13 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 	if (unlikely(result != SCAN_SUCCEED))
 		goto out_up_write;
 
+	folio = page_folio(hpage);
 	/*
-	 * spin_lock() below is not the equivalent of smp_wmb(), but
-	 * the smp_wmb() inside __SetPageUptodate() can be reused to
-	 * avoid the copy_huge_page writes to become visible after
-	 * the set_pmd_at() write.
+	 * The smp_wmb() inside __folio_mark_uptodate() ensures the
+	 * copy_huge_page writes become visible before the set_pmd_at()
+	 * write.
 	 */
-	__SetPageUptodate(hpage);
+	__folio_mark_uptodate(folio);
 	pgtable = pmd_pgtable(_pmd);
 
 	_pmd = mk_huge_pmd(hpage, vma->vm_page_prot);
@@ -1222,8 +1224,8 @@ static int collapse_huge_page(struct mm_struct *mm, unsigned long address,
 
 	spin_lock(pmd_ptl);
 	BUG_ON(!pmd_none(*pmd));
-	page_add_new_anon_rmap(hpage, vma, address);
-	lru_cache_add_inactive_or_unevictable(hpage, vma);
+	folio_add_new_anon_rmap(folio, vma, address);
+	folio_add_lru_vma(folio, vma);
 	pgtable_trans_huge_deposit(mm, pmd, pgtable);
 	set_pmd_at(mm, address, pmd, _pmd);
 	update_mmu_cache_pmd(vma, address, pmd);
@@ -1503,7 +1505,8 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 	 * and map it by a PMD, regardless of sysfs THP settings. As such, let's
 	 * analogously elide sysfs THP settings here.
 	 */
-	if (!hugepage_vma_check(vma, vma->vm_flags, false, false, false))
+	if (!thp_vma_allowable_order(vma, vma->vm_flags, false, false, false,
+				     PMD_ORDER))
 		return SCAN_VMA_CHECK;
 
 	/* Keep pmd pgtable for uffd-wp; see comment in retract_page_tables() */
@@ -1619,7 +1622,7 @@ int collapse_pte_mapped_thp(struct mm_struct *mm, unsigned long addr,
 		 * PTE dirty? Shmem page is already dirty; file is read-only.
 		 */
 		ptep_clear(mm, addr, pte);
-		page_remove_rmap(page, vma, false);
+		folio_remove_rmap_pte(folio, page, vma);
 		nr_ptes++;
 	}
 
@@ -2368,7 +2371,8 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages, int *result,
 			progress++;
 			break;
 		}
-		if (!hugepage_vma_check(vma, vma->vm_flags, false, false, true)) {
+		if (!thp_vma_allowable_order(vma, vma->vm_flags, false, false,
+					     true, PMD_ORDER)) {
 skip:
 			progress++;
 			continue;
@@ -2492,7 +2496,7 @@ static void khugepaged_do_scan(struct collapse_control *cc)
 	while (true) {
 		cond_resched();
 
-		if (unlikely(kthread_should_stop() || try_to_freeze()))
+		if (unlikely(kthread_should_stop()))
 			break;
 
 		spin_lock(&khugepaged_mm_lock);
@@ -2705,7 +2709,8 @@ int madvise_collapse(struct vm_area_struct *vma, struct vm_area_struct **prev,
 
 	*prev = vma;
 
-	if (!hugepage_vma_check(vma, vma->vm_flags, false, false, false))
+	if (!thp_vma_allowable_order(vma, vma->vm_flags, false, false, false,
+				     PMD_ORDER))
 		return -EINVAL;
 
 	cc = kmalloc(sizeof(*cc), GFP_KERNEL);
