@@ -8102,6 +8102,7 @@ F:	include/trace/events/fs_dax.h
 FILESYSTEMS (VFS and infrastructure)
 M:	Alexander Viro <viro@zeniv.linux.org.uk>
 M:	Christian Brauner <brauner@kernel.org>
+R:	Jan Kara <jack@suse.cz>
 L:	linux-fsdevel@vger.kernel.org
 S:	Maintained
 F:	fs/*
@@ -8122,6 +8123,16 @@ F:	fs/exportfs/
 F:	fs/fhandle.c
 F:	include/linux/exportfs.h
 
+FILESYSTEMS [IDMAPPED MOUNTS]
+M:	Christian Brauner <brauner@kernel.org>
+M:	Seth Forshee <sforshee@kernel.org>
+L:	linux-fsdevel@vger.kernel.org
+S:	Maintained
+F:	Documentation/filesystems/idmappings.rst
+F:	fs/mnt_idmapping.c
+F:	include/linux/mnt_idmapping.*
+F:	tools/testing/selftests/mount_setattr/
+
 FILESYSTEMS [IOMAP]
 M:	Christian Brauner <brauner@kernel.org>
 R:	Darrick J. Wong <djwong@kernel.org>
@@ -8130,6 +8141,28 @@ L:	linux-fsdevel@vger.kernel.org
 S:	Supported
 F:	fs/iomap/
 F:	include/linux/iomap.h
+
+FILESYSTEMS [NETFS LIBRARY]
+M:	David Howells <dhowells@redhat.com>
+L:	linux-cachefs@redhat.com (moderated for non-subscribers)
+L:	linux-fsdevel@vger.kernel.org
+S:	Supported
+F:	Documentation/filesystems/caching/
+F:	Documentation/filesystems/netfs_library.rst
+F:	fs/netfs/
+F:	include/linux/fscache*.h
+F:	include/linux/netfs.h
+F:	include/trace/events/fscache.h
+F:	include/trace/events/netfs.h
+
+FILESYSTEMS [STACKABLE]
+M:	Miklos Szeredi <miklos@szeredi.hu>
+M:	Amir Goldstein <amir73il@gmail.com>
+L:	linux-fsdevel@vger.kernel.org
+L:	linux-unionfs@vger.kernel.org
+S:	Maintained
+F:	fs/backing-file.c
+F:	include/linux/backing-file.h
 
 FINTEK F75375S HARDWARE MONITOR AND FAN CONTROLLER DRIVER
 M:	Riku Voipio <riku.voipio@iki.fi>
@@ -8564,14 +8597,6 @@ S:	Supported
 F:	Documentation/power/freezing-of-tasks.rst
 F:	include/linux/freezer.h
 F:	kernel/freezer.c
-
-FS-CACHE: LOCAL CACHING FOR NETWORK FILESYSTEMS
-M:	David Howells <dhowells@redhat.com>
-L:	linux-cachefs@redhat.com (moderated for non-subscribers)
-S:	Supported
-F:	Documentation/filesystems/caching/
-F:	fs/fscache/
-F:	include/linux/fscache*.h
 
 FSCRYPT: FILE SYSTEM LEVEL ENCRYPTION SUPPORT
 M:	Eric Biggers <ebiggers@kernel.org>
@@ -10209,16 +10234,6 @@ L:	linux-input@vger.kernel.org
 S:	Maintained
 W:	https://github.com/o2genum/ideapad-slidebar
 F:	drivers/input/misc/ideapad_slidebar.c
-
-IDMAPPED MOUNTS
-M:	Christian Brauner <brauner@kernel.org>
-M:	Seth Forshee <sforshee@kernel.org>
-L:	linux-fsdevel@vger.kernel.org
-S:	Maintained
-T:	git git://git.kernel.org/pub/scm/linux/kernel/git/vfs/idmapping.git
-F:	Documentation/filesystems/idmappings.rst
-F:	include/linux/mnt_idmapping.*
-F:	tools/testing/selftests/mount_setattr/
 
 IDT VersaClock 5 CLOCK DRIVER
 M:	Luca Ceresoli <luca@lucaceresoli.net>
