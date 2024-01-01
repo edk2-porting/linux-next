@@ -934,7 +934,6 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct bch_dev *ca,
 	struct sort_iter *iter;
 	struct btree_node *sorted;
 	struct bkey_packed *k;
-	struct bch_extent_ptr *ptr;
 	struct bset *i;
 	bool used_mempool, blacklisted;
 	bool updated_range = b->key.k.type == KEY_TYPE_btree_ptr_v2 &&
@@ -968,12 +967,20 @@ int bch2_btree_node_read_done(struct bch_fs *c, struct bch_dev *ca,
 		struct bch_btree_ptr_v2 *bp =
 			&bkey_i_to_btree_ptr_v2(&b->key)->v;
 
+		bch2_bpos_to_text(&buf, b->data->min_key);
+		prt_str(&buf, "-");
+		bch2_bpos_to_text(&buf, b->data->max_key);
+
 		btree_err_on(b->data->keys.seq != bp->seq,
 			     -BCH_ERR_btree_node_read_err_must_retry,
 			     c, ca, b, NULL,
 			     btree_node_bad_seq,
-			     "got wrong btree node (seq %llx want %llx)",
-			     b->data->keys.seq, bp->seq);
+			     "got wrong btree node (want %llx got %llx)\n"
+			     "got btree %s level %llu pos %s",
+			     bp->seq, b->data->keys.seq,
+			     bch2_btree_id_str(BTREE_NODE_ID(b->data)),
+			     BTREE_NODE_LEVEL(b->data),
+			     buf.buf);
 	} else {
 		btree_err_on(!b->data->keys.seq,
 			     -BCH_ERR_btree_node_read_err_must_retry,
@@ -1575,16 +1582,17 @@ static int btree_node_read_all_replicas(struct bch_fs *c, struct btree *b, bool 
 	return 0;
 }
 
-void bch2_btree_node_read(struct bch_fs *c, struct btree *b,
+void bch2_btree_node_read(struct btree_trans *trans, struct btree *b,
 			  bool sync)
 {
+	struct bch_fs *c = trans->c;
 	struct extent_ptr_decoded pick;
 	struct btree_read_bio *rb;
 	struct bch_dev *ca;
 	struct bio *bio;
 	int ret;
 
-	trace_and_count(c, btree_node_read, c, b);
+	trace_and_count(c, btree_node_read, trans, b);
 
 	if (bch2_verify_all_btree_replicas &&
 	    !btree_node_read_all_replicas(c, b, sync))
@@ -1663,12 +1671,12 @@ static int __bch2_btree_root_read(struct btree_trans *trans, enum btree_id id,
 	closure_init_stack(&cl);
 
 	do {
-		ret = bch2_btree_cache_cannibalize_lock(c, &cl);
+		ret = bch2_btree_cache_cannibalize_lock(trans, &cl);
 		closure_sync(&cl);
 	} while (ret);
 
 	b = bch2_btree_node_mem_alloc(trans, level != 0);
-	bch2_btree_cache_cannibalize_unlock(c);
+	bch2_btree_cache_cannibalize_unlock(trans);
 
 	BUG_ON(IS_ERR(b));
 
@@ -1677,7 +1685,7 @@ static int __bch2_btree_root_read(struct btree_trans *trans, enum btree_id id,
 
 	set_btree_node_read_in_flight(b);
 
-	bch2_btree_node_read(c, b, true);
+	bch2_btree_node_read(trans, b, true);
 
 	if (btree_node_read_error(b)) {
 		bch2_btree_node_hash_remove(&c->btree_cache, b);
@@ -1789,8 +1797,10 @@ static void btree_node_write_work(struct work_struct *work)
 	bch2_bkey_drop_ptrs(bkey_i_to_s(&wbio->key), ptr,
 		bch2_dev_list_has_dev(wbio->wbio.failed, ptr->dev));
 
-	if (!bch2_bkey_nr_ptrs(bkey_i_to_s_c(&wbio->key)))
+	if (!bch2_bkey_nr_ptrs(bkey_i_to_s_c(&wbio->key))) {
+		ret = -BCH_ERR_btree_write_all_failed;
 		goto err;
+	}
 
 	if (wbio->wbio.first_btree_write) {
 		if (wbio->wbio.failed.nr) {
@@ -1800,9 +1810,9 @@ static void btree_node_write_work(struct work_struct *work)
 		ret = bch2_trans_do(c, NULL, NULL, 0,
 			bch2_btree_node_update_key_get_iter(trans, b, &wbio->key,
 					BCH_WATERMARK_reclaim|
-					BTREE_INSERT_JOURNAL_RECLAIM|
-					BTREE_INSERT_NOFAIL|
-					BTREE_INSERT_NOCHECK_RW,
+					BCH_TRANS_COMMIT_journal_reclaim|
+					BCH_TRANS_COMMIT_no_enospc|
+					BCH_TRANS_COMMIT_no_check_rw,
 					!wbio->wbio.failed.nr));
 		if (ret)
 			goto err;
@@ -1885,7 +1895,6 @@ static int validate_bset_for_write(struct bch_fs *c, struct btree *b,
 static void btree_write_submit(struct work_struct *work)
 {
 	struct btree_write_bio *wbio = container_of(work, struct btree_write_bio, work);
-	struct bch_extent_ptr *ptr;
 	BKEY_PADDED_ONSTACK(k, BKEY_BTREE_PTR_VAL_U64s_MAX) tmp;
 
 	bkey_copy(&tmp.k, &wbio->key);

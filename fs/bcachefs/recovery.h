@@ -4,6 +4,9 @@
 
 extern const char * const bch2_recovery_passes[];
 
+u64 bch2_recovery_passes_to_stable(u64 v);
+u64 bch2_recovery_passes_from_stable(u64 v);
+
 /*
  * For when we need to rewind recovery passes and run a pass we skipped:
  */
@@ -28,6 +31,7 @@ static inline int bch2_run_explicit_recovery_pass(struct bch_fs *c,
 	}
 }
 
+int bch2_run_online_recovery_passes(struct bch_fs *);
 u64 bch2_fsck_recovery_passes(void);
 
 int bch2_fs_recovery(struct bch_fs *);
