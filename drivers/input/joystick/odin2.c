@@ -114,7 +114,7 @@ static void gamepad_data_handler(struct serdev_device *serdev, struct gamepad_da
     }
 }
 
-static int gamepad_mcu_uart_rx_bytes(struct serdev_device *serdev,
+static ssize_t gamepad_mcu_uart_rx_bytes(struct serdev_device *serdev,
                  const u8 *data,
                  size_t count)
 {
