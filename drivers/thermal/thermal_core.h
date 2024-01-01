@@ -116,6 +116,7 @@ void __thermal_zone_device_update(struct thermal_zone_device *tz,
 				  enum thermal_notify_event event);
 void thermal_governor_update_tz(struct thermal_zone_device *tz,
 				enum thermal_notify_event reason);
+void thermal_zone_device_critical_reboot(struct thermal_zone_device *tz);
 
 /* Helpers */
 #define for_each_trip(__tz, __trip)	\
