@@ -462,9 +462,14 @@
 			no-map;
 		};
 
-		/* merged aop_config, tme_crash_dump, tme_log, uefi_log */
+		/* merged aop_config, tme_crash_dump, tme_log */
 		aop_config_merged_mem: aop-config-merged-region@81c80000 {
-			reg = <0 0x81c80000 0 0x74000>;
+			reg = <0 0x81c80000 0 0x64000>;
+			no-map;
+		};
+
+		uefi_log: uefi-log@81ce4000 {
+			reg = <0 0x81ce4000 0 0x10000>;
 			no-map;
 		};
 
