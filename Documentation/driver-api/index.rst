@@ -114,6 +114,7 @@ available subsections can be seen below.
    dpll
    tee
    wbrf
+   crypto/index
 
 .. only::  subproject and html
 
