@@ -2616,58 +2616,38 @@ static void intel_dp_compute_vsc_sdp(struct intel_dp *intel_dp,
 				     struct intel_crtc_state *crtc_state,
 				     const struct drm_connector_state *conn_state)
 {
-	struct drm_dp_vsc_sdp *vsc = &crtc_state->infoframes.vsc;
+	struct drm_dp_vsc_sdp *vsc;
 
-	/* When a crtc state has PSR, VSC SDP will be handled by PSR routine */
-	if (crtc_state->has_psr)
+	if ((!intel_dp->colorimetry_support ||
+	     !intel_dp_needs_vsc_sdp(crtc_state, conn_state)) &&
+	    !crtc_state->has_psr)
 		return;
 
-	if (!intel_dp_needs_vsc_sdp(crtc_state, conn_state))
-		return;
+	vsc = &crtc_state->infoframes.vsc;
 
 	crtc_state->infoframes.enable |= intel_hdmi_infoframe_enable(DP_SDP_VSC);
 	vsc->sdp_type = DP_SDP_VSC;
-	intel_dp_compute_vsc_colorimetry(crtc_state, conn_state,
-					 &crtc_state->infoframes.vsc);
-}
 
-void intel_dp_compute_psr_vsc_sdp(struct intel_dp *intel_dp,
-				  const struct intel_crtc_state *crtc_state,
-				  const struct drm_connector_state *conn_state,
-				  struct drm_dp_vsc_sdp *vsc)
-{
-	vsc->sdp_type = DP_SDP_VSC;
-
-	if (crtc_state->has_psr2) {
-		if (intel_dp->psr.colorimetry_support &&
-		    intel_dp_needs_vsc_sdp(crtc_state, conn_state)) {
-			/* [PSR2, +Colorimetry] */
-			intel_dp_compute_vsc_colorimetry(crtc_state, conn_state,
-							 vsc);
-		} else {
-			/*
-			 * [PSR2, -Colorimetry]
-			 * Prepare VSC Header for SU as per eDP 1.4 spec, Table 6-11
-			 * 3D stereo + PSR/PSR2 + Y-coordinate.
-			 */
-			vsc->revision = 0x4;
-			vsc->length = 0xe;
-		}
+	/* Needs colorimetry */
+	if (intel_dp_needs_vsc_sdp(crtc_state, conn_state)) {
+		intel_dp_compute_vsc_colorimetry(crtc_state, conn_state,
+						 vsc);
+	} else if (crtc_state->has_psr2) {
+		/*
+		 * [PSR2 without colorimetry]
+		 * Prepare VSC Header for SU as per eDP 1.4 spec, Table 6-11
+		 * 3D stereo + PSR/PSR2 + Y-coordinate.
+		 */
+		vsc->revision = 0x4;
+		vsc->length = 0xe;
 	} else if (crtc_state->has_panel_replay) {
-		if (intel_dp->psr.colorimetry_support &&
-		    intel_dp_needs_vsc_sdp(crtc_state, conn_state)) {
-			/* [Panel Replay with colorimetry info] */
-			intel_dp_compute_vsc_colorimetry(crtc_state, conn_state,
-							 vsc);
-		} else {
-			/*
-			 * [Panel Replay without colorimetry info]
-			 * Prepare VSC Header for SU as per DP 2.0 spec, Table 2-223
-			 * VSC SDP supporting 3D stereo + Panel Replay.
-			 */
-			vsc->revision = 0x6;
-			vsc->length = 0x10;
-		}
+		/*
+		 * [Panel Replay without colorimetry info]
+		 * Prepare VSC Header for SU as per DP 2.0 spec, Table 2-223
+		 * VSC SDP supporting 3D stereo + Panel Replay.
+		 */
+		vsc->revision = 0x6;
+		vsc->length = 0x10;
 	} else {
 		/*
 		 * [PSR1]
@@ -4288,24 +4268,6 @@ static void intel_write_dp_sdp(struct intel_encoder *encoder,
 	dig_port->write_infoframe(encoder, crtc_state, type, &sdp, len);
 }
 
-void intel_write_dp_vsc_sdp(struct intel_encoder *encoder,
-			    const struct intel_crtc_state *crtc_state,
-			    const struct drm_dp_vsc_sdp *vsc)
-{
-	struct intel_digital_port *dig_port = enc_to_dig_port(encoder);
-	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-	struct dp_sdp sdp = {};
-	ssize_t len;
-
-	len = intel_dp_vsc_sdp_pack(vsc, &sdp, sizeof(sdp));
-
-	if (drm_WARN_ON(&dev_priv->drm, len < 0))
-		return;
-
-	dig_port->write_infoframe(encoder, crtc_state, DP_SDP_VSC,
-					&sdp, len);
-}
-
 void intel_dp_set_infoframes(struct intel_encoder *encoder,
 			     bool enable,
 			     const struct intel_crtc_state *crtc_state,
@@ -4332,9 +4294,7 @@ void intel_dp_set_infoframes(struct intel_encoder *encoder,
 	if (!enable)
 		return;
 
-	/* When PSR is enabled, VSC SDP is handled by PSR routine */
-	if (!crtc_state->has_psr)
-		intel_write_dp_sdp(encoder, crtc_state, DP_SDP_VSC);
+	intel_write_dp_sdp(encoder, crtc_state, DP_SDP_VSC);
 
 	intel_write_dp_sdp(encoder, crtc_state, HDMI_PACKET_TYPE_GAMUT_METADATA);
 }
@@ -4464,10 +4424,6 @@ static void intel_read_dp_vsc_sdp(struct intel_encoder *encoder,
 	unsigned int type = DP_SDP_VSC;
 	struct dp_sdp sdp = {};
 	int ret;
-
-	/* When PSR is enabled, VSC SDP is handled by PSR routine */
-	if (crtc_state->has_psr)
-		return;
 
 	if ((crtc_state->infoframes.enable &
 	     intel_hdmi_infoframe_enable(type)) == 0)
@@ -4679,31 +4635,36 @@ static void intel_dp_phy_pattern_update(struct intel_dp *intel_dp,
 	struct drm_dp_phy_test_params *data =
 			&intel_dp->compliance.test_data.phytest;
 	struct intel_crtc *crtc = to_intel_crtc(crtc_state->uapi.crtc);
+	struct intel_encoder *encoder = &dp_to_dig_port(intel_dp)->base;
 	enum pipe pipe = crtc->pipe;
 	u32 pattern_val;
 
 	switch (data->phy_pattern) {
-	case DP_PHY_TEST_PATTERN_NONE:
+	case DP_LINK_QUAL_PATTERN_DISABLE:
 		drm_dbg_kms(&dev_priv->drm, "Disable Phy Test Pattern\n");
 		intel_de_write(dev_priv, DDI_DP_COMP_CTL(pipe), 0x0);
+		if (DISPLAY_VER(dev_priv) >= 10)
+			intel_de_rmw(dev_priv, dp_tp_ctl_reg(encoder, crtc_state),
+				     DP_TP_CTL_TRAIN_PAT4_SEL_MASK | DP_TP_CTL_LINK_TRAIN_MASK,
+				     DP_TP_CTL_LINK_TRAIN_NORMAL);
 		break;
-	case DP_PHY_TEST_PATTERN_D10_2:
+	case DP_LINK_QUAL_PATTERN_D10_2:
 		drm_dbg_kms(&dev_priv->drm, "Set D10.2 Phy Test Pattern\n");
 		intel_de_write(dev_priv, DDI_DP_COMP_CTL(pipe),
 			       DDI_DP_COMP_CTL_ENABLE | DDI_DP_COMP_CTL_D10_2);
 		break;
-	case DP_PHY_TEST_PATTERN_ERROR_COUNT:
+	case DP_LINK_QUAL_PATTERN_ERROR_RATE:
 		drm_dbg_kms(&dev_priv->drm, "Set Error Count Phy Test Pattern\n");
 		intel_de_write(dev_priv, DDI_DP_COMP_CTL(pipe),
 			       DDI_DP_COMP_CTL_ENABLE |
 			       DDI_DP_COMP_CTL_SCRAMBLED_0);
 		break;
-	case DP_PHY_TEST_PATTERN_PRBS7:
+	case DP_LINK_QUAL_PATTERN_PRBS7:
 		drm_dbg_kms(&dev_priv->drm, "Set PRBS7 Phy Test Pattern\n");
 		intel_de_write(dev_priv, DDI_DP_COMP_CTL(pipe),
 			       DDI_DP_COMP_CTL_ENABLE | DDI_DP_COMP_CTL_PRBS7);
 		break;
-	case DP_PHY_TEST_PATTERN_80BIT_CUSTOM:
+	case DP_LINK_QUAL_PATTERN_80BIT_CUSTOM:
 		/*
 		 * FIXME: Ideally pattern should come from DPCD 0x250. As
 		 * current firmware of DPR-100 could not set it, so hardcoding
@@ -4721,7 +4682,7 @@ static void intel_dp_phy_pattern_update(struct intel_dp *intel_dp,
 			       DDI_DP_COMP_CTL_ENABLE |
 			       DDI_DP_COMP_CTL_CUSTOM80);
 		break;
-	case DP_PHY_TEST_PATTERN_CP2520:
+	case DP_LINK_QUAL_PATTERN_CP2520_PAT_1:
 		/*
 		 * FIXME: Ideally pattern should come from DPCD 0x24A. As
 		 * current firmware of DPR-100 could not set it, so hardcoding
@@ -4733,8 +4694,19 @@ static void intel_dp_phy_pattern_update(struct intel_dp *intel_dp,
 			       DDI_DP_COMP_CTL_ENABLE | DDI_DP_COMP_CTL_HBR2 |
 			       pattern_val);
 		break;
+	case DP_LINK_QUAL_PATTERN_CP2520_PAT_3:
+		if (DISPLAY_VER(dev_priv) < 10)  {
+			drm_warn(&dev_priv->drm, "Platform does not support TPS4\n");
+			break;
+		}
+		drm_dbg_kms(&dev_priv->drm, "Set TPS4 compliance Phy Test Pattern\n");
+		intel_de_write(dev_priv, DDI_DP_COMP_CTL(pipe), 0x0);
+		intel_de_rmw(dev_priv, dp_tp_ctl_reg(encoder, crtc_state),
+			     DP_TP_CTL_TRAIN_PAT4_SEL_MASK | DP_TP_CTL_LINK_TRAIN_MASK,
+			     DP_TP_CTL_TRAIN_PAT4_SEL_TP4A | DP_TP_CTL_LINK_TRAIN_PAT4);
+		break;
 	default:
-		WARN(1, "Invalid Phy Test Pattern\n");
+		drm_warn(&dev_priv->drm, "Invalid Phy Test Pattern\n");
 	}
 }
 
@@ -6526,6 +6498,9 @@ intel_dp_init_connector(struct intel_digital_port *dig_port,
 			drm_dbg_kms(&dev_priv->drm,
 				    "HDCP init failed, skipping.\n");
 	}
+
+	intel_dp->colorimetry_support =
+		intel_dp_get_colorimetry_status(intel_dp);
 
 	intel_dp->frl.is_trained = false;
 	intel_dp->frl.trained_rate_gbps = 0;
