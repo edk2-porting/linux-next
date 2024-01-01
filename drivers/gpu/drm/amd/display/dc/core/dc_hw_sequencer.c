@@ -31,6 +31,7 @@
 #include "basics/dc_common.h"
 #include "resource.h"
 #include "dc_dmub_srv.h"
+#include "dc_state_priv.h"
 
 #define NUM_ELEMENTS(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -440,8 +441,7 @@ void get_subvp_visual_confirm_color(
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		struct pipe_ctx *pipe = &context->res_ctx.pipe_ctx[i];
 
-		if (pipe->stream && pipe->stream->mall_stream_config.paired_stream &&
-		    pipe->stream->mall_stream_config.type == SUBVP_MAIN) {
+		if (dc_state_get_pipe_subvp_type(context, pipe) == SUBVP_MAIN) {
 			/* SubVP enable - red */
 			color->color_g_y = 0;
 			color->color_b_cb = 0;
@@ -454,7 +454,7 @@ void get_subvp_visual_confirm_color(
 		}
 	}
 
-	if (enable_subvp && pipe_ctx->stream->mall_stream_config.type == SUBVP_NONE) {
+	if (enable_subvp && dc_state_get_pipe_subvp_type(context, pipe_ctx) == SUBVP_NONE) {
 		color->color_r_cr = 0;
 		if (pipe_ctx->stream->allow_freesync == 1) {
 			/* SubVP enable and DRR on - green */
@@ -473,7 +473,8 @@ void hwss_build_fast_sequence(struct dc *dc,
 		unsigned int dmub_cmd_count,
 		struct block_sequence block_sequence[],
 		int *num_steps,
-		struct pipe_ctx *pipe_ctx)
+		struct pipe_ctx *pipe_ctx,
+		struct dc_stream_status *stream_status)
 {
 	struct dc_plane_state *plane = pipe_ctx->plane_state;
 	struct dc_stream_state *stream = pipe_ctx->stream;
@@ -490,7 +491,8 @@ void hwss_build_fast_sequence(struct dc *dc,
 	if (dc->hwss.subvp_pipe_control_lock_fast) {
 		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.dc = dc;
 		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.lock = true;
-		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.pipe_ctx = pipe_ctx;
+		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.subvp_immediate_flip =
+				plane->flip_immediate && stream_status->mall_stream_config.type == SUBVP_MAIN;
 		block_sequence[*num_steps].func = DMUB_SUBVP_PIPE_CONTROL_LOCK_FAST;
 		(*num_steps)++;
 	}
@@ -529,7 +531,7 @@ void hwss_build_fast_sequence(struct dc *dc,
 			}
 			if (dc->hwss.update_plane_addr && current_mpc_pipe->plane_state->update_flags.bits.addr_update) {
 				if (resource_is_pipe_type(current_mpc_pipe, OTG_MASTER) &&
-						current_mpc_pipe->stream->mall_stream_config.type == SUBVP_MAIN) {
+						stream_status->mall_stream_config.type == SUBVP_MAIN) {
 					block_sequence[*num_steps].params.subvp_save_surf_addr.dc_dmub_srv = dc->ctx->dmub_srv;
 					block_sequence[*num_steps].params.subvp_save_surf_addr.addr = &current_mpc_pipe->plane_state->address;
 					block_sequence[*num_steps].params.subvp_save_surf_addr.subvp_index = current_mpc_pipe->subvp_index;
@@ -612,7 +614,8 @@ void hwss_build_fast_sequence(struct dc *dc,
 	if (dc->hwss.subvp_pipe_control_lock_fast) {
 		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.dc = dc;
 		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.lock = false;
-		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.pipe_ctx = pipe_ctx;
+		block_sequence[*num_steps].params.subvp_pipe_control_lock_fast_params.subvp_immediate_flip =
+				plane->flip_immediate && stream_status->mall_stream_config.type == SUBVP_MAIN;
 		block_sequence[*num_steps].func = DMUB_SUBVP_PIPE_CONTROL_LOCK_FAST;
 		(*num_steps)++;
 	}
@@ -724,7 +727,7 @@ void hwss_send_dmcub_cmd(union block_sequence_params *params)
 	union dmub_rb_cmd *cmd = params->send_dmcub_cmd_params.cmd;
 	enum dm_dmub_wait_type wait_type = params->send_dmcub_cmd_params.wait_type;
 
-	dm_execute_dmub_cmd(ctx, cmd, wait_type);
+	dc_wake_and_execute_dmub_cmd(ctx, cmd, wait_type);
 }
 
 void hwss_program_manual_trigger(union block_sequence_params *params)

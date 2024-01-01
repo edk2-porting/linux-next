@@ -102,6 +102,8 @@
 #include "vm_helper.h"
 #include "dcn20/dcn20_vmid.h"
 
+#include "dc_state_priv.h"
+
 #include "link_enc_cfg.h"
 #define DC_LOGGER_INIT(logger)
 
@@ -778,7 +780,8 @@ static const struct dc_debug_options debug_defaults_drv = {
 	.ignore_pg = true,
 	.psp_disabled_wa = true,
 	.ips2_eval_delay_us = 200,
-	.ips2_entry_delay_us = 400
+	.ips2_entry_delay_us = 400,
+	.static_screen_wait_frames = 2,
 };
 
 static const struct dc_panel_config panel_config_defaults = {

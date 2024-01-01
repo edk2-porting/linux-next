@@ -27,6 +27,8 @@
 #define DC_INTERFACE_H_
 
 #include "dc_types.h"
+#include "dc_state.h"
+#include "dc_plane.h"
 #include "grph_object_defs.h"
 #include "logger_types.h"
 #include "hdcp_msg_types.h"
@@ -49,7 +51,7 @@ struct aux_payload;
 struct set_config_cmd_payload;
 struct dmub_notification;
 
-#define DC_VER "3.2.264"
+#define DC_VER "3.2.265"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -979,6 +981,8 @@ struct dc_debug_options {
 	unsigned int ips2_eval_delay_us;
 	unsigned int ips2_entry_delay_us;
 	bool disable_timeout;
+	bool disable_extblankadj;
+	unsigned int static_screen_wait_frames;
 };
 
 struct gpu_info_soc_bounding_box_v1_0;
@@ -1026,7 +1030,6 @@ struct dc {
 
 	/* Require to optimize clocks and bandwidth for added/removed planes */
 	bool optimized_required;
-	bool wm_optimized_required;
 	bool idle_optimizations_allowed;
 	bool enable_c20_dtm_b0;
 
@@ -1389,13 +1392,6 @@ struct dc_surface_update {
 /*
  * Create a new surface with default parameters;
  */
-struct dc_plane_state *dc_create_plane_state(struct dc *dc);
-const struct dc_plane_status *dc_plane_get_status(
-		const struct dc_plane_state *plane_state);
-
-void dc_plane_state_retain(struct dc_plane_state *plane_state);
-void dc_plane_state_release(struct dc_plane_state *plane_state);
-
 void dc_gamma_retain(struct dc_gamma *dc_gamma);
 void dc_gamma_release(struct dc_gamma **dc_gamma);
 struct dc_gamma *dc_create_gamma(void);
@@ -1459,26 +1455,11 @@ enum dc_status dc_validate_global_state(
 		struct dc_state *new_ctx,
 		bool fast_validate);
 
-
-void dc_resource_state_construct(
-		const struct dc *dc,
-		struct dc_state *dst_ctx);
-
 bool dc_acquire_release_mpc_3dlut(
 		struct dc *dc, bool acquire,
 		struct dc_stream_state *stream,
 		struct dc_3dlut **lut,
 		struct dc_transfer_func **shaper);
-
-void dc_resource_state_copy_construct(
-		const struct dc_state *src_ctx,
-		struct dc_state *dst_ctx);
-
-void dc_resource_state_copy_construct_current(
-		const struct dc *dc,
-		struct dc_state *dst_ctx);
-
-void dc_resource_state_destruct(struct dc_state *context);
 
 bool dc_resource_is_dsc_encoding_supported(const struct dc *dc);
 
@@ -1486,10 +1467,6 @@ enum dc_status dc_commit_streams(struct dc *dc,
 				 struct dc_stream_state *streams[],
 				 uint8_t stream_count);
 
-struct dc_state *dc_create_state(struct dc *dc);
-struct dc_state *dc_copy_state(struct dc_state *src_ctx);
-void dc_retain_state(struct dc_state *context);
-void dc_release_state(struct dc_state *context);
 
 struct dc_plane_state *dc_get_surface_for_mpcc(struct dc *dc,
 		struct dc_stream_state *stream,

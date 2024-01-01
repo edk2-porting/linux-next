@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Advanced Micro Devices, Inc.
+ * Copyright 2023 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,24 +23,15 @@
  *
  */
 
-#ifndef __DC_HWSS_DCN201_H__
-#define __DC_HWSS_DCN201_H__
+#ifndef _DC_STREAM_PRIV_H_
+#define _DC_STREAM_PRIV_H_
 
-#include "hw_sequencer_private.h"
+#include "dc_stream.h"
 
-void dcn201_set_dmdata_attributes(struct pipe_ctx *pipe_ctx);
-void dcn201_init_hw(struct dc *dc);
-void dcn201_unblank_stream(struct pipe_ctx *pipe_ctx,
-		struct dc_link_settings *link_settings);
-void dcn201_update_plane_addr(const struct dc *dc, struct pipe_ctx *pipe_ctx);
-void dcn201_plane_atomic_disconnect(struct dc *dc, struct dc_state *state, struct pipe_ctx *pipe_ctx);
-void dcn201_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx);
-void dcn201_set_cursor_attribute(struct pipe_ctx *pipe_ctx);
-void dcn201_pipe_control_lock(
-	struct dc *dc,
-	struct pipe_ctx *pipe,
-	bool lock);
-void dcn201_init_blank(
-		struct dc *dc,
-		struct timing_generator *tg);
-#endif /* __DC_HWSS_DCN201_H__ */
+bool dc_stream_construct(struct dc_stream_state *stream,
+	struct dc_sink *dc_sink_data);
+void dc_stream_destruct(struct dc_stream_state *stream);
+
+void dc_stream_assign_stream_id(struct dc_stream_state *stream);
+
+#endif // _DC_STREAM_PRIV_H_
