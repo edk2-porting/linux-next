@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024, Xilin Wu <wuxilin123@gmail.com>
+ */
+
+/dts-v1/;
+/plugin/;
+
+&soc {
+    qcom_tzlog: qcom_tzlog {
+        status = "disabled";
+    };
+
+    arch_timer: arch_timer {
+        status = "disabled";
+    };
+};

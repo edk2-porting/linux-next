@@ -1,4 +1,8 @@
 # SPDX-License-Identifier: GPL-2.0
+
+# Enable support for device-tree overlays required on qcs8550-ayn-odin2.
+DTC_FLAGS_qcs8550-ayn-odin2-hypdtbo := -@
+
 dtb-$(CONFIG_ARCH_QCOM)	+= apq8016-sbc.dtb
 
 apq8016-sbc-usb-host-dtbs	:= apq8016-sbc.dtb apq8016-sbc-usb-host.dtbo
@@ -92,6 +96,9 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-idp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-1000.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs404-evb-4000.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-rb3gen2.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-ayn-odin2.dtb
+qcs8550-ayn-odin2-hypdtbo-dtbs	:= qcs8550-ayn-odin2.dtb qcs8550-ayn-odin2-hypdtbo.dtbo
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs8550-ayn-odin2-hypdtbo.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qdu1000-idp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qrb2210-rb1.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qrb4210-rb2.dtb
