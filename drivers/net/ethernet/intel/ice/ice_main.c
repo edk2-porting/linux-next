@@ -14,6 +14,7 @@
 #include "ice_dcb_lib.h"
 #include "ice_dcb_nl.h"
 #include "ice_devlink.h"
+#include "ice_hwmon.h"
 /* Including ice_trace.h with CREATE_TRACE_POINTS defined will generate the
  * ice tracepoint functions. This must be done exactly once across the
  * ice driver.
@@ -979,7 +980,7 @@ static void ice_set_dflt_mib(struct ice_pf *pf)
 	 * Octets 13 - 20 are TSA values - leave as zeros
 	 */
 	buf[5] = 0x64;
-	len = (typelen & ICE_LLDP_TLV_LEN_M) >> ICE_LLDP_TLV_LEN_S;
+	len = FIELD_GET(ICE_LLDP_TLV_LEN_M, typelen);
 	offset += len + 2;
 	tlv = (struct ice_lldp_org_tlv *)
 		((char *)tlv + sizeof(tlv->typelen) + len);
@@ -1013,7 +1014,7 @@ static void ice_set_dflt_mib(struct ice_pf *pf)
 
 	/* Octet 1 left as all zeros - PFC disabled */
 	buf[0] = 0x08;
-	len = (typelen & ICE_LLDP_TLV_LEN_M) >> ICE_LLDP_TLV_LEN_S;
+	len = FIELD_GET(ICE_LLDP_TLV_LEN_M, typelen);
 	offset += len + 2;
 
 	if (ice_aq_set_lldp_mib(hw, mib_type, (void *)lldpmib, offset, NULL))
@@ -1249,6 +1250,32 @@ ice_handle_link_event(struct ice_pf *pf, struct ice_rq_event_info *event)
 			status);
 
 	return status;
+}
+
+/**
+ * ice_get_fwlog_data - copy the FW log data from ARQ event
+ * @pf: PF that the FW log event is associated with
+ * @event: event structure containing FW log data
+ */
+static void
+ice_get_fwlog_data(struct ice_pf *pf, struct ice_rq_event_info *event)
+{
+	struct ice_fwlog_data *fwlog;
+	struct ice_hw *hw = &pf->hw;
+
+	fwlog = &hw->fwlog_ring.rings[hw->fwlog_ring.tail];
+
+	memset(fwlog->data, 0, PAGE_SIZE);
+	fwlog->data_size = le16_to_cpu(event->desc.datalen);
+
+	memcpy(fwlog->data, event->msg_buf, fwlog->data_size);
+	ice_fwlog_ring_increment(&hw->fwlog_ring.tail, hw->fwlog_ring.size);
+
+	if (ice_fwlog_ring_full(&hw->fwlog_ring)) {
+		/* the rings are full so bump the head to create room */
+		ice_fwlog_ring_increment(&hw->fwlog_ring.head,
+					 hw->fwlog_ring.size);
+	}
 }
 
 /**
@@ -1532,8 +1559,8 @@ static int __ice_clean_ctrlq(struct ice_pf *pf, enum ice_ctl_q q_type)
 
 			ice_vc_process_vf_msg(pf, &event, &data);
 			break;
-		case ice_aqc_opc_fw_logging:
-			ice_output_fw_log(hw, &event.desc, event.msg_buf);
+		case ice_aqc_opc_fw_logs_event:
+			ice_get_fwlog_data(pf, &event);
 			break;
 		case ice_aqc_opc_lldp_set_mib_change:
 			ice_dcb_process_lldp_set_mib_change(pf, &event);
@@ -1744,14 +1771,10 @@ static void ice_handle_mdd_event(struct ice_pf *pf)
 	/* find what triggered an MDD event */
 	reg = rd32(hw, GL_MDET_TX_PQM);
 	if (reg & GL_MDET_TX_PQM_VALID_M) {
-		u8 pf_num = (reg & GL_MDET_TX_PQM_PF_NUM_M) >>
-				GL_MDET_TX_PQM_PF_NUM_S;
-		u16 vf_num = (reg & GL_MDET_TX_PQM_VF_NUM_M) >>
-				GL_MDET_TX_PQM_VF_NUM_S;
-		u8 event = (reg & GL_MDET_TX_PQM_MAL_TYPE_M) >>
-				GL_MDET_TX_PQM_MAL_TYPE_S;
-		u16 queue = ((reg & GL_MDET_TX_PQM_QNUM_M) >>
-				GL_MDET_TX_PQM_QNUM_S);
+		u8 pf_num = FIELD_GET(GL_MDET_TX_PQM_PF_NUM_M, reg);
+		u16 vf_num = FIELD_GET(GL_MDET_TX_PQM_VF_NUM_M, reg);
+		u8 event = FIELD_GET(GL_MDET_TX_PQM_MAL_TYPE_M, reg);
+		u16 queue = FIELD_GET(GL_MDET_TX_PQM_QNUM_M, reg);
 
 		if (netif_msg_tx_err(pf))
 			dev_info(dev, "Malicious Driver Detection event %d on TX queue %d PF# %d VF# %d\n",
@@ -1761,14 +1784,10 @@ static void ice_handle_mdd_event(struct ice_pf *pf)
 
 	reg = rd32(hw, GL_MDET_TX_TCLAN_BY_MAC(hw));
 	if (reg & GL_MDET_TX_TCLAN_VALID_M) {
-		u8 pf_num = (reg & GL_MDET_TX_TCLAN_PF_NUM_M) >>
-				GL_MDET_TX_TCLAN_PF_NUM_S;
-		u16 vf_num = (reg & GL_MDET_TX_TCLAN_VF_NUM_M) >>
-				GL_MDET_TX_TCLAN_VF_NUM_S;
-		u8 event = (reg & GL_MDET_TX_TCLAN_MAL_TYPE_M) >>
-				GL_MDET_TX_TCLAN_MAL_TYPE_S;
-		u16 queue = ((reg & GL_MDET_TX_TCLAN_QNUM_M) >>
-				GL_MDET_TX_TCLAN_QNUM_S);
+		u8 pf_num = FIELD_GET(GL_MDET_TX_TCLAN_PF_NUM_M, reg);
+		u16 vf_num = FIELD_GET(GL_MDET_TX_TCLAN_VF_NUM_M, reg);
+		u8 event = FIELD_GET(GL_MDET_TX_TCLAN_MAL_TYPE_M, reg);
+		u16 queue = FIELD_GET(GL_MDET_TX_TCLAN_QNUM_M, reg);
 
 		if (netif_msg_tx_err(pf))
 			dev_info(dev, "Malicious Driver Detection event %d on TX queue %d PF# %d VF# %d\n",
@@ -1778,14 +1797,10 @@ static void ice_handle_mdd_event(struct ice_pf *pf)
 
 	reg = rd32(hw, GL_MDET_RX);
 	if (reg & GL_MDET_RX_VALID_M) {
-		u8 pf_num = (reg & GL_MDET_RX_PF_NUM_M) >>
-				GL_MDET_RX_PF_NUM_S;
-		u16 vf_num = (reg & GL_MDET_RX_VF_NUM_M) >>
-				GL_MDET_RX_VF_NUM_S;
-		u8 event = (reg & GL_MDET_RX_MAL_TYPE_M) >>
-				GL_MDET_RX_MAL_TYPE_S;
-		u16 queue = ((reg & GL_MDET_RX_QNUM_M) >>
-				GL_MDET_RX_QNUM_S);
+		u8 pf_num = FIELD_GET(GL_MDET_RX_PF_NUM_M, reg);
+		u16 vf_num = FIELD_GET(GL_MDET_RX_VF_NUM_M, reg);
+		u8 event = FIELD_GET(GL_MDET_RX_MAL_TYPE_M, reg);
+		u16 queue = FIELD_GET(GL_MDET_RX_QNUM_M, reg);
 
 		if (netif_msg_rx_err(pf))
 			dev_info(dev, "Malicious Driver Detection event %d on RX queue %d PF# %d VF# %d\n",
@@ -3108,8 +3123,8 @@ static irqreturn_t ice_misc_intr(int __always_unused irq, void *data)
 
 		/* we have a reset warning */
 		ena_mask &= ~PFINT_OICR_GRST_M;
-		reset = (rd32(hw, GLGEN_RSTAT) & GLGEN_RSTAT_RESET_TYPE_M) >>
-			GLGEN_RSTAT_RESET_TYPE_S;
+		reset = FIELD_GET(GLGEN_RSTAT_RESET_TYPE_M,
+				  rd32(hw, GLGEN_RSTAT));
 
 		if (reset == ICE_RESET_CORER)
 			pf->corer_count++;
@@ -3150,7 +3165,7 @@ static irqreturn_t ice_misc_intr(int __always_unused irq, void *data)
 
 	if (oicr & PFINT_OICR_TSYN_TX_M) {
 		ena_mask &= ~PFINT_OICR_TSYN_TX_M;
-		if (!hw->reset_ongoing && ice_ptp_pf_handles_tx_interrupt(pf))
+		if (ice_ptp_pf_handles_tx_interrupt(pf))
 			set_bit(ICE_MISC_THREAD_TX_TSTAMP, pf->misc_thread);
 	}
 
@@ -3375,9 +3390,11 @@ static void ice_napi_add(struct ice_vsi *vsi)
 	if (!vsi->netdev)
 		return;
 
-	ice_for_each_q_vector(vsi, v_idx)
+	ice_for_each_q_vector(vsi, v_idx) {
 		netif_napi_add(vsi->netdev, &vsi->q_vectors[v_idx]->napi,
 			       ice_napi_poll);
+		ice_q_vector_set_napi_queues(vsi->q_vectors[v_idx], false);
+	}
 }
 
 /**
@@ -3397,6 +3414,7 @@ static void ice_set_ops(struct ice_vsi *vsi)
 
 	netdev->netdev_ops = &ice_netdev_ops;
 	netdev->udp_tunnel_nic_info = &pf->hw.udp_tunnel_nic;
+	netdev->xdp_metadata_ops = &ice_xdp_md_ops;
 	ice_set_ethtool_ops(netdev);
 
 	if (vsi->type != ICE_VSI_PF)
@@ -4361,6 +4379,19 @@ static void ice_print_wake_reason(struct ice_pf *pf)
 }
 
 /**
+ * ice_pf_fwlog_update_module - update 1 module
+ * @pf: pointer to the PF struct
+ * @log_level: log_level to use for the @module
+ * @module: module to update
+ */
+void ice_pf_fwlog_update_module(struct ice_pf *pf, int log_level, int module)
+{
+	struct ice_hw *hw = &pf->hw;
+
+	hw->fwlog_cfg.module_entries[module].log_level = log_level;
+}
+
+/**
  * ice_register_netdev - register netdev
  * @vsi: pointer to the VSI struct
  */
@@ -4685,6 +4716,8 @@ static void ice_init_features(struct ice_pf *pf)
 
 	if (ice_init_lag(pf))
 		dev_warn(dev, "Failed to init link aggregation support\n");
+
+	ice_hwmon_init(pf);
 }
 
 static void ice_deinit_features(struct ice_pf *pf)
@@ -4702,6 +4735,8 @@ static void ice_deinit_features(struct ice_pf *pf)
 		ice_ptp_release(pf);
 	if (test_bit(ICE_FLAG_DPLL, pf->flags))
 		ice_dpll_deinit(pf);
+	if (pf->eswitch_mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)
+		xa_destroy(&pf->eswitch.reprs);
 }
 
 static void ice_init_wakeup(struct ice_pf *pf)
@@ -5203,10 +5238,14 @@ static void ice_remove(struct pci_dev *pdev)
 		msleep(100);
 	}
 
+	ice_debugfs_exit();
+
 	if (test_bit(ICE_FLAG_SRIOV_ENA, pf->flags)) {
 		set_bit(ICE_VF_RESETS_DISABLED, pf->state);
 		ice_free_vfs(pf);
 	}
+
+	ice_hwmon_exit(pf);
 
 	ice_service_task_stop(pf);
 	ice_aq_cancel_waiting_tasks(pf);
@@ -5672,6 +5711,8 @@ static int __init ice_module_init(void)
 		goto err_dest_wq;
 	}
 
+	ice_debugfs_init();
+
 	status = pci_register_driver(&ice_driver);
 	if (status) {
 		pr_err("failed to register PCI driver, err %d\n", status);
@@ -5682,6 +5723,7 @@ static int __init ice_module_init(void)
 
 err_dest_lag_wq:
 	destroy_workqueue(ice_lag_wq);
+	ice_debugfs_exit();
 err_dest_wq:
 	destroy_workqueue(ice_wq);
 	return status;
@@ -6041,6 +6083,23 @@ ice_fix_features(struct net_device *netdev, netdev_features_t features)
 }
 
 /**
+ * ice_set_rx_rings_vlan_proto - update rings with new stripped VLAN proto
+ * @vsi: PF's VSI
+ * @vlan_ethertype: VLAN ethertype (802.1Q or 802.1ad) in network byte order
+ *
+ * Store current stripped VLAN proto in ring packet context,
+ * so it can be accessed more efficiently by packet processing code.
+ */
+static void
+ice_set_rx_rings_vlan_proto(struct ice_vsi *vsi, __be16 vlan_ethertype)
+{
+	u16 i;
+
+	ice_for_each_alloc_rxq(vsi, i)
+		vsi->rx_rings[i]->pkt_ctx.vlan_proto = vlan_ethertype;
+}
+
+/**
  * ice_set_vlan_offload_features - set VLAN offload features for the PF VSI
  * @vsi: PF's VSI
  * @features: features used to determine VLAN offload settings
@@ -6081,6 +6140,9 @@ ice_set_vlan_offload_features(struct ice_vsi *vsi, netdev_features_t features)
 
 	if (strip_err || insert_err)
 		return -EIO;
+
+	ice_set_rx_rings_vlan_proto(vsi, enable_stripping ?
+				    htons(vlan_ethertype) : 0);
 
 	return 0;
 }
@@ -7401,9 +7463,9 @@ static void ice_rebuild(struct ice_pf *pf, enum ice_reset_req reset_type)
 		goto err_vsi_rebuild;
 	}
 
-	err = ice_vsi_rebuild_by_type(pf, ICE_VSI_SWITCHDEV_CTRL);
+	err = ice_eswitch_rebuild(pf);
 	if (err) {
-		dev_err(dev, "Switchdev CTRL VSI rebuild failed: %d\n", err);
+		dev_err(dev, "Switchdev rebuild failed: %d\n", err);
 		goto err_vsi_rebuild;
 	}
 
@@ -7704,6 +7766,59 @@ int ice_get_rss_key(struct ice_vsi *vsi, u8 *seed)
 }
 
 /**
+ * ice_set_rss_hfunc - Set RSS HASH function
+ * @vsi: Pointer to VSI structure
+ * @hfunc: hash function (ICE_AQ_VSI_Q_OPT_RSS_*)
+ *
+ * Returns 0 on success, negative on failure
+ */
+int ice_set_rss_hfunc(struct ice_vsi *vsi, u8 hfunc)
+{
+	struct ice_hw *hw = &vsi->back->hw;
+	struct ice_vsi_ctx *ctx;
+	bool symm;
+	int err;
+
+	if (hfunc == vsi->rss_hfunc)
+		return 0;
+
+	if (hfunc != ICE_AQ_VSI_Q_OPT_RSS_HASH_TPLZ &&
+	    hfunc != ICE_AQ_VSI_Q_OPT_RSS_HASH_SYM_TPLZ)
+		return -EOPNOTSUPP;
+
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!ctx)
+		return -ENOMEM;
+
+	ctx->info.valid_sections = cpu_to_le16(ICE_AQ_VSI_PROP_Q_OPT_VALID);
+	ctx->info.q_opt_rss = vsi->info.q_opt_rss;
+	ctx->info.q_opt_rss &= ~ICE_AQ_VSI_Q_OPT_RSS_HASH_M;
+	ctx->info.q_opt_rss |=
+		FIELD_PREP(ICE_AQ_VSI_Q_OPT_RSS_HASH_M, hfunc);
+	ctx->info.q_opt_tc = vsi->info.q_opt_tc;
+	ctx->info.q_opt_flags = vsi->info.q_opt_rss;
+
+	err = ice_update_vsi(hw, vsi->idx, ctx, NULL);
+	if (err) {
+		dev_err(ice_pf_to_dev(vsi->back), "Failed to configure RSS hash for VSI %d, error %d\n",
+			vsi->vsi_num, err);
+	} else {
+		vsi->info.q_opt_rss = ctx->info.q_opt_rss;
+		vsi->rss_hfunc = hfunc;
+		netdev_info(vsi->netdev, "Hash function set to: %sToeplitz\n",
+			    hfunc == ICE_AQ_VSI_Q_OPT_RSS_HASH_SYM_TPLZ ?
+			    "Symmetric " : "");
+	}
+	kfree(ctx);
+	if (err)
+		return err;
+
+	/* Fix the symmetry setting for all existing RSS configurations */
+	symm = !!(hfunc == ICE_AQ_VSI_Q_OPT_RSS_HASH_SYM_TPLZ);
+	return ice_set_rss_cfg_symm(hw, vsi, symm);
+}
+
+/**
  * ice_bridge_getlink - Get the hardware bridge mode
  * @skb: skb buff
  * @pid: process ID
@@ -7889,8 +8004,8 @@ static void ice_tx_timeout(struct net_device *netdev, unsigned int txqueue)
 		struct ice_hw *hw = &pf->hw;
 		u32 head, val = 0;
 
-		head = (rd32(hw, QTX_COMM_HEAD(vsi->txq_map[txqueue])) &
-			QTX_COMM_HEAD_HEAD_M) >> QTX_COMM_HEAD_HEAD_S;
+		head = FIELD_GET(QTX_COMM_HEAD_HEAD_M,
+				 rd32(hw, QTX_COMM_HEAD(vsi->txq_map[txqueue])));
 		/* Read interrupt register */
 		val = rd32(hw, GLINT_DYN_CTL(tx_ring->q_vector->reg_idx));
 
@@ -8138,13 +8253,12 @@ static int ice_add_vsi_to_fdir(struct ice_pf *pf, struct ice_vsi *vsi)
 
 		for (tun = 0; tun < ICE_FD_HW_SEG_MAX; tun++) {
 			enum ice_flow_priority prio;
-			u64 prof_id;
 
 			/* add this VSI to FDir profile for this flow */
 			prio = ICE_FLOW_PRIO_NORMAL;
 			prof = hw->fdir_prof[flow];
-			prof_id = flow + tun * ICE_FLTR_PTYPE_MAX;
-			status = ice_flow_add_entry(hw, ICE_BLK_FD, prof_id,
+			status = ice_flow_add_entry(hw, ICE_BLK_FD,
+						    prof->prof_id[tun],
 						    prof->vsi_h[0], vsi->idx,
 						    prio, prof->fdir_seg[tun],
 						    &entry_h);
