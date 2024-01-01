@@ -157,6 +157,10 @@ bool is_dp2p0_output_encoder(const struct pipe_ctx *pipe_ctx)
 {
 	/* If this assert is hit then we have a link encoder dynamic management issue */
 	ASSERT(pipe_ctx->stream_res.hpo_dp_stream_enc ? pipe_ctx->link_res.hpo_dp_link_enc != NULL : true);
+
+	if (pipe_ctx->stream == NULL)
+		return false;
+
 	return (pipe_ctx->stream_res.hpo_dp_stream_enc &&
 		pipe_ctx->link_res.hpo_dp_link_enc &&
 		dc_is_dp_signal(pipe_ctx->stream->signal));
@@ -468,7 +472,7 @@ bool dml2_verify_det_buffer_configuration(struct dml2_context *in_ctx, struct dc
 	return need_recalculation;
 }
 
-bool dml2_is_stereo_timing(struct dc_stream_state *stream)
+bool dml2_is_stereo_timing(const struct dc_stream_state *stream)
 {
 	bool is_stereo = false;
 
