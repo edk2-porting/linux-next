@@ -1073,10 +1073,12 @@ enum {
 	PCI_SCAN_ALL_PCIE_DEVS	= 0x00000040,	/* Scan all, not just dev 0 */
 };
 
-#define PCI_IRQ_LEGACY		(1 << 0) /* Allow legacy interrupts */
+#define PCI_IRQ_INTX		(1 << 0) /* Allow INTx interrupts */
 #define PCI_IRQ_MSI		(1 << 1) /* Allow MSI interrupts */
 #define PCI_IRQ_MSIX		(1 << 2) /* Allow MSI-X interrupts */
 #define PCI_IRQ_AFFINITY	(1 << 3) /* Auto-assign affinity */
+
+#define PCI_IRQ_LEGACY		PCI_IRQ_INTX /* Deprecated! Use PCI_IRQ_INTX */
 
 /* These external functions are only available when PCI support is enabled */
 #ifdef CONFIG_PCI
@@ -2132,14 +2134,14 @@ int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma);
 	(pci_resource_end((dev), (bar)) ? 				\
 	 resource_size(pci_resource_n((dev), (bar))) : 0)
 
-#define __pci_dev_for_each_res0(dev, res, ...)				\
-	for (unsigned int __b = 0;					\
-	     res = pci_resource_n(dev, __b), __b < PCI_NUM_RESOURCES;	\
+#define __pci_dev_for_each_res0(dev, res, ...)				  \
+	for (unsigned int __b = 0;					  \
+	     __b < PCI_NUM_RESOURCES && (res = pci_resource_n(dev, __b)); \
 	     __b++)
 
-#define __pci_dev_for_each_res1(dev, res, __b)				\
-	for (__b = 0;							\
-	     res = pci_resource_n(dev, __b), __b < PCI_NUM_RESOURCES;	\
+#define __pci_dev_for_each_res1(dev, res, __b)				  \
+	for (__b = 0;							  \
+	     __b < PCI_NUM_RESOURCES && (res = pci_resource_n(dev, __b)); \
 	     __b++)
 
 #define pci_dev_for_each_resource(dev, res, ...)			\
