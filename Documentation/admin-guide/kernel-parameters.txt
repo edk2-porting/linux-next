@@ -4005,7 +4005,7 @@
 			prediction) vulnerability. System may allow data
 			leaks with this option.
 
-	no-steal-acc	[X86,PV_OPS,ARM64,PPC/PSERIES,EARLY] Disable
+	no-steal-acc	[X86,PV_OPS,ARM64,PPC/PSERIES,RISCV,EARLY] Disable
 			paravirtualized steal time accounting. steal
 			time is computed, but won't influence scheduler
 			behaviour
