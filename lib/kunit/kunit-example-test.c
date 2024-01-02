@@ -222,6 +222,20 @@ static void example_params_test(struct kunit *test)
 }
 
 /*
+ * This test shows the use of test->priv.
+ */
+static void example_priv_test(struct kunit *test)
+{
+	/* unless setup in suite->init(), test->priv is NULL */
+	KUNIT_ASSERT_NULL(test, test->priv);
+
+	/* but can be used to pass arbitrary data to other functions */
+	test->priv = kunit_kzalloc(test, 1, GFP_KERNEL);
+	KUNIT_EXPECT_NOT_NULL(test, test->priv);
+	KUNIT_ASSERT_PTR_EQ(test, test->priv, kunit_get_current_test()->priv);
+}
+
+/*
  * This test should always pass. Can be used to practice filtering attributes.
  */
 static void example_slow_test(struct kunit *test)
@@ -245,6 +259,7 @@ static struct kunit_case example_test_cases[] = {
 	KUNIT_CASE(example_mark_skipped_test),
 	KUNIT_CASE(example_all_expect_macros_test),
 	KUNIT_CASE(example_static_stub_test),
+	KUNIT_CASE(example_priv_test),
 	KUNIT_CASE_PARAM(example_params_test, example_gen_params),
 	KUNIT_CASE_SLOW(example_slow_test),
 	{}
@@ -286,5 +301,42 @@ static struct kunit_suite example_test_suite = {
  * tests that need to be run.
  */
 kunit_test_suites(&example_test_suite);
+
+static int __init init_add(int x, int y)
+{
+	return (x + y);
+}
+
+/*
+ * This test should always pass. Can be used to test init suites.
+ */
+static void __init example_init_test(struct kunit *test)
+{
+	KUNIT_EXPECT_EQ(test, init_add(1, 1), 2);
+}
+
+/*
+ * The kunit_case struct cannot be marked as __initdata as this will be
+ * used in debugfs to retrieve results after test has run
+ */
+static struct kunit_case __refdata example_init_test_cases[] = {
+	KUNIT_CASE(example_init_test),
+	{}
+};
+
+/*
+ * The kunit_suite struct cannot be marked as __initdata as this will be
+ * used in debugfs to retrieve results after test has run
+ */
+static struct kunit_suite example_init_test_suite = {
+	.name = "example_init",
+	.test_cases = example_init_test_cases,
+};
+
+/*
+ * This registers the test suite and marks the suite as using init data
+ * and/or functions.
+ */
+kunit_test_init_section_suites(&example_init_test_suite);
 
 MODULE_LICENSE("GPL v2");
