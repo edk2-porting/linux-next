@@ -45,7 +45,7 @@ EXPORT_SYMBOL_GPL(alternatives_patched);
 #define DA_ENDBR	0x08
 #define DA_SMP		0x10
 
-static unsigned int __initdata_or_module debug_alternative;
+static unsigned int debug_alternative;
 
 static int __init debug_alt(char *str)
 {
@@ -133,7 +133,7 @@ const unsigned char * const x86_nops[ASM_NOP_MAX+1] =
  * each single-byte NOPs). If @len to fill out is > ASM_NOP_MAX, pad with INT3 and
  * *jump* over instead of executing long and daft NOPs.
  */
-static void __init_or_module add_nop(u8 *instr, unsigned int len)
+static void add_nop(u8 *instr, unsigned int len)
 {
 	u8 *target = instr + len;
 
@@ -161,7 +161,6 @@ extern s32 __retpoline_sites[], __retpoline_sites_end[];
 extern s32 __return_sites[], __return_sites_end[];
 extern s32 __cfi_sites[], __cfi_sites_end[];
 extern s32 __ibt_endbr_seal[], __ibt_endbr_seal_end[];
-extern struct alt_instr __alt_instructions[], __alt_instructions_end[];
 extern s32 __smp_locks[], __smp_locks_end[];
 void text_poke_early(void *addr, const void *opcode, size_t len);
 
@@ -207,7 +206,7 @@ static int skip_nops(u8 *instr, int offset, int len)
  * Optimize a sequence of NOPs, possibly preceded by an unconditional jump
  * to the end of the NOP sequence into a single NOP.
  */
-static bool __init_or_module
+static bool
 __optimize_nops(u8 *instr, size_t len, struct insn *insn, int *next, int *prev, int *target)
 {
 	int i = *next - insn->length;
@@ -336,8 +335,7 @@ bool need_reloc(unsigned long offset, u8 *src, size_t src_len)
 	return (target < src || target > src + src_len);
 }
 
-static void __init_or_module noinline
-apply_relocation(u8 *buf, size_t len, u8 *dest, u8 *src, size_t src_len)
+void apply_relocation(u8 *buf, size_t len, u8 *dest, u8 *src, size_t src_len)
 {
 	int prev, target = 0;
 
@@ -394,6 +392,63 @@ apply_relocation(u8 *buf, size_t len, u8 *dest, u8 *src, size_t src_len)
 			}
 		}
 	}
+}
+
+/* Low-level backend functions usable from alternative code replacements. */
+DEFINE_ASM_FUNC(nop_func, "", .entry.text);
+EXPORT_SYMBOL_GPL(nop_func);
+
+noinstr void BUG_func(void)
+{
+	BUG();
+}
+EXPORT_SYMBOL_GPL(BUG_func);
+
+#define CALL_RIP_REL_OPCODE	0xff
+#define CALL_RIP_REL_MODRM	0x15
+
+/*
+ * Rewrite the "call BUG_func" replacement to point to the target of the
+ * indirect pv_ops call "call *disp(%ip)".
+ */
+static int alt_replace_call(u8 *instr, u8 *insn_buff, struct alt_instr *a)
+{
+	void *target, *bug = &BUG_func;
+	s32 disp;
+
+	if (a->replacementlen != 5 || insn_buff[0] != CALL_INSN_OPCODE) {
+		pr_err("ALT_FLAG_DIRECT_CALL set for a non-call replacement instruction\n");
+		BUG();
+	}
+
+	if (a->instrlen != 6 ||
+	    instr[0] != CALL_RIP_REL_OPCODE ||
+	    instr[1] != CALL_RIP_REL_MODRM) {
+		pr_err("ALT_FLAG_DIRECT_CALL set for unrecognized indirect call\n");
+		BUG();
+	}
+
+	/* Skip CALL_RIP_REL_OPCODE and CALL_RIP_REL_MODRM */
+	disp = *(s32 *)(instr + 2);
+#ifdef CONFIG_X86_64
+	/* ff 15 00 00 00 00   call   *0x0(%rip) */
+	/* target address is stored at "next instruction + disp". */
+	target = *(void **)(instr + a->instrlen + disp);
+#else
+	/* ff 15 00 00 00 00   call   *0x0 */
+	/* target address is stored at disp. */
+	target = *(void **)disp;
+#endif
+	if (!target)
+		target = bug;
+
+	/* (BUG_func - .) + (target - BUG_func) := target - . */
+	*(s32 *)(insn_buff + 1) += target - bug;
+
+	if (target == &nop_func)
+		return 0;
+
+	return 5;
 }
 
 /*
@@ -453,15 +508,20 @@ void __init_or_module noinline apply_alternatives(struct alt_instr *start,
 			continue;
 		}
 
-		DPRINTK(ALT, "feat: %s%d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d)",
-			(a->flags & ALT_FLAG_NOT) ? "!" : "",
+		DPRINTK(ALT, "feat: %d*32+%d, old: (%pS (%px) len: %d), repl: (%px, len: %d) flags: 0x%x",
 			a->cpuid >> 5,
 			a->cpuid & 0x1f,
 			instr, instr, a->instrlen,
-			replacement, a->replacementlen);
+			replacement, a->replacementlen, a->flags);
 
 		memcpy(insn_buff, replacement, a->replacementlen);
 		insn_buff_sz = a->replacementlen;
+
+		if (a->flags & ALT_FLAG_DIRECT_CALL) {
+			insn_buff_sz = alt_replace_call(instr, insn_buff, a);
+			if (insn_buff_sz < 0)
+				continue;
+		}
 
 		for (; insn_buff_sz < a->instrlen; insn_buff_sz++)
 			insn_buff[insn_buff_sz] = 0x90;
@@ -1492,46 +1552,6 @@ int alternatives_text_reserved(void *start, void *end)
 }
 #endif /* CONFIG_SMP */
 
-#ifdef CONFIG_PARAVIRT
-
-/* Use this to add nops to a buffer, then text_poke the whole buffer. */
-static void __init_or_module add_nops(void *insns, unsigned int len)
-{
-	while (len > 0) {
-		unsigned int noplen = len;
-		if (noplen > ASM_NOP_MAX)
-			noplen = ASM_NOP_MAX;
-		memcpy(insns, x86_nops[noplen], noplen);
-		insns += noplen;
-		len -= noplen;
-	}
-}
-
-void __init_or_module apply_paravirt(struct paravirt_patch_site *start,
-				     struct paravirt_patch_site *end)
-{
-	struct paravirt_patch_site *p;
-	char insn_buff[MAX_PATCH_LEN];
-
-	for (p = start; p < end; p++) {
-		unsigned int used;
-
-		BUG_ON(p->len > MAX_PATCH_LEN);
-		/* prep the buffer with the original instructions */
-		memcpy(insn_buff, p->instr, p->len);
-		used = paravirt_patch(p->type, insn_buff, (unsigned long)p->instr, p->len);
-
-		BUG_ON(used > p->len);
-
-		/* Pad the rest with nops */
-		add_nops(insn_buff + used, p->len - used);
-		text_poke_early(p->instr, insn_buff, p->len);
-	}
-}
-extern struct paravirt_patch_site __start_parainstructions[],
-	__stop_parainstructions[];
-#endif	/* CONFIG_PARAVIRT */
-
 /*
  * Self-test for the INT3 based CALL emulation code.
  *
@@ -1667,27 +1687,10 @@ void __init alternative_instructions(void)
 	 */
 
 	/*
-	 * Paravirt patching and alternative patching can be combined to
-	 * replace a function call with a short direct code sequence (e.g.
-	 * by setting a constant return value instead of doing that in an
-	 * external function).
-	 * In order to make this work the following sequence is required:
-	 * 1. set (artificial) features depending on used paravirt
-	 *    functions which can later influence alternative patching
-	 * 2. apply paravirt patching (generally replacing an indirect
-	 *    function call with a direct one)
-	 * 3. apply alternative patching (e.g. replacing a direct function
-	 *    call with a custom code sequence)
-	 * Doing paravirt patching after alternative patching would clobber
-	 * the optimization of the custom code with a function call again.
+	 * Make sure to set (artificial) features depending on used paravirt
+	 * functions which can later influence alternative patching.
 	 */
 	paravirt_set_cap();
-
-	/*
-	 * First patch paravirt functions, such that we overwrite the indirect
-	 * call with the direct call.
-	 */
-	apply_paravirt(__parainstructions, __parainstructions_end);
 
 	__apply_fineibt(__retpoline_sites, __retpoline_sites_end,
 			__cfi_sites, __cfi_sites_end, true);
@@ -1699,10 +1702,6 @@ void __init alternative_instructions(void)
 	apply_retpolines(__retpoline_sites, __retpoline_sites_end);
 	apply_returns(__return_sites, __return_sites_end);
 
-	/*
-	 * Then patch alternatives, such that those paravirt calls that are in
-	 * alternatives can be overwritten by their immediate fragments.
-	 */
 	apply_alternatives(__alt_instructions, __alt_instructions_end);
 
 	/*

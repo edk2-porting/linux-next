@@ -386,10 +386,6 @@ config HAVE_INTEL_TXT
 	def_bool y
 	depends on INTEL_IOMMU && ACPI
 
-config X86_32_SMP
-	def_bool y
-	depends on X86_32 && SMP
-
 config X86_64_SMP
 	def_bool y
 	depends on X86_64 && SMP
@@ -1417,7 +1413,7 @@ config HIGHMEM4G
 
 config HIGHMEM64G
 	bool "64GB"
-	depends on !M486SX && !M486 && !M586 && !M586TSC && !M586MMX && !MGEODE_LX && !MGEODEGX1 && !MCYRIXIII && !MELAN && !MWINCHIPC6 && !MWINCHIP3D && !MK6
+	depends on X86_HAVE_PAE
 	select X86_PAE
 	help
 	  Select this if you have a 32-bit processor and more than 4
@@ -1474,7 +1470,7 @@ config HIGHMEM
 
 config X86_PAE
 	bool "PAE (Physical Address Extension) Support"
-	depends on X86_32 && !HIGHMEM4G
+	depends on X86_32 && X86_HAVE_PAE
 	select PHYS_ADDR_T_64BIT
 	select SWIOTLB
 	help
@@ -1972,6 +1968,11 @@ config INTEL_TDX_HOST
 	depends on CPU_SUP_INTEL
 	depends on X86_64
 	depends on KVM_INTEL
+	depends on X86_X2APIC
+	select ARCH_KEEP_MEMBLOCK
+	depends on CONTIG_ALLOC
+	depends on !KEXEC_CORE
+	depends on X86_MCE
 	help
 	  Intel Trust Domain Extensions (TDX) protects guest VMs from malicious
 	  host and certain physical attacks.  This option enables necessary TDX
@@ -2430,6 +2431,18 @@ config STRICT_SIGALTSTACK_SIZE
 source "kernel/livepatch/Kconfig"
 
 endmenu
+
+config CC_HAS_NAMED_AS
+	def_bool CC_IS_GCC && GCC_VERSION >= 120100
+
+config USE_X86_SEG_SUPPORT
+	def_bool y
+	depends on CC_HAS_NAMED_AS
+	#
+	# -fsanitize=kernel-address (KASAN) is at the moment incompatible
+	# with named address spaces - see GCC PR sanitizer/111736.
+	#
+	depends on !KASAN
 
 config CC_HAS_SLS
 	def_bool $(cc-option,-mharden-sls=all)
