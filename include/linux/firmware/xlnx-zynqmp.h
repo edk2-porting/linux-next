@@ -32,6 +32,7 @@
 #define PM_SIP_SVC			0xC2000000
 
 /* PM API versions */
+#define PM_API_VERSION_1	1
 #define PM_API_VERSION_2	2
 
 #define PM_PINCTRL_PARAM_SET_VERSION	2
@@ -46,6 +47,9 @@
 
 #define FAMILY_CODE_MASK	GENMASK(27, 21)
 #define SUB_FAMILY_CODE_MASK	GENMASK(20, 19)
+
+#define API_ID_MASK		GENMASK(7, 0)
+#define MODULE_ID_MASK		GENMASK(11, 8)
 
 /* ATF only commands */
 #define TF_A_PM_REGISTER_SGI		0xa04
@@ -112,6 +116,12 @@
 #define XPM_EVENT_ERROR_MASK_NOC_NCR		BIT(13)
 #define XPM_EVENT_ERROR_MASK_NOC_CR		BIT(12)
 
+enum pm_module_id {
+	PM_MODULE_ID = 0x0,
+	XSEM_MODULE_ID = 0x3,
+	TF_A_MODULE_ID = 0xa,
+};
+
 enum pm_api_cb_id {
 	PM_INIT_SUSPEND_CB = 30,
 	PM_ACKNOWLEDGE_CB = 31,
@@ -119,6 +129,7 @@ enum pm_api_cb_id {
 };
 
 enum pm_api_id {
+	PM_API_FEATURES = 0,
 	PM_GET_API_VERSION = 1,
 	PM_REGISTER_NOTIFIER = 5,
 	PM_FORCE_POWERDOWN = 8,
@@ -138,7 +149,6 @@ enum pm_api_id {
 	PM_SECURE_SHA = 26,
 	PM_PINCTRL_REQUEST = 28,
 	PM_PINCTRL_RELEASE = 29,
-	PM_PINCTRL_GET_FUNCTION = 30,
 	PM_PINCTRL_SET_FUNCTION = 31,
 	PM_PINCTRL_CONFIG_PARAM_GET = 32,
 	PM_PINCTRL_CONFIG_PARAM_SET = 33,
@@ -149,8 +159,6 @@ enum pm_api_id {
 	PM_CLOCK_GETSTATE = 38,
 	PM_CLOCK_SETDIVIDER = 39,
 	PM_CLOCK_GETDIVIDER = 40,
-	PM_CLOCK_SETRATE = 41,
-	PM_CLOCK_GETRATE = 42,
 	PM_CLOCK_SETPARENT = 43,
 	PM_CLOCK_GETPARENT = 44,
 	PM_FPGA_READ = 46,
@@ -161,7 +169,9 @@ enum pm_api_id {
 /* PMU-FW return status codes */
 enum pm_ret_status {
 	XST_PM_SUCCESS = 0,
+	XST_PM_INVALID_VERSION = 4,
 	XST_PM_NO_FEATURE = 19,
+	XST_PM_INVALID_CRC = 301,
 	XST_PM_INTERNAL = 2000,
 	XST_PM_CONFLICT = 2001,
 	XST_PM_NO_ACCESS = 2002,
@@ -509,8 +519,7 @@ struct zynqmp_pm_query_data {
 	u32 arg3;
 };
 
-int zynqmp_pm_invoke_fn(u32 pm_api_id, u32 arg0, u32 arg1,
-			u32 arg2, u32 arg3, u32 *ret_payload);
+int zynqmp_pm_invoke_fn(u32 pm_api_id, u32 *ret_payload, u32 num_args, ...);
 
 #if IS_REACHABLE(CONFIG_ZYNQMP_FIRMWARE)
 int zynqmp_pm_get_api_version(u32 *version);
@@ -521,8 +530,6 @@ int zynqmp_pm_clock_disable(u32 clock_id);
 int zynqmp_pm_clock_getstate(u32 clock_id, u32 *state);
 int zynqmp_pm_clock_setdivider(u32 clock_id, u32 divider);
 int zynqmp_pm_clock_getdivider(u32 clock_id, u32 *divider);
-int zynqmp_pm_clock_setrate(u32 clock_id, u64 rate);
-int zynqmp_pm_clock_getrate(u32 clock_id, u64 *rate);
 int zynqmp_pm_clock_setparent(u32 clock_id, u32 parent_id);
 int zynqmp_pm_clock_getparent(u32 clock_id, u32 *parent_id);
 int zynqmp_pm_set_pll_frac_mode(u32 clk_id, u32 mode);
@@ -559,7 +566,6 @@ int zynqmp_pm_system_shutdown(const u32 type, const u32 subtype);
 int zynqmp_pm_set_boot_health_status(u32 value);
 int zynqmp_pm_pinctrl_request(const u32 pin);
 int zynqmp_pm_pinctrl_release(const u32 pin);
-int zynqmp_pm_pinctrl_get_function(const u32 pin, u32 *id);
 int zynqmp_pm_pinctrl_set_function(const u32 pin, const u32 id);
 int zynqmp_pm_pinctrl_get_config(const u32 pin, const u32 param,
 				 u32 *value);
@@ -623,16 +629,6 @@ static inline int zynqmp_pm_clock_setdivider(u32 clock_id, u32 divider)
 }
 
 static inline int zynqmp_pm_clock_getdivider(u32 clock_id, u32 *divider)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_clock_setrate(u32 clock_id, u64 rate)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_clock_getrate(u32 clock_id, u64 *rate)
 {
 	return -ENODEV;
 }
@@ -802,11 +798,6 @@ static inline int zynqmp_pm_pinctrl_request(const u32 pin)
 }
 
 static inline int zynqmp_pm_pinctrl_release(const u32 pin)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_pinctrl_get_function(const u32 pin, u32 *id)
 {
 	return -ENODEV;
 }
