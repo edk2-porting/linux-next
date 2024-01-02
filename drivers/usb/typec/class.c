@@ -476,7 +476,7 @@ static int altmode_id_get(struct device *dev)
 	else
 		ids = &to_typec_port(dev)->mode_ids;
 
-	return ida_simple_get(ids, 0, 0, GFP_KERNEL);
+	return ida_alloc(ids, GFP_KERNEL);
 }
 
 static void altmode_id_remove(struct device *dev, int id)
@@ -490,7 +490,7 @@ static void altmode_id_remove(struct device *dev, int id)
 	else
 		ids = &to_typec_port(dev)->mode_ids;
 
-	ida_simple_remove(ids, id);
+	ida_free(ids, id);
 }
 
 static void typec_altmode_release(struct device *dev)
@@ -1798,7 +1798,7 @@ static void typec_release(struct device *dev)
 {
 	struct typec_port *port = to_typec_port(dev);
 
-	ida_simple_remove(&typec_index_ida, port->id);
+	ida_free(&typec_index_ida, port->id);
 	ida_destroy(&port->mode_ids);
 	typec_switch_put(port->sw);
 	typec_mux_put(port->mux);
@@ -2231,7 +2231,8 @@ void typec_port_register_altmodes(struct typec_port *port,
 	struct typec_altmode_desc desc;
 	struct typec_altmode *alt;
 	size_t index = 0;
-	u32 svid, vdo;
+	u16 svid;
+	u32 vdo;
 	int ret;
 
 	altmodes_node = device_get_named_child_node(&port->dev, "altmodes");
@@ -2239,7 +2240,7 @@ void typec_port_register_altmodes(struct typec_port *port,
 		return; /* No altmodes specified */
 
 	fwnode_for_each_child_node(altmodes_node, child) {
-		ret = fwnode_property_read_u32(child, "svid", &svid);
+		ret = fwnode_property_read_u16(child, "svid", &svid);
 		if (ret) {
 			dev_err(&port->dev, "Error reading svid for altmode %s\n",
 				fwnode_get_name(child));
@@ -2297,7 +2298,7 @@ struct typec_port *typec_register_port(struct device *parent,
 	if (!port)
 		return ERR_PTR(-ENOMEM);
 
-	id = ida_simple_get(&typec_index_ida, 0, 0, GFP_KERNEL);
+	id = ida_alloc(&typec_index_ida, GFP_KERNEL);
 	if (id < 0) {
 		kfree(port);
 		return ERR_PTR(id);

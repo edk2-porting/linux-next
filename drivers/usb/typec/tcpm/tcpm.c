@@ -251,6 +251,7 @@ enum frs_typec_current {
 #define TCPM_FRS_EVENT		BIT(3)
 #define TCPM_SOURCING_VBUS	BIT(4)
 #define TCPM_PORT_CLEAN		BIT(5)
+#define TCPM_PORT_ERROR		BIT(6)
 
 #define LOG_BUFFER_ENTRIES	1024
 #define LOG_BUFFER_ENTRY_SIZE	128
@@ -2847,7 +2848,7 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 					   PD_MSG_CTRL_NOT_SUPP,
 					   NONE_AMS);
 		} else {
-			if (port->send_discover) {
+			if (port->send_discover && port->negotiated_rev < PD_REV30) {
 				tcpm_queue_message(port, PD_MSG_CTRL_WAIT);
 				break;
 			}
@@ -2863,7 +2864,7 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 					   PD_MSG_CTRL_NOT_SUPP,
 					   NONE_AMS);
 		} else {
-			if (port->send_discover) {
+			if (port->send_discover && port->negotiated_rev < PD_REV30) {
 				tcpm_queue_message(port, PD_MSG_CTRL_WAIT);
 				break;
 			}
@@ -2872,7 +2873,7 @@ static void tcpm_pd_ctrl_request(struct tcpm_port *port,
 		}
 		break;
 	case PD_CTRL_VCONN_SWAP:
-		if (port->send_discover) {
+		if (port->send_discover && port->negotiated_rev < PD_REV30) {
 			tcpm_queue_message(port, PD_MSG_CTRL_WAIT);
 			break;
 		}
@@ -4401,7 +4402,8 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_current_limit(port, tcpm_get_current_limit(port), 5000);
 		tcpm_swap_complete(port, 0);
 		tcpm_typec_connect(port);
-		mod_enable_frs_delayed_work(port, 0);
+		if (port->pd_capable && port->source_caps[0] & PDO_FIXED_DUAL_ROLE)
+			mod_enable_frs_delayed_work(port, 0);
 		tcpm_pps_complete(port, port->pps_status);
 
 		if (port->ams != NONE_AMS)
@@ -5487,6 +5489,10 @@ static void tcpm_pd_event_handler(struct kthread_work *work)
 					tcpm_set_state(port, tcpm_default_state(port), 0);
 			}
 		}
+		if (events & TCPM_PORT_ERROR) {
+			tcpm_log(port, "port triggering error recovery");
+			tcpm_set_state(port, ERROR_RECOVERY, 0);
+		}
 
 		spin_lock(&port->pd_event_lock);
 	}
@@ -5553,6 +5559,15 @@ bool tcpm_port_is_toggling(struct tcpm_port *port)
 	return port->port_type == TYPEC_PORT_DRP && port->state == TOGGLING;
 }
 EXPORT_SYMBOL_GPL(tcpm_port_is_toggling);
+
+void tcpm_port_error_recovery(struct tcpm_port *port)
+{
+	spin_lock(&port->pd_event_lock);
+	port->pd_events |= TCPM_PORT_ERROR;
+	spin_unlock(&port->pd_event_lock);
+	kthread_queue_work(port->wq, &port->event_work);
+}
+EXPORT_SYMBOL_GPL(tcpm_port_error_recovery);
 
 static void tcpm_enable_frs_work(struct kthread_work *work)
 {
@@ -6129,6 +6144,7 @@ static int tcpm_fw_get_caps(struct tcpm_port *port,
 {
 	const char *opmode_str;
 	int ret;
+	int mode;
 	u32 mw, frs_current;
 
 	if (!fwnode)
@@ -6146,6 +6162,14 @@ static int tcpm_fw_get_caps(struct tcpm_port *port,
 	ret = typec_get_fw_cap(&port->typec_caps, fwnode);
 	if (ret < 0)
 		return ret;
+
+	mode = 0;
+
+	if (fwnode_property_read_bool(fwnode, "accessory-mode-audio"))
+		port->typec_caps.accessory[mode++] = TYPEC_ACCESSORY_AUDIO;
+
+	if (fwnode_property_read_bool(fwnode, "accessory-mode-debug"))
+		port->typec_caps.accessory[mode++] = TYPEC_ACCESSORY_DEBUG;
 
 	port->port_type = port->typec_caps.type;
 	port->pd_supported = !fwnode_property_read_bool(fwnode, "pd-disable");
