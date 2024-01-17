@@ -100,11 +100,11 @@ install_linux_image_dbg () {
 	while read -r mod; do
 		mod="${mod%.o}.ko"
 		dbg="${pdir}/usr/lib/debug/lib/modules/${KERNELRELEASE}/kernel/${mod}"
-		buildid=$("${READELF}" -n "${mod}" | sed -n 's@^.*Build ID: \(..\)\(.*\)@\1/\2@p')
+		buildid=$(${READELF} -n "${mod}" | sed -n 's@^.*Build ID: \(..\)\(.*\)@\1/\2@p')
 		link="${pdir}/usr/lib/debug/.build-id/${buildid}.debug"
 
 		mkdir -p "${dbg%/*}" "${link%/*}"
-		"${OBJCOPY}" --only-keep-debug "${mod}" "${dbg}"
+		${OBJCOPY} --only-keep-debug "${mod}" "${dbg}"
 		ln -sf --relative "${dbg}" "${link}"
 	done < modules.order
 
