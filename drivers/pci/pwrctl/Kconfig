@@ -5,4 +5,12 @@ menu "PCI Power control drivers"
 config PCI_PWRCTL
 	tristate
 
+config PCI_PWRCTL_WCN7850
+	tristate "PCI Power Control driver for WCN7850"
+	select PCI_PWRCTL
+	default m if (ATH12K && ARCH_QCOM)
+	help
+	  Enable support for the PCI power control driver for the ath12k
+	  module of the WCN7850 WLAN/BT chip.
+
 endmenu
