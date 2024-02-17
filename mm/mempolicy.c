@@ -1503,9 +1503,10 @@ static inline int sanitize_mpol_flags(int *mode, unsigned short *flags)
 	if ((*flags & MPOL_F_STATIC_NODES) && (*flags & MPOL_F_RELATIVE_NODES))
 		return -EINVAL;
 	if (*flags & MPOL_F_NUMA_BALANCING) {
-		if (*mode != MPOL_BIND)
+		if (*mode == MPOL_BIND || *mode == MPOL_PREFERRED_MANY)
+			*flags |= (MPOL_F_MOF | MPOL_F_MORON);
+		else
 			return -EINVAL;
-		*flags |= (MPOL_F_MOF | MPOL_F_MORON);
 	}
 	return 0;
 }
@@ -2713,6 +2714,23 @@ static void sp_free(struct sp_node *n)
 	kmem_cache_free(sn_cache, n);
 }
 
+static inline bool mpol_preferred_should_numa_migrate(int exec_node, int folio_node,
+					    struct mempolicy *pol)
+{
+	/* if the executing node is in the policy node mask, migrate */
+	if (node_isset(exec_node, pol->nodes))
+		return true;
+
+	/* If the folio node is in policy node mask, don't migrate */
+	if (node_isset(folio_node, pol->nodes))
+		return false;
+	/*
+	 * both the folio node and executing node are outside the policy nodemask,
+	 * migrate as normal numa fault migration.
+	 */
+	return true;
+}
+
 /**
  * mpol_misplaced - check whether current folio node is valid in policy
  *
@@ -2780,6 +2798,12 @@ int mpol_misplaced(struct folio *folio, struct vm_area_struct *vma,
 		break;
 
 	case MPOL_PREFERRED_MANY:
+		if (pol->flags & MPOL_F_MORON) {
+			if (!mpol_preferred_should_numa_migrate(thisnid, curnid, pol))
+				goto out;
+			break;
+		}
+
 		/*
 		 * use current page if in policy nodemask,
 		 * else select nearest allowed node, if any.
