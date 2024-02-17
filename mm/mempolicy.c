@@ -2769,7 +2769,15 @@ int mpol_misplaced(struct folio *folio, struct vm_area_struct *vma,
 				break;
 			goto out;
 		}
-		fallthrough;
+
+		if (node_isset(curnid, pol->nodes))
+			goto out;
+		z = first_zones_zonelist(
+				node_zonelist(thisnid, GFP_HIGHUSER),
+				gfp_zone(GFP_HIGHUSER),
+				&pol->nodes);
+		polnid = zone_to_nid(z->zone);
+		break;
 
 	case MPOL_PREFERRED_MANY:
 		/*
