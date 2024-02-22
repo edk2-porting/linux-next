@@ -14,10 +14,8 @@
 #include <linux/namei.h>
 #include "misc.h"
 #include "ctree.h"
-#include "extent_map.h"
 #include "disk-io.h"
 #include "transaction.h"
-#include "print-tree.h"
 #include "volumes.h"
 #include "raid56.h"
 #include "rcu-string.h"
@@ -3393,7 +3391,17 @@ again:
 			mutex_unlock(&fs_info->reclaim_bgs_lock);
 			goto error;
 		}
-		BUG_ON(ret == 0); /* Corruption */
+		if (ret == 0) {
+			/*
+			 * On the first search we would find chunk tree with
+			 * offset -1, which is not possible. On subsequent
+			 * loops this would find an existing item on an invalid
+			 * offset (one less than the previous one, wrong
+			 * alignment and size).
+			 */
+			ret = -EUCLEAN;
+			goto error;
+		}
 
 		ret = btrfs_previous_item(chunk_root, path, key.objectid,
 					  key.type);
@@ -3478,6 +3486,44 @@ static int btrfs_may_alloc_data_chunk(struct btrfs_fs_info *fs_info,
 	}
 
 	return 0;
+}
+
+static void btrfs_disk_balance_args_to_cpu(struct btrfs_balance_args *cpu,
+					   const struct btrfs_disk_balance_args *disk)
+{
+	memset(cpu, 0, sizeof(*cpu));
+
+	cpu->profiles = le64_to_cpu(disk->profiles);
+	cpu->usage = le64_to_cpu(disk->usage);
+	cpu->devid = le64_to_cpu(disk->devid);
+	cpu->pstart = le64_to_cpu(disk->pstart);
+	cpu->pend = le64_to_cpu(disk->pend);
+	cpu->vstart = le64_to_cpu(disk->vstart);
+	cpu->vend = le64_to_cpu(disk->vend);
+	cpu->target = le64_to_cpu(disk->target);
+	cpu->flags = le64_to_cpu(disk->flags);
+	cpu->limit = le64_to_cpu(disk->limit);
+	cpu->stripes_min = le32_to_cpu(disk->stripes_min);
+	cpu->stripes_max = le32_to_cpu(disk->stripes_max);
+}
+
+static void btrfs_cpu_balance_args_to_disk(struct btrfs_disk_balance_args *disk,
+					   const struct btrfs_balance_args *cpu)
+{
+	memset(disk, 0, sizeof(*disk));
+
+	disk->profiles = cpu_to_le64(cpu->profiles);
+	disk->usage = cpu_to_le64(cpu->usage);
+	disk->devid = cpu_to_le64(cpu->devid);
+	disk->pstart = cpu_to_le64(cpu->pstart);
+	disk->pend = cpu_to_le64(cpu->pend);
+	disk->vstart = cpu_to_le64(cpu->vstart);
+	disk->vend = cpu_to_le64(cpu->vend);
+	disk->target = cpu_to_le64(cpu->target);
+	disk->flags = cpu_to_le64(cpu->flags);
+	disk->limit = cpu_to_le64(cpu->limit);
+	disk->stripes_min = cpu_to_le32(cpu->stripes_min);
+	disk->stripes_max = cpu_to_le32(cpu->stripes_max);
 }
 
 static int insert_balance_item(struct btrfs_fs_info *fs_info,
@@ -3624,7 +3670,7 @@ static void reset_balance_state(struct btrfs_fs_info *fs_info)
 	struct btrfs_balance_control *bctl = fs_info->balance_ctl;
 	int ret;
 
-	BUG_ON(!fs_info->balance_ctl);
+	ASSERT(fs_info->balance_ctl);
 
 	spin_lock(&fs_info->balance_lock);
 	fs_info->balance_ctl = NULL;
@@ -5944,6 +5990,7 @@ static int find_live_mirror(struct btrfs_fs_info *fs_info,
 			    struct btrfs_chunk_map *map, int first,
 			    int dev_replace_is_ongoing)
 {
+	const enum btrfs_read_policy policy = READ_ONCE(fs_info->fs_devices->read_policy);
 	int i;
 	int num_stripes;
 	int preferred_mirror;
@@ -5958,13 +6005,12 @@ static int find_live_mirror(struct btrfs_fs_info *fs_info,
 	else
 		num_stripes = map->num_stripes;
 
-	switch (fs_info->fs_devices->read_policy) {
+	switch (policy) {
 	default:
 		/* Shouldn't happen, just warn and use pid instead of failing */
-		btrfs_warn_rl(fs_info,
-			      "unknown read_policy type %u, reset to pid",
-			      fs_info->fs_devices->read_policy);
-		fs_info->fs_devices->read_policy = BTRFS_READ_POLICY_PID;
+		btrfs_warn_rl(fs_info, "unknown read_policy type %u, reset to pid",
+			      policy);
+		WRITE_ONCE(fs_info->fs_devices->read_policy, BTRFS_READ_POLICY_PID);
 		fallthrough;
 	case BTRFS_READ_POLICY_PID:
 		preferred_mirror = first + (current->pid % num_stripes);
