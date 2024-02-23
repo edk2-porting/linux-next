@@ -127,6 +127,9 @@ struct scan_control {
 	/* One of the zones is ready for compaction */
 	unsigned int compaction_ready:1;
 
+	/* If the last try was reclaimable */
+	unsigned int reclaimable:1;
+
 	/* There is easily reclaimable cold cache in the current node */
 	unsigned int cache_trim_mode:1;
 
@@ -2267,9 +2270,14 @@ static void prepare_scan_control(pg_data_t *pgdat, struct scan_control *sc)
 	 * If we have plenty of inactive file pages that aren't
 	 * thrashing, try to reclaim those first before touching
 	 * anonymous pages.
+	 *
+	 * It doesn't make sense to keep cache_trim_mode on if the mode
+	 * is not working while struggling against reclaim. So do not
+	 * turn it on if so. Note the highest priority of kswapd is 1.
 	 */
 	file = lruvec_page_state(target_lruvec, NR_INACTIVE_FILE);
-	if (file >> sc->priority && !(sc->may_deactivate & DEACTIVATE_FILE))
+	if (file >> sc->priority && !(sc->may_deactivate & DEACTIVATE_FILE) &&
+	    !(sc->cache_trim_mode && !sc->reclaimable && sc->priority <= 1))
 		sc->cache_trim_mode = 1;
 	else
 		sc->cache_trim_mode = 0;
@@ -5883,7 +5891,6 @@ static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 {
 	unsigned long nr_reclaimed, nr_scanned, nr_node_reclaimed;
 	struct lruvec *target_lruvec;
-	bool reclaimable = false;
 
 	if (lru_gen_enabled() && root_reclaim(sc)) {
 		lru_gen_shrink_node(pgdat, sc);
@@ -5898,6 +5905,14 @@ again:
 	nr_reclaimed = sc->nr_reclaimed;
 	nr_scanned = sc->nr_scanned;
 
+	/*
+	 * Reset to the default values at the start.
+	 */
+	if (sc->priority == DEF_PRIORITY) {
+		sc->reclaimable = 1;
+		sc->cache_trim_mode = 0;
+	}
+
 	prepare_scan_control(pgdat, sc);
 
 	shrink_node_memcgs(pgdat, sc);
@@ -5911,8 +5926,7 @@ again:
 		vmpressure(sc->gfp_mask, sc->target_mem_cgroup, true,
 			   sc->nr_scanned - nr_scanned, nr_node_reclaimed);
 
-	if (nr_node_reclaimed)
-		reclaimable = true;
+	sc->reclaimable = !!nr_node_reclaimed;
 
 	if (current_is_kswapd()) {
 		/*
@@ -5986,7 +6000,7 @@ again:
 	 * sleep. On reclaim progress, reset the failure counter. A
 	 * successful direct reclaim run will revive a dormant kswapd.
 	 */
-	if (reclaimable)
+	if (sc->reclaimable)
 		pgdat->kswapd_failures = 0;
 }
 
