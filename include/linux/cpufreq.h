@@ -263,6 +263,7 @@ static inline bool cpufreq_supports_freq_invariance(void)
 	return false;
 }
 static inline void disable_cpufreq(void) { }
+static inline void cpufreq_update_limits(unsigned int cpu) { }
 #endif
 
 #ifdef CONFIG_CPU_FREQ_STAT
@@ -568,9 +569,7 @@ static inline unsigned long cpufreq_scale(unsigned long old, u_int div,
 
 /*
  * The polling frequency depends on the capability of the processor. Default
- * polling frequency is 1000 times the transition latency of the processor. The
- * ondemand governor will work on any processor with transition latency <= 10ms,
- * using appropriate sampling rate.
+ * polling frequency is 1000 times the transition latency of the processor.
  */
 #define LATENCY_MULTIPLIER		(1000)
 
