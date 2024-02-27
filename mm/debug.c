@@ -141,7 +141,7 @@ again:
 	__dump_folio(foliop, &precise, pfn, idx);
 }
 
-void dump_page(struct page *page, const char *reason)
+void dump_page(const struct page *page, const char *reason)
 {
 	if (PagePoisoned(page))
 		pr_warn("page:%p is uninitialized and poisoned", page);
