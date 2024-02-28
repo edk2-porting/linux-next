@@ -3059,11 +3059,8 @@ int split_huge_page_to_list_to_order(struct page *page, struct list_head *list,
 
 	if (new_order) {
 		/* Only swapping a whole PMD-mapped folio is supported */
-		if (folio_test_swapcache(folio)) {
-			VM_WARN_ONCE(1,
-				"Cannot split swap-cached folio to non-0 order");
+		if (folio_test_swapcache(folio))
 			return -EINVAL;
-		}
 		/* Split shmem folio to non-zero order not supported */
 		if (shmem_mapping(folio->mapping)) {
 			VM_WARN_ONCE(1,
