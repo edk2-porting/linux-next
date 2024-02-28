@@ -57,7 +57,7 @@ static void pds_vfio_recovery(struct pds_vfio_pci_device *pds_vfio)
 	if (deferred_reset_needed) {
 		mutex_lock(&pds_vfio->reset_mutex);
 		pds_vfio->deferred_reset = true;
-		pds_vfio->deferred_reset_state = VFIO_DEVICE_STATE_ERROR;
+		pds_vfio->deferred_reset_type = PDS_VFIO_DEVICE_RESET;
 		mutex_unlock(&pds_vfio->reset_mutex);
 	}
 }

@@ -10,6 +10,11 @@
 #include "dirty.h"
 #include "lm.h"
 
+enum pds_vfio_reset_type {
+	PDS_VFIO_HOST_RESET = 0,
+	PDS_VFIO_DEVICE_RESET = 1,
+};
+
 struct pds_vfio_pci_device {
 	struct vfio_pci_core_device vfio_coredev;
 
@@ -20,7 +25,7 @@ struct pds_vfio_pci_device {
 	enum vfio_device_mig_state state;
 	struct mutex reset_mutex; /* protect reset_done flow */
 	u8 deferred_reset;
-	enum vfio_device_mig_state deferred_reset_state;
+	enum pds_vfio_reset_type deferred_reset_type;
 	struct notifier_block nb;
 
 	int vf_id;
