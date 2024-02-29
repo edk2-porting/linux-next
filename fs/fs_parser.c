@@ -119,7 +119,8 @@ int __fs_parse(struct p_log *log,
 	/* Try to turn the type we were given into the type desired by the
 	 * parameter and give an error if we can't.
 	 */
-	if (is_flag(p)) {
+	if (is_flag(p) ||
+	    (!param->string && (p->flags & fs_param_can_be_empty))) {
 		if (param->type != fs_value_is_flag)
 			return inval_plog(log, "Unexpected value for '%s'",
 				      param->key);
