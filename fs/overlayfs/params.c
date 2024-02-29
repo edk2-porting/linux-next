@@ -441,7 +441,7 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 	/* drop all existing lower layers */
 	ovl_reset_lowerdirs(ctx);
 
-	if (!*name)
+	if (!name)
 		return 0;
 
 	if (*name == ':') {
