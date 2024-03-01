@@ -7,6 +7,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/regulator/consumer.h>
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_modes.h>
@@ -15,6 +16,7 @@
 struct sim {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
+	struct regulator_bulk_data supplies[2];
 	struct gpio_desc *reset_gpio;
 	bool prepared;
 };
@@ -42,6 +44,7 @@ static int sim_on(struct sim *ctx)
 
 	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
+	dev_info(dev, "Turning on panel\n");
 	mipi_dsi_dcs_write_seq(dsi, 0xb0, 0x00);
 	mipi_dsi_dcs_write_seq(dsi, 0xb3, 0x31);
 	mipi_dsi_dcs_write_seq(dsi, 0xd6, 0x00);
@@ -70,18 +73,20 @@ static int sim_off(struct sim *ctx)
 
 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 
-	// ret = mipi_dsi_dcs_set_display_off(dsi);
-	// if (ret < 0) {
-	// 	dev_err(dev, "Failed to set display off: %d\n", ret);
-	// 	return ret;
-	// }
-	// msleep(50);
+	dev_info(dev, "Turning off panel\n");
 
-	// ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
-	// if (ret < 0) {
-	// 	dev_err(dev, "Failed to enter sleep mode: %d\n", ret);
-	// 	return ret;
-	// }
+	ret = mipi_dsi_dcs_set_display_off(dsi);
+	if (ret < 0) {
+		dev_err(dev, "Failed to set display off: %d\n", ret);
+		return ret;
+	}
+	msleep(50);
+
+	ret = mipi_dsi_dcs_enter_sleep_mode(dsi);
+	if (ret < 0) {
+		dev_err(dev, "Failed to enter sleep mode: %d\n", ret);
+		return ret;
+	}
 	msleep(120);
 
 	return 0;
@@ -96,12 +101,21 @@ static int sim_prepare(struct drm_panel *panel)
 	if (ctx->prepared)
 		return 0;
 
+	dev_info(dev, "Preparing panel\n");
+
+	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
+	if (ret < 0) {
+		dev_err(dev, "Failed to enable regulators: %d\n", ret);
+		return ret;
+	}
+
 	sim_reset(ctx);
 
 	ret = sim_on(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Failed to initialize panel: %d\n", ret);
 		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+		regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 		return ret;
 	}
 
@@ -118,11 +132,14 @@ static int sim_unprepare(struct drm_panel *panel)
 	if (!ctx->prepared)
 		return 0;
 
+	dev_info(dev, "Unpreparing panel\n");
 	ret = sim_off(ctx);
 	if (ret < 0)
 		dev_err(dev, "Failed to un-initialize panel: %d\n", ret);
 
-	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	// Setting reset gpio to high will cause rmi4 to fail to suspend
+	// gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 
 	ctx->prepared = false;
 	return 0;
@@ -163,7 +180,7 @@ static int sim_get_modes(struct drm_panel *panel,
 
 static const struct drm_panel_funcs sim_panel_funcs = {
 	.prepare = sim_prepare,
-	.unprepare = sim_unprepare,
+	.disable = sim_unprepare,
 	.get_modes = sim_get_modes,
 };
 
@@ -177,7 +194,16 @@ static int sim_probe(struct mipi_dsi_device *dsi)
 	if (!ctx)
 		return -ENOMEM;
 
-	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+	dev_info(dev, "Odin 2 Panel probe start!\n");
+
+	ctx->supplies[0].supply = "vddio";
+	ctx->supplies[1].supply = "vdd";
+	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(ctx->supplies),
+				      ctx->supplies);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to get regulators\n");
+
+	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 	if (IS_ERR(ctx->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
 				     "Failed to get reset-gpios\n");
@@ -196,8 +222,7 @@ static int sim_probe(struct mipi_dsi_device *dsi)
 
 	ret = drm_panel_of_backlight(&ctx->panel);
 	if (ret)
-		dev_err(dev, "Failed to get backlight: %d\n", ret);
-		// return dev_err_probe(dev, ret, "Failed to get backlight\n");
+		return dev_err_probe(dev, ret, "Failed to get backlight\n");
 
 	drm_panel_add(&ctx->panel);
 
