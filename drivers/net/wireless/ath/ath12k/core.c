@@ -45,8 +45,8 @@ int ath12k_core_suspend(struct ath12k_base *ab)
 {
 	int ret;
 
-	if (!ab->hw_params->supports_suspend)
-		return -EOPNOTSUPP;
+	// if (!ab->hw_params->supports_suspend)
+	// 	return -EOPNOTSUPP;
 
 	/* TODO: there can frames in queues so for now add delay as a hack.
 	 * Need to implement to handle and remove this delay.
@@ -83,8 +83,8 @@ int ath12k_core_resume(struct ath12k_base *ab)
 {
 	int ret;
 
-	if (!ab->hw_params->supports_suspend)
-		return -EOPNOTSUPP;
+	// if (!ab->hw_params->supports_suspend)
+	// 	return -EOPNOTSUPP;
 
 	ret = ath12k_hif_resume(ab);
 	if (ret) {
