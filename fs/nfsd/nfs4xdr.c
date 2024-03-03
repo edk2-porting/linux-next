@@ -3507,6 +3507,8 @@ nfsd4_encode_fattr4(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 		unsigned long	mask[2];
 	} u;
 	unsigned long bit;
+	bool file_modified = false;
+	u64 size = 0;
 
 	WARN_ON_ONCE(bmval[1] & NFSD_WRITEONLY_ATTRS_WORD1);
 	WARN_ON_ONCE(!nfsd_attrs_supported(minorversion, bmval));
@@ -3533,7 +3535,8 @@ nfsd4_encode_fattr4(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 	}
 	args.size = 0;
 	if (u.attrmask[0] & (FATTR4_WORD0_CHANGE | FATTR4_WORD0_SIZE)) {
-		status = nfsd4_deleg_getattr_conflict(rqstp, d_inode(dentry));
+		status = nfsd4_deleg_getattr_conflict(rqstp, d_inode(dentry),
+					&file_modified, &size);
 		if (status)
 			goto out;
 	}
@@ -3543,7 +3546,10 @@ nfsd4_encode_fattr4(struct svc_rqst *rqstp, struct xdr_stream *xdr,
 			  AT_STATX_SYNC_AS_STAT);
 	if (err)
 		goto out_nfserr;
-	args.size = args.stat.size;
+	if (file_modified)
+		args.size = size;
+	else
+		args.size = args.stat.size;
 
 	if (!(args.stat.result_mask & STATX_BTIME))
 		/* underlying FS does not offer btime so we can't share it */
@@ -5386,14 +5392,9 @@ nfsd4_listxattr_validate_cookie(struct nfsd4_listxattrs *listxattrs,
 
 	/*
 	 * If the cookie is larger than the maximum number we can fit
-	 * in either the buffer we just got back from vfs_listxattr, or,
-	 * XDR-encoded, in the return buffer, it's invalid.
+	 * in the buffer we just got back from vfs_listxattr, it's invalid.
 	 */
 	if (cookie > (listxattrs->lsxa_len) / (XATTR_USER_PREFIX_LEN + 2))
-		return nfserr_badcookie;
-
-	if (cookie > (listxattrs->lsxa_maxcount /
-		      (XDR_QUADLEN(XATTR_USER_PREFIX_LEN + 2) + 4)))
 		return nfserr_badcookie;
 
 	*offsetp = (u32)cookie;
@@ -5412,6 +5413,7 @@ nfsd4_encode_listxattrs(struct nfsd4_compoundres *resp, __be32 nfserr,
 	u64 cookie;
 	char *sp;
 	__be32 status, tmp;
+	__be64 wire_cookie;
 	__be32 *p;
 	u32 nuser;
 
@@ -5427,7 +5429,7 @@ nfsd4_encode_listxattrs(struct nfsd4_compoundres *resp, __be32 nfserr,
 	 */
 	cookie_offset = xdr->buf->len;
 	count_offset = cookie_offset + 8;
-	p = xdr_reserve_space(xdr, 12);
+	p = xdr_reserve_space(xdr, XDR_UNIT * 3);
 	if (!p) {
 		status = nfserr_resource;
 		goto out;
@@ -5438,7 +5440,8 @@ nfsd4_encode_listxattrs(struct nfsd4_compoundres *resp, __be32 nfserr,
 	sp = listxattrs->lsxa_buf;
 	nuser = 0;
 
-	xdrleft = listxattrs->lsxa_maxcount;
+	/* Bytes left is maxcount - 8 (cookie) - 4 (array count) */
+	xdrleft = listxattrs->lsxa_maxcount - XDR_UNIT * 3;
 
 	while (left > 0 && xdrleft > 0) {
 		slen = strlen(sp);
@@ -5451,7 +5454,8 @@ nfsd4_encode_listxattrs(struct nfsd4_compoundres *resp, __be32 nfserr,
 
 		slen -= XATTR_USER_PREFIX_LEN;
 		xdrlen = 4 + ((slen + 3) & ~3);
-		if (xdrlen > xdrleft) {
+		/* Check if both entry and eof can fit in the XDR buffer */
+		if (xdrlen + XDR_UNIT > xdrleft) {
 			if (count == 0) {
 				/*
 				 * Can't even fit the first attribute name.
@@ -5503,7 +5507,8 @@ wreof:
 
 	cookie = offset + count;
 
-	write_bytes_to_xdr_buf(xdr->buf, cookie_offset, &cookie, 8);
+	wire_cookie = cpu_to_be64(cookie);
+	write_bytes_to_xdr_buf(xdr->buf, cookie_offset, &wire_cookie, 8);
 	tmp = cpu_to_be32(count);
 	write_bytes_to_xdr_buf(xdr->buf, count_offset, &tmp, 4);
 out:
