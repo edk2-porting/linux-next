@@ -1356,29 +1356,30 @@ static long do_mbind(unsigned long start, unsigned long len,
 		 */
 		if (new->mode == MPOL_INTERLEAVE ||
 		    new->mode == MPOL_WEIGHTED_INTERLEAVE) {
-			struct page *page;
+			struct folio *folio;
 			unsigned int order;
 			unsigned long addr = -EFAULT;
 
-			list_for_each_entry(page, &pagelist, lru) {
-				if (!PageKsm(page))
+			list_for_each_entry(folio, &pagelist, lru) {
+				if (!folio_test_ksm(folio))
 					break;
 			}
-			if (!list_entry_is_head(page, &pagelist, lru)) {
+			if (!list_entry_is_head(folio, &pagelist, lru)) {
 				vma_iter_init(&vmi, mm, start);
 				for_each_vma_range(vmi, vma, end) {
-					addr = page_address_in_vma(page, vma);
+					addr = page_address_in_vma(
+						folio_page(folio, 0), vma);
 					if (addr != -EFAULT)
 						break;
 				}
 			}
 			if (addr != -EFAULT) {
-				order = compound_order(page);
+				order = folio_order(folio);
 				/* We already know the pol, but not the ilx */
 				mpol_cond_put(get_vma_policy(vma, addr, order,
 							     &mmpol.ilx));
 				/* Set base from which to increment by index */
-				mmpol.ilx -= page->index >> order;
+				mmpol.ilx -= folio->index >> order;
 			}
 		}
 	}
@@ -1503,9 +1504,10 @@ static inline int sanitize_mpol_flags(int *mode, unsigned short *flags)
 	if ((*flags & MPOL_F_STATIC_NODES) && (*flags & MPOL_F_RELATIVE_NODES))
 		return -EINVAL;
 	if (*flags & MPOL_F_NUMA_BALANCING) {
-		if (*mode != MPOL_BIND)
+		if (*mode == MPOL_BIND || *mode == MPOL_PREFERRED_MANY)
+			*flags |= (MPOL_F_MOF | MPOL_F_MORON);
+		else
 			return -EINVAL;
-		*flags |= (MPOL_F_MOF | MPOL_F_MORON);
 	}
 	return 0;
 }
@@ -2713,6 +2715,23 @@ static void sp_free(struct sp_node *n)
 	kmem_cache_free(sn_cache, n);
 }
 
+static inline bool mpol_preferred_should_numa_migrate(int exec_node, int folio_node,
+					    struct mempolicy *pol)
+{
+	/* if the executing node is in the policy node mask, migrate */
+	if (node_isset(exec_node, pol->nodes))
+		return true;
+
+	/* If the folio node is in policy node mask, don't migrate */
+	if (node_isset(folio_node, pol->nodes))
+		return false;
+	/*
+	 * both the folio node and executing node are outside the policy nodemask,
+	 * migrate as normal numa fault migration.
+	 */
+	return true;
+}
+
 /**
  * mpol_misplaced - check whether current folio node is valid in policy
  *
@@ -2769,9 +2788,23 @@ int mpol_misplaced(struct folio *folio, struct vm_area_struct *vma,
 				break;
 			goto out;
 		}
-		fallthrough;
+
+		if (node_isset(curnid, pol->nodes))
+			goto out;
+		z = first_zones_zonelist(
+				node_zonelist(thisnid, GFP_HIGHUSER),
+				gfp_zone(GFP_HIGHUSER),
+				&pol->nodes);
+		polnid = zone_to_nid(z->zone);
+		break;
 
 	case MPOL_PREFERRED_MANY:
+		if (pol->flags & MPOL_F_MORON) {
+			if (!mpol_preferred_should_numa_migrate(thisnid, curnid, pol))
+				goto out;
+			break;
+		}
+
 		/*
 		 * use current page if in policy nodemask,
 		 * else select nearest allowed node, if any.
@@ -2780,7 +2813,7 @@ int mpol_misplaced(struct folio *folio, struct vm_area_struct *vma,
 		if (node_isset(curnid, pol->nodes))
 			goto out;
 		z = first_zones_zonelist(
-				node_zonelist(numa_node_id(), GFP_HIGHUSER),
+				node_zonelist(thisnid, GFP_HIGHUSER),
 				gfp_zone(GFP_HIGHUSER),
 				&pol->nodes);
 		polnid = zone_to_nid(z->zone);
