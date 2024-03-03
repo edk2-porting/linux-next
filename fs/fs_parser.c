@@ -83,8 +83,8 @@ static const struct fs_parameter_spec *fs_lookup_key(
 }
 
 /*
- * fs_parse - Parse a filesystem configuration parameter
- * @fc: The filesystem context to log errors through.
+ * __fs_parse - Parse a filesystem configuration parameter
+ * @log: The filesystem context to log errors through.
  * @desc: The parameter description to use.
  * @param: The parameter.
  * @result: Where to place the result of the parse
@@ -119,7 +119,8 @@ int __fs_parse(struct p_log *log,
 	/* Try to turn the type we were given into the type desired by the
 	 * parameter and give an error if we can't.
 	 */
-	if (is_flag(p)) {
+	if (is_flag(p) ||
+	    (!param->string && (p->flags & fs_param_can_be_empty))) {
 		if (param->type != fs_value_is_flag)
 			return inval_plog(log, "Unexpected value for '%s'",
 				      param->key);
