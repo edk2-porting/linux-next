@@ -238,8 +238,8 @@ static inline void snd_soc_debugfs_exit(void) { }
 
 #endif
 
-static int snd_soc_is_match_dai_args(struct of_phandle_args *args1,
-				     struct of_phandle_args *args2)
+static int snd_soc_is_match_dai_args(const struct of_phandle_args *args1,
+				     const struct of_phandle_args *args2)
 {
 	if (!args1 || !args2)
 		return 0;
@@ -287,7 +287,7 @@ static int snd_soc_is_matching_dai(const struct snd_soc_dai_link_component *dlc,
 		return 1;
 
 	if (dai->driver->name &&
-	    strcmp(dai->driver->name, dlc->dai_name) == 0)
+	    strcmp(dlc->dai_name, dai->driver->name) == 0)
 		return 1;
 
 	if (dai->component->name &&
@@ -831,7 +831,8 @@ static struct device_node
 	return of_node;
 }
 
-struct of_phandle_args *snd_soc_copy_dai_args(struct device *dev, struct of_phandle_args *args)
+struct of_phandle_args *snd_soc_copy_dai_args(struct device *dev,
+					      const struct of_phandle_args *args)
 {
 	struct of_phandle_args *ret = devm_kzalloc(dev, sizeof(*ret), GFP_KERNEL);
 
@@ -3597,7 +3598,7 @@ int snd_soc_of_get_dai_name(struct device_node *of_node,
 }
 EXPORT_SYMBOL_GPL(snd_soc_of_get_dai_name);
 
-struct snd_soc_dai *snd_soc_get_dai_via_args(struct of_phandle_args *dai_args)
+struct snd_soc_dai *snd_soc_get_dai_via_args(const struct of_phandle_args *dai_args)
 {
 	struct snd_soc_dai *dai;
 	struct snd_soc_component *component;
