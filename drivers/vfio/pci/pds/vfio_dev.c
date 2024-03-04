@@ -32,13 +32,14 @@ again:
 	mutex_lock(&pds_vfio->reset_mutex);
 	if (pds_vfio->deferred_reset) {
 		pds_vfio->deferred_reset = false;
-		if (pds_vfio->state == VFIO_DEVICE_STATE_ERROR) {
-			pds_vfio_put_restore_file(pds_vfio);
-			pds_vfio_put_save_file(pds_vfio);
+		pds_vfio_put_restore_file(pds_vfio);
+		pds_vfio_put_save_file(pds_vfio);
+		if (pds_vfio->deferred_reset_type == PDS_VFIO_DEVICE_RESET) {
 			pds_vfio_dirty_disable(pds_vfio, false);
+			pds_vfio->state = VFIO_DEVICE_STATE_ERROR;
+		} else {
+			pds_vfio->state = VFIO_DEVICE_STATE_RUNNING;
 		}
-		pds_vfio->state = pds_vfio->deferred_reset_state;
-		pds_vfio->deferred_reset_state = VFIO_DEVICE_STATE_RUNNING;
 		mutex_unlock(&pds_vfio->reset_mutex);
 		goto again;
 	}
@@ -50,7 +51,7 @@ void pds_vfio_reset(struct pds_vfio_pci_device *pds_vfio)
 {
 	mutex_lock(&pds_vfio->reset_mutex);
 	pds_vfio->deferred_reset = true;
-	pds_vfio->deferred_reset_state = VFIO_DEVICE_STATE_RUNNING;
+	pds_vfio->deferred_reset_type = PDS_VFIO_HOST_RESET;
 	if (!mutex_trylock(&pds_vfio->state_mutex)) {
 		mutex_unlock(&pds_vfio->reset_mutex);
 		return;
@@ -194,7 +195,6 @@ static int pds_vfio_open_device(struct vfio_device *vdev)
 		return err;
 
 	pds_vfio->state = VFIO_DEVICE_STATE_RUNNING;
-	pds_vfio->deferred_reset_state = VFIO_DEVICE_STATE_RUNNING;
 
 	vfio_pci_core_finish_enable(&pds_vfio->vfio_coredev);
 
