@@ -47,6 +47,7 @@
 		serial2 = &uart15;
 	};
 
+/*
 	wcd938x: audio-codec {
 		compatible = "qcom,wcd9385-codec";
 
@@ -72,6 +73,7 @@
 
 		#sound-dai-cells = <1>;
 	};
+*/
 
 	backlight: backlight {
 		compatible = "pwm-backlight";
@@ -229,6 +231,7 @@
 		enable-active-high;
 	};
 
+/*
 	sound {
 		compatible = "qcom,sm8550-sndcard", "qcom,sm8450-sndcard";
 		model = "QCS8550-AYN-ODIN2";
@@ -305,6 +308,7 @@
 			};
 		};
 	};
+*/
 
 	usb0-sbu-mux {
 		compatible = "gpio-sbu-mux";
@@ -978,11 +982,13 @@
 	vdd3-supply = <&vreg_l5b_3p1>;
 };
 
+/*
 &pm8550b_haptics {
 	nvmem-names = "hap_cfg_sdam";
 	nvmem = <&pmk8550_sdam_46>;
 	status = "okay";
 };
+*/
 
 &pmk8550_gpios {
 	pmk8550_sleep_clk: sleep-clk-state {
@@ -1048,11 +1054,13 @@
 	status = "okay";
 };
 
+/*
 &remoteproc_cdsp {
 	firmware-name = "qcom/sm8550/ayn/odin2/cdsp.mbn",
 			"qcom/sm8550/ayn/odin2/cdsp_dtb.mbn";
 	status = "okay";
 };
+*/
 
 &sdhc_2 {
 	cd-gpios = <&pm8550_gpios 12 GPIO_ACTIVE_LOW>;
@@ -1076,27 +1084,27 @@
 	clock-frequency = <32000>;
 };
 
-&swr1 {
-	status = "okay";
+// &swr1 {
+// 	status = "okay";
 
-	/* WCD9385 RX */
-	wcd_rx: codec@0,4 {
-		compatible = "sdw20217010d00";
-		reg = <0 4>;
-		qcom,rx-port-mapping = <1 2 3 4 5>;
-	};
-};
+// 	/* WCD9385 RX */
+// 	wcd_rx: codec@0,4 {
+// 		compatible = "sdw20217010d00";
+// 		reg = <0 4>;
+// 		qcom,rx-port-mapping = <1 2 3 4 5>;
+// 	};
+// };
 
-&swr2 {
-	status = "okay";
+// &swr2 {
+// 	status = "okay";
 
-	/* WCD9385 TX */
-	wcd_tx: codec@0,3 {
-		compatible = "sdw20217010d00";
-		reg = <0 3>;
-		qcom,tx-port-mapping = <2 2 3 4>;
-	};
-};
+// 	/* WCD9385 TX */
+// 	wcd_tx: codec@0,3 {
+// 		compatible = "sdw20217010d00";
+// 		reg = <0 3>;
+// 		qcom,tx-port-mapping = <2 2 3 4>;
+// 	};
+// };
 
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
