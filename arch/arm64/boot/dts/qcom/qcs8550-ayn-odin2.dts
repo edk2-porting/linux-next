@@ -226,8 +226,6 @@
 		regulator-max-microvolt = <3700000>;
 
 		gpio = <&tlmm 10 GPIO_ACTIVE_HIGH>;
-		regulator-always-on;
-		regulator-boot-on;
 		enable-active-high;
 	};
 
@@ -754,11 +752,18 @@
 	clock-frequency = <100000>;
 	status = "okay";
 
-	/* Not working yet, DDC bus unknown */
 	hdmi-bridge@48 {
 		compatible = "lontium,lt8912b";
 		reg = <0x48> ;
 		reset-gpios = <&tlmm 7 GPIO_ACTIVE_LOW>;
+
+		vdd-supply = <&hdmi_pwr>;
+		vccmipirx-supply = <&hdmi_pwr>;
+		vccsysclk-supply = <&hdmi_pwr>;
+		vcclvdstx-supply = <&hdmi_pwr>;
+		vcchdmitx-supply = <&hdmi_pwr>;
+		vcclvdspll-supply = <&hdmi_pwr>;
+		vcchdmipll-supply = <&hdmi_pwr>;
 
 		ports {
 			#address-cells = <1>;
