@@ -10,7 +10,7 @@
 #include <linux/slab.h>
 #include <uapi/linux/sched/types.h>
 
-#define MAX_DATA_LEN 32
+#define MAX_DATA_LEN 64
 
 #define gamepad_serdev_write_seq(serdev, seq...) \
     do {                                                               \
@@ -37,7 +37,6 @@ struct gamepad_data {
     u8 command;
     u16 data_len;
     u8 data[MAX_DATA_LEN];
-    u8 checksum;
 };
 
 struct gamepad_device {
