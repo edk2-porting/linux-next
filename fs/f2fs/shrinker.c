@@ -33,7 +33,7 @@ static unsigned long __count_extent_cache(struct f2fs_sb_info *sbi,
 {
 	struct extent_tree_info *eti = &sbi->extent_tree[type];
 
-	return atomic_read(&eti->total_zombie_tree) +
+	return (unsigned long)atomic_read(&eti->total_zombie_tree) +
 				atomic_read(&eti->total_ext_node);
 }
 
