@@ -4307,6 +4307,13 @@
 			#clock-cells = <1>;
 		};
 
+		qfprom: efuse@221c8000 {
+			compatible = "qcom,sm8550-qfprom", "qcom,qfprom";
+			reg = <0 0x221c8000 0 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+		};
+
 		pmu@24091000 {
 			compatible = "qcom,sm8550-llcc-bwmon", "qcom,sc7280-llcc-bwmon";
 			reg = <0 0x24091000 0 0x1000>;
