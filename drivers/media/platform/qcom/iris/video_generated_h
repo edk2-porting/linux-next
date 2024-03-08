@@ -1,0 +1,4 @@
+#define VIDEO_COMPILE_TIME "2000 years later"
+#define VIDEO_COMPILE_BY "whoami"
+#define VIDEO_COMPILE_HOST "whatever"
+

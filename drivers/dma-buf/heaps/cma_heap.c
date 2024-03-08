@@ -377,6 +377,7 @@ static int __add_cma_heap(struct cma *cma, void *data)
 	cma_heap->cma = cma;
 
 	exp_info.name = cma_get_name(cma);
+	pr_info("Adding CMA heap %s\n", exp_info.name);
 	exp_info.ops = &cma_heap_ops;
 	exp_info.priv = cma_heap;
 
