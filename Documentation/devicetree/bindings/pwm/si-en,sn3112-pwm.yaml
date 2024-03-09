@@ -1,0 +1,55 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/pwm/si-en,sn3112-pwm.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: SI-EN SN3112 12-channel 8-bit PWM LED controller
+
+maintainers:
+  - Junhao Xie <bigfoot@classfun.cn>
+
+allOf:
+  - $ref: pwm.yaml#
+
+properties:
+  compatible:
+    const: si-en,sn3112-pwm
+
+  reg:
+    const: 0x54
+    description: I2C slave address
+
+  sdb-gpios:
+    maxItems: 1
+    description: GPIO pin to hardware shutdown the device.
+
+  vdd-supply:
+    description: Chip vdd supply
+
+  "#pwm-cells":
+    const: 1
+
+required:
+  - compatible
+  - reg
+  - "#pwm-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+
+    i2c {
+      #address-cells = <1>;
+      #size-cells = <0>;
+
+      pwm@54 {
+        compatible = "si-en,sn3112-pwm";
+        reg = <0x54>;
+        sdb-gpios = <&pio 1 1 GPIO_ACTIVE_LOW>; /* PA1 */
+        vdd-supply = <&reg_dcdc1>;
+        #pwm-cells = <1>;
+      };
+    };
