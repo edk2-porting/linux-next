@@ -9,7 +9,7 @@
 #undef TRACE_SYSTEM
 #define TRACE_SYSTEM msm_vidc_events
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH .
+#define TRACE_INCLUDE_PATH ../../drivers/media/platform/qcom/iris/
 #undef TRACE_INCLUDE_FILE
 #define TRACE_INCLUDE_FILE msm_vidc_events
 
