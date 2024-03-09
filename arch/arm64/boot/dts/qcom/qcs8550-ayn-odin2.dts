@@ -195,6 +195,106 @@
 		};
 	};
 
+	led_left_side: rgb-led-left-side {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "left-side";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_left 0>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_left 1>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_left 2>;
+			};
+		};
+	};
+
+	led_left_joystick: rgb-led-left-joystick {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "left-joystick";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_left 6>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_left 7>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_left 8>;
+			};
+		};
+	};
+
+	led_right_side: rgb-led-right-side {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "right-side";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_right 0>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_right 1>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_right 2>;
+			};
+		};
+	};
+
+	led_right_joystick: rgb-led-right-joystick {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "right-joystick";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_right 6>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_right 7>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_right 8>;
+			};
+		};
+	};
+
 	fan_pwr: fan-pwr-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "fan_pwr";
@@ -710,6 +810,19 @@
 	bias-disable;
 };
 
+&i2c0 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	pwm_rgb_left: sn3112@54 {
+		compatible = "si-en,sn3112-pwm";
+		reg = <0x54>;
+		sdb-gpios = <&tlmm 55 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&mcu_3v3>;
+		#pwm-cells = <1>;
+	};
+};
+
 &i2c4 {
 	clock-frequency = <400000>;
 	status = "okay";
@@ -745,6 +858,19 @@
 			syna,sensor-type = <1>;
 			touchscreen-inverted-x;
 		};
+	};
+};
+
+&i2c12 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	pwm_rgb_right: sn3112@54 {
+		compatible = "si-en,sn3112-pwm";
+		reg = <0x54>;
+		sdb-gpios = <&tlmm 56 GPIO_ACTIVE_LOW>;
+		vdd-supply = <&mcu_3v3>;
+		#pwm-cells = <1>;
 	};
 };
 
