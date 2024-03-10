@@ -178,10 +178,16 @@ static int sim_get_modes(struct drm_panel *panel,
 	return 1;
 }
 
+static enum drm_panel_orientation sim_get_orientation(struct drm_panel *panel)
+{
+	return DRM_MODE_PANEL_ORIENTATION_RIGHT_UP;
+}
+
 static const struct drm_panel_funcs sim_panel_funcs = {
 	.prepare = sim_prepare,
 	.disable = sim_unprepare,
 	.get_modes = sim_get_modes,
+	.get_orientation = sim_get_orientation,
 };
 
 static int sim_probe(struct mipi_dsi_device *dsi)
@@ -218,6 +224,7 @@ static int sim_probe(struct mipi_dsi_device *dsi)
 
 	drm_panel_init(&ctx->panel, dev, &sim_panel_funcs,
 		       DRM_MODE_CONNECTOR_DSI);
+
 	ctx->panel.prepare_prev_first = true;
 
 	ret = drm_panel_of_backlight(&ctx->panel);
