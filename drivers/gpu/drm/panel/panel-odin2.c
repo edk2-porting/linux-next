@@ -155,8 +155,8 @@ static const struct drm_display_mode sim_mode = {
 	.vsync_start = 1920 + 40,
 	.vsync_end = 1920 + 40 + 2,
 	.vtotal = 1920 + 40 + 2 + 60,
-	.width_mm = 0,
-	.height_mm = 0,
+	.width_mm = 52,
+	.height_mm = 28,
 };
 
 static int sim_get_modes(struct drm_panel *panel,
