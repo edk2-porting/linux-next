@@ -23,6 +23,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/remoteproc.h>
 #include <linux/soc/qcom/mdt_loader.h>
+#include <linux/soc/qcom/pd_mapper.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
 #include <soc/qcom/qcom_minidump.h>
@@ -58,6 +59,9 @@ struct adsp_data {
 	int region_assign_count;
 	bool region_assign_shared;
 	int region_assign_vmid;
+
+	const struct qcom_pdm_domain_data * const *domains;
+	size_t num_domains;
 };
 
 struct qcom_adsp {
@@ -115,6 +119,9 @@ struct qcom_adsp {
 
 	struct qcom_scm_pas_metadata pas_metadata;
 	struct qcom_scm_pas_metadata dtb_pas_metadata;
+
+	const struct qcom_pdm_domain_data * const *domains;
+	size_t num_domains;
 };
 
 static void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
@@ -262,9 +269,13 @@ static int adsp_start(struct rproc *rproc)
 	struct qcom_adsp *adsp = rproc->priv;
 	int ret;
 
-	ret = qcom_q6v5_prepare(&adsp->q6v5);
+	ret = qcom_pdm_add_domains(adsp->domains, adsp->num_domains);
 	if (ret)
 		return ret;
+
+	ret = qcom_q6v5_prepare(&adsp->q6v5);
+	if (ret)
+		goto del_domains;
 
 	ret = adsp_pds_enable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
 	if (ret < 0)
@@ -354,6 +365,9 @@ disable_proxy_pds:
 disable_irqs:
 	qcom_q6v5_unprepare(&adsp->q6v5);
 
+del_domains:
+	qcom_pdm_del_domains(adsp->domains, adsp->num_domains);
+
 	/* Remove pointer to the loaded firmware, only valid in adsp_load() & adsp_start() */
 	adsp->firmware = NULL;
 
@@ -399,6 +413,8 @@ static int adsp_stop(struct rproc *rproc)
 	handover = qcom_q6v5_unprepare(&adsp->q6v5);
 	if (handover)
 		qcom_pas_handover(&adsp->q6v5);
+
+	qcom_pdm_del_domains(adsp->domains, adsp->num_domains);
 
 	return ret;
 }
@@ -737,6 +753,10 @@ static int adsp_probe(struct platform_device *pdev)
 		adsp->dtb_firmware_name = dtb_fw_name;
 		adsp->dtb_pas_id = desc->dtb_pas_id;
 	}
+
+	adsp->domains = desc->domains;
+	adsp->num_domains = desc->num_domains;
+
 	platform_set_drvdata(pdev, adsp);
 
 	ret = device_init_wakeup(adsp->dev, true);
@@ -811,6 +831,172 @@ static void adsp_remove(struct platform_device *pdev)
 	device_init_wakeup(adsp->dev, false);
 }
 
+static const struct qcom_pdm_domain_data adsp_audio_pd = {
+	.domain = "msm/adsp/audio_pd",
+	.instance_id = 74,
+	.services = {
+		"avs/audio",
+		NULL,
+	},
+};
+
+static const struct qcom_pdm_domain_data adsp_charger_pd = {
+	.domain = "msm/adsp/charger_pd",
+	.instance_id = 74,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data adsp_root_pd = {
+	.domain = "msm/adsp/root_pd",
+	.instance_id = 74,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data adsp_root_pd_pdr = {
+	.domain = "msm/adsp/root_pd",
+	.instance_id = 74,
+	.services = {
+		"tms/pdr_enabled",
+		NULL,
+	},
+};
+
+static const struct qcom_pdm_domain_data adsp_sensor_pd = {
+	.domain = "msm/adsp/sensor_pd",
+	.instance_id = 74,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data msm8996_adsp_audio_pd = {
+	.domain = "msm/adsp/audio_pd",
+	.instance_id = 4,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data msm8996_adsp_root_pd = {
+	.domain = "msm/adsp/root_pd",
+	.instance_id = 4,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data *msm8996_adsp_domains[] = {
+	&msm8996_adsp_audio_pd,
+	&msm8996_adsp_root_pd,
+};
+
+static const struct qcom_pdm_domain_data *qcs404_adsp_domains[] = {
+	&adsp_audio_pd,
+	&adsp_root_pd,
+	&adsp_sensor_pd,
+};
+
+static const struct qcom_pdm_domain_data *sc7180_adsp_domains[] = {
+	&adsp_audio_pd,
+	&adsp_root_pd_pdr,
+	&adsp_sensor_pd,
+};
+
+static const struct qcom_pdm_domain_data *sc7280_adsp_domains[] = {
+	&adsp_audio_pd,
+	&adsp_root_pd_pdr,
+	&adsp_charger_pd,
+	&adsp_sensor_pd,
+};
+
+static const struct qcom_pdm_domain_data *sdm845_adsp_domains[] = {
+	&adsp_audio_pd,
+	&adsp_root_pd,
+};
+
+static const struct qcom_pdm_domain_data *sm8350_adsp_domains[] = {
+	&adsp_audio_pd,
+	&adsp_root_pd_pdr,
+	&adsp_charger_pd,
+};
+
+static const struct qcom_pdm_domain_data cdsp_root_pd = {
+	.domain = "msm/cdsp/root_pd",
+	.instance_id = 76,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data *sdm845_cdsp_domains[] = {
+	&cdsp_root_pd,
+};
+
+static const struct qcom_pdm_domain_data slpi_root_pd = {
+	.domain = "msm/slpi/root_pd",
+	.instance_id = 90,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data slpi_sensor_pd = {
+	.domain = "msm/slpi/sensor_pd",
+	.instance_id = 90,
+	.services = { NULL },
+};
+
+static const struct qcom_pdm_domain_data *sdm845_slpi_domains[] = {
+	&slpi_root_pd,
+	&slpi_sensor_pd,
+};
+
+static const struct qcom_pdm_domain_data mpss_root_pd = {
+	.domain = "msm/modem/root_pd",
+	.instance_id = 180,
+	.services = {
+		NULL,
+	},
+};
+
+static const struct qcom_pdm_domain_data mpss_root_pd_gps = {
+	.domain = "msm/modem/root_pd",
+	.instance_id = 180,
+	.services = {
+		"gps/gps_service",
+		NULL,
+	},
+};
+
+static const struct qcom_pdm_domain_data mpss_root_pd_gps_pdr = {
+	.domain = "msm/modem/root_pd",
+	.instance_id = 180,
+	.services = {
+		"gps/gps_service",
+		"tms/pdr_enabled",
+		NULL,
+	},
+};
+
+static const struct qcom_pdm_domain_data mpss_wlan_pd = {
+	.domain = "msm/modem/wlan_pd",
+	.instance_id = 180,
+	.services = {
+		"kernel/elf_loader",
+		"wlan/fw",
+		NULL,
+	},
+};
+
+static const struct qcom_pdm_domain_data *qcs404_mpss_domains[] = {
+	&mpss_root_pd,
+	&mpss_wlan_pd,
+};
+
+static const struct qcom_pdm_domain_data *sc7180_mpss_domains[] = {
+	&mpss_root_pd_gps_pdr,
+	&mpss_wlan_pd,
+};
+
+static const struct qcom_pdm_domain_data *sm8150_mpss_domains[] = {
+	&mpss_root_pd_gps,
+	&mpss_wlan_pd,
+};
+
+static const struct qcom_pdm_domain_data *sm8350_mpss_domains[] = {
+	&mpss_root_pd_gps,
+};
+
 static const struct adsp_data adsp_resource_init = {
 	.crash_reason_smem = 423,
 	.firmware_name = "adsp.mdt",
@@ -819,6 +1005,55 @@ static const struct adsp_data adsp_resource_init = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	/* no domains */
+};
+
+static const struct adsp_data qcs404_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.auto_boot = true,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.domains = qcs404_adsp_domains,
+	.num_domains = ARRAY_SIZE(qcs404_adsp_domains),
+};
+
+static const struct adsp_data sc7180_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.auto_boot = true,
+	.proxy_pd_names = (char*[]){
+		"lcx",
+		"lmx",
+		NULL
+	},
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.domains = sc7180_adsp_domains,
+	.num_domains = ARRAY_SIZE(sc7180_adsp_domains),
+};
+
+static const struct adsp_data sc7280_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.auto_boot = true,
+	.proxy_pd_names = (char*[]){
+		"lcx",
+		"lmx",
+		NULL
+	},
+	.load_state = "adsp",
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.domains = sc7280_adsp_domains,
+	.num_domains = ARRAY_SIZE(sc7280_adsp_domains),
 };
 
 static const struct adsp_data sdm845_adsp_resource_init = {
@@ -830,6 +1065,20 @@ static const struct adsp_data sdm845_adsp_resource_init = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.domains = sdm845_adsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_adsp_domains),
+};
+
+static const struct adsp_data sm6115_adsp_resource = {
+	.crash_reason_smem = 423,
+	.firmware_name = "adsp.mdt",
+	.pas_id = 1,
+	.auto_boot = true,
+	.ssr_name = "lpass",
+	.sysmon_name = "adsp",
+	.ssctl_id = 0x14,
+	.domains = sdm845_adsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_adsp_domains),
 };
 
 static const struct adsp_data sm6350_adsp_resource = {
@@ -846,6 +1095,8 @@ static const struct adsp_data sm6350_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.domains = qcs404_adsp_domains,
+	.num_domains = ARRAY_SIZE(qcs404_adsp_domains),
 };
 
 static const struct adsp_data sm6375_mpss_resource = {
@@ -861,6 +1112,7 @@ static const struct adsp_data sm6375_mpss_resource = {
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	// TODO: domains
 };
 
 static const struct adsp_data sm8150_adsp_resource = {
@@ -876,6 +1128,8 @@ static const struct adsp_data sm8150_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.domains = sdm845_adsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_adsp_domains),
 };
 
 static const struct adsp_data sm8250_adsp_resource = {
@@ -892,6 +1146,8 @@ static const struct adsp_data sm8250_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.domains = sdm845_adsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_adsp_domains),
 };
 
 static const struct adsp_data sm8350_adsp_resource = {
@@ -908,6 +1164,8 @@ static const struct adsp_data sm8350_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.domains = sm8350_adsp_domains,
+	.num_domains = ARRAY_SIZE(sm8350_adsp_domains),
 };
 
 static const struct adsp_data msm8996_adsp_resource = {
@@ -922,9 +1180,11 @@ static const struct adsp_data msm8996_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.domains = msm8996_adsp_domains,
+	.num_domains = ARRAY_SIZE(msm8996_adsp_domains),
 };
 
-static const struct adsp_data cdsp_resource_init = {
+static const struct adsp_data qcs404_cdsp_resource = {
 	.crash_reason_smem = 601,
 	.firmware_name = "cdsp.mdt",
 	.pas_id = 18,
@@ -932,6 +1192,8 @@ static const struct adsp_data cdsp_resource_init = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sdm845_cdsp_resource_init = {
@@ -943,6 +1205,8 @@ static const struct adsp_data sdm845_cdsp_resource_init = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sm6350_cdsp_resource = {
@@ -959,6 +1223,8 @@ static const struct adsp_data sm6350_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sm8150_cdsp_resource = {
@@ -974,6 +1240,8 @@ static const struct adsp_data sm8150_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sm8250_cdsp_resource = {
@@ -989,6 +1257,8 @@ static const struct adsp_data sm8250_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sc8280xp_nsp0_resource = {
@@ -1003,6 +1273,8 @@ static const struct adsp_data sc8280xp_nsp0_resource = {
 	.ssr_name = "cdsp0",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sc8280xp_nsp1_resource = {
@@ -1017,6 +1289,7 @@ static const struct adsp_data sc8280xp_nsp1_resource = {
 	.ssr_name = "cdsp1",
 	.sysmon_name = "cdsp1",
 	.ssctl_id = 0x20,
+	// TODO: domains
 };
 
 static const struct adsp_data x1e80100_adsp_resource = {
@@ -1073,9 +1346,11 @@ static const struct adsp_data sm8350_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
-static const struct adsp_data mpss_resource_init = {
+static const struct adsp_data sc7180_mpss_resource = {
 	.crash_reason_smem = 421,
 	.firmware_name = "modem.mdt",
 	.pas_id = 4,
@@ -1090,6 +1365,27 @@ static const struct adsp_data mpss_resource_init = {
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.domains = sc7180_mpss_domains,
+	.num_domains = ARRAY_SIZE(sc7180_mpss_domains),
+};
+
+static const struct adsp_data sc7280_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.auto_boot = false,
+	.proxy_pd_names = (char*[]){
+		"cx",
+		"mss",
+		NULL
+	},
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.domains = sm8350_mpss_domains,
+	.num_domains = ARRAY_SIZE(sm8350_mpss_domains),
 };
 
 static const struct adsp_data sc8180x_mpss_resource = {
@@ -1105,6 +1401,27 @@ static const struct adsp_data sc8180x_mpss_resource = {
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.domains = sm8150_mpss_domains,
+	.num_domains = ARRAY_SIZE(sm8150_mpss_domains),
+};
+
+static const struct adsp_data sm8150_mpss_resource = {
+	.crash_reason_smem = 421,
+	.firmware_name = "modem.mdt",
+	.pas_id = 4,
+	.minidump_id = 3,
+	.auto_boot = false,
+	.proxy_pd_names = (char*[]){
+		"cx",
+		"mss",
+		NULL
+	},
+	.load_state = "modem",
+	.ssr_name = "mpss",
+	.sysmon_name = "modem",
+	.ssctl_id = 0x12,
+	.domains = sm8150_mpss_domains,
+	.num_domains = ARRAY_SIZE(sm8150_mpss_domains),
 };
 
 static const struct adsp_data msm8996_slpi_resource_init = {
@@ -1119,6 +1436,7 @@ static const struct adsp_data msm8996_slpi_resource_init = {
 	.ssr_name = "dsps",
 	.sysmon_name = "slpi",
 	.ssctl_id = 0x16,
+	/* no domains */
 };
 
 static const struct adsp_data sdm845_slpi_resource_init = {
@@ -1135,9 +1453,11 @@ static const struct adsp_data sdm845_slpi_resource_init = {
 	.ssr_name = "dsps",
 	.sysmon_name = "slpi",
 	.ssctl_id = 0x16,
+	.domains = sdm845_slpi_domains,
+	.num_domains = ARRAY_SIZE(sdm845_slpi_domains),
 };
 
-static const struct adsp_data wcss_resource_init = {
+static const struct adsp_data qcs404_wcss_resource = {
 	.crash_reason_smem = 421,
 	.firmware_name = "wcnss.mdt",
 	.pas_id = 6,
@@ -1145,6 +1465,8 @@ static const struct adsp_data wcss_resource_init = {
 	.ssr_name = "mpss",
 	.sysmon_name = "wcnss",
 	.ssctl_id = 0x12,
+	.domains = qcs404_mpss_domains,
+	.num_domains = ARRAY_SIZE(qcs404_mpss_domains),
 };
 
 static const struct adsp_data sdx55_mpss_resource = {
@@ -1160,6 +1482,7 @@ static const struct adsp_data sdx55_mpss_resource = {
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x22,
+	// TODO: domains
 };
 
 static const struct adsp_data sm8450_mpss_resource = {
@@ -1178,6 +1501,8 @@ static const struct adsp_data sm8450_mpss_resource = {
 	.ssr_name = "mpss",
 	.sysmon_name = "modem",
 	.ssctl_id = 0x12,
+	.domains = sm8350_mpss_domains,
+	.num_domains = ARRAY_SIZE(sm8350_mpss_domains),
 };
 
 static const struct adsp_data sm8550_adsp_resource = {
@@ -1197,6 +1522,8 @@ static const struct adsp_data sm8550_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
+	.domains = sm8350_adsp_domains,
+	.num_domains = ARRAY_SIZE(sm8350_adsp_domains),
 };
 
 static const struct adsp_data sm8550_cdsp_resource = {
@@ -1217,6 +1544,8 @@ static const struct adsp_data sm8550_cdsp_resource = {
 	.ssr_name = "cdsp",
 	.sysmon_name = "cdsp",
 	.ssctl_id = 0x17,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sm8550_mpss_resource = {
@@ -1240,6 +1569,8 @@ static const struct adsp_data sm8550_mpss_resource = {
 	.region_assign_idx = 2,
 	.region_assign_count = 1,
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.domains = sm8350_mpss_domains,
+	.num_domains = ARRAY_SIZE(sm8350_mpss_domains),
 };
 
 static const struct adsp_data sc7280_wpss_resource = {
@@ -1280,6 +1611,8 @@ static const struct adsp_data sm8650_cdsp_resource = {
 	.region_assign_count = 1,
 	.region_assign_shared = true,
 	.region_assign_vmid = QCOM_SCM_VMID_CDSP,
+	.domains = sdm845_cdsp_domains,
+	.num_domains = ARRAY_SIZE(sdm845_cdsp_domains),
 };
 
 static const struct adsp_data sm8650_mpss_resource = {
@@ -1303,29 +1636,32 @@ static const struct adsp_data sm8650_mpss_resource = {
 	.region_assign_idx = 2,
 	.region_assign_count = 3,
 	.region_assign_vmid = QCOM_SCM_VMID_MSS_MSA,
+	.domains = sm8350_mpss_domains,
+	.num_domains = ARRAY_SIZE(sm8350_mpss_domains),
 };
 
 static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,msm8226-adsp-pil", .data = &adsp_resource_init},
+	// FIXME: is msm8996 adsp audio domain applicable to msm8953 ?
 	{ .compatible = "qcom,msm8953-adsp-pil", .data = &msm8996_adsp_resource},
 	{ .compatible = "qcom,msm8974-adsp-pil", .data = &adsp_resource_init},
 	{ .compatible = "qcom,msm8996-adsp-pil", .data = &msm8996_adsp_resource},
 	{ .compatible = "qcom,msm8996-slpi-pil", .data = &msm8996_slpi_resource_init},
 	{ .compatible = "qcom,msm8998-adsp-pas", .data = &msm8996_adsp_resource},
 	{ .compatible = "qcom,msm8998-slpi-pas", .data = &msm8996_slpi_resource_init},
-	{ .compatible = "qcom,qcs404-adsp-pas", .data = &adsp_resource_init },
-	{ .compatible = "qcom,qcs404-cdsp-pas", .data = &cdsp_resource_init },
-	{ .compatible = "qcom,qcs404-wcss-pas", .data = &wcss_resource_init },
-	{ .compatible = "qcom,sc7180-adsp-pas", .data = &sm8250_adsp_resource},
-	{ .compatible = "qcom,sc7180-mpss-pas", .data = &mpss_resource_init},
-	{ .compatible = "qcom,sc7280-adsp-pas", .data = &sm8350_adsp_resource},
+	{ .compatible = "qcom,qcs404-adsp-pas", .data = &qcs404_adsp_resource },
+	{ .compatible = "qcom,qcs404-cdsp-pas", .data = &qcs404_cdsp_resource },
+	{ .compatible = "qcom,qcs404-wcss-pas", .data = &qcs404_wcss_resource },
+	{ .compatible = "qcom,sc7180-adsp-pas", .data = &sc7180_adsp_resource},
+	{ .compatible = "qcom,sc7180-mpss-pas", .data = &sc7180_mpss_resource},
+	{ .compatible = "qcom,sc7280-adsp-pas", .data = &sc7280_adsp_resource},
 	{ .compatible = "qcom,sc7280-cdsp-pas", .data = &sm6350_cdsp_resource},
-	{ .compatible = "qcom,sc7280-mpss-pas", .data = &mpss_resource_init},
+	{ .compatible = "qcom,sc7280-mpss-pas", .data = &sc7280_mpss_resource},
 	{ .compatible = "qcom,sc7280-wpss-pas", .data = &sc7280_wpss_resource},
 	{ .compatible = "qcom,sc8180x-adsp-pas", .data = &sm8150_adsp_resource},
 	{ .compatible = "qcom,sc8180x-cdsp-pas", .data = &sm8150_cdsp_resource},
 	{ .compatible = "qcom,sc8180x-mpss-pas", .data = &sc8180x_mpss_resource},
-	{ .compatible = "qcom,sc8280xp-adsp-pas", .data = &sm8250_adsp_resource},
+	{ .compatible = "qcom,sc8280xp-adsp-pas", .data = &sm8350_adsp_resource},
 	{ .compatible = "qcom,sc8280xp-nsp0-pas", .data = &sc8280xp_nsp0_resource},
 	{ .compatible = "qcom,sc8280xp-nsp1-pas", .data = &sc8280xp_nsp1_resource},
 	{ .compatible = "qcom,sdm660-adsp-pas", .data = &adsp_resource_init},
@@ -1333,18 +1669,18 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sdm845-cdsp-pas", .data = &sdm845_cdsp_resource_init},
 	{ .compatible = "qcom,sdm845-slpi-pas", .data = &sdm845_slpi_resource_init},
 	{ .compatible = "qcom,sdx55-mpss-pas", .data = &sdx55_mpss_resource},
-	{ .compatible = "qcom,sm6115-adsp-pas", .data = &adsp_resource_init},
-	{ .compatible = "qcom,sm6115-cdsp-pas", .data = &cdsp_resource_init},
+	{ .compatible = "qcom,sm6115-adsp-pas", .data = &sm6115_adsp_resource},
+	{ .compatible = "qcom,sm6115-cdsp-pas", .data = &qcs404_cdsp_resource},
 	{ .compatible = "qcom,sm6115-mpss-pas", .data = &sc8180x_mpss_resource},
 	{ .compatible = "qcom,sm6350-adsp-pas", .data = &sm6350_adsp_resource},
 	{ .compatible = "qcom,sm6350-cdsp-pas", .data = &sm6350_cdsp_resource},
-	{ .compatible = "qcom,sm6350-mpss-pas", .data = &mpss_resource_init},
+	{ .compatible = "qcom,sm6350-mpss-pas", .data = &sm8150_mpss_resource},
 	{ .compatible = "qcom,sm6375-adsp-pas", .data = &sm6350_adsp_resource},
 	{ .compatible = "qcom,sm6375-cdsp-pas", .data = &sm8150_cdsp_resource},
 	{ .compatible = "qcom,sm6375-mpss-pas", .data = &sm6375_mpss_resource},
 	{ .compatible = "qcom,sm8150-adsp-pas", .data = &sm8150_adsp_resource},
 	{ .compatible = "qcom,sm8150-cdsp-pas", .data = &sm8150_cdsp_resource},
-	{ .compatible = "qcom,sm8150-mpss-pas", .data = &mpss_resource_init},
+	{ .compatible = "qcom,sm8150-mpss-pas", .data = &sm8150_mpss_resource},
 	{ .compatible = "qcom,sm8150-slpi-pas", .data = &sdm845_slpi_resource_init},
 	{ .compatible = "qcom,sm8250-adsp-pas", .data = &sm8250_adsp_resource},
 	{ .compatible = "qcom,sm8250-cdsp-pas", .data = &sm8250_cdsp_resource},
@@ -1352,7 +1688,7 @@ static const struct of_device_id adsp_of_match[] = {
 	{ .compatible = "qcom,sm8350-adsp-pas", .data = &sm8350_adsp_resource},
 	{ .compatible = "qcom,sm8350-cdsp-pas", .data = &sm8350_cdsp_resource},
 	{ .compatible = "qcom,sm8350-slpi-pas", .data = &sdm845_slpi_resource_init},
-	{ .compatible = "qcom,sm8350-mpss-pas", .data = &mpss_resource_init},
+	{ .compatible = "qcom,sm8350-mpss-pas", .data = &sc7280_mpss_resource},
 	{ .compatible = "qcom,sm8450-adsp-pas", .data = &sm8350_adsp_resource},
 	{ .compatible = "qcom,sm8450-cdsp-pas", .data = &sm8350_cdsp_resource},
 	{ .compatible = "qcom,sm8450-slpi-pas", .data = &sdm845_slpi_resource_init},
