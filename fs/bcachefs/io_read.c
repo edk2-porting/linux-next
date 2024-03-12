@@ -134,7 +134,7 @@ static void promote_done(struct bch_write_op *wop)
 		container_of(wop, struct promote_op, write.op);
 	struct bch_fs *c = op->write.op.c;
 
-	bch2_time_stats_update(&c->times[BCH_TIME_data_promote],
+	time_stats_update(&c->times[BCH_TIME_data_promote],
 			       op->start_time);
 	promote_free(c, op);
 }
@@ -174,7 +174,7 @@ static struct promote_op *__promote_alloc(struct btree_trans *trans,
 	if (!bch2_write_ref_tryget(c, BCH_WRITE_REF_promote))
 		return ERR_PTR(-BCH_ERR_nopromote_no_writes);
 
-	op = kzalloc(sizeof(*op) + sizeof(struct bio_vec) * pages, GFP_KERNEL);
+	op = kzalloc(struct_size(op, bi_inline_vecs, pages), GFP_KERNEL);
 	if (!op) {
 		ret = -BCH_ERR_nopromote_enomem;
 		goto err;
@@ -356,7 +356,7 @@ static inline struct bch_read_bio *bch2_rbio_free(struct bch_read_bio *rbio)
 static void bch2_rbio_done(struct bch_read_bio *rbio)
 {
 	if (rbio->start_time)
-		bch2_time_stats_update(&rbio->c->times[BCH_TIME_data_read],
+		time_stats_update(&rbio->c->times[BCH_TIME_data_read],
 				       rbio->start_time);
 	bio_endio(&rbio->bio);
 }
