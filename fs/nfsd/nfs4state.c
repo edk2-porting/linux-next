@@ -8835,7 +8835,7 @@ nfsd4_deleg_getattr_conflict(struct svc_rqst *rqstp, struct inode *inode,
 			}
 break_lease:
 			nfsd_stats_wdeleg_getattr_inc(nn);
-			dp = fl->fl_owner;
+			dp = fl->c.flc_owner;
 			ncf = &dp->dl_cb_fattr;
 			nfs4_cb_getattr(&dp->dl_cb_fattr);
 			spin_unlock(&ctx->flc_lock);
