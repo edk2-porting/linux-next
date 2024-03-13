@@ -914,6 +914,13 @@ static const struct qcom_pdm_domain_data *sm8350_adsp_domains[] = {
 	&adsp_charger_pd,
 };
 
+static const struct qcom_pdm_domain_data *sm8550_adsp_domains[] = {
+	&adsp_audio_pd,
+	&adsp_sensor_pd,
+	&adsp_root_pd,
+	&adsp_charger_pd,
+};
+
 static const struct qcom_pdm_domain_data cdsp_root_pd = {
 	.domain = "msm/cdsp/root_pd",
 	.instance_id = 76,
@@ -1522,8 +1529,8 @@ static const struct adsp_data sm8550_adsp_resource = {
 	.ssr_name = "lpass",
 	.sysmon_name = "adsp",
 	.ssctl_id = 0x14,
-	.domains = sm8350_adsp_domains,
-	.num_domains = ARRAY_SIZE(sm8350_adsp_domains),
+	.domains = sm8550_adsp_domains,
+	.num_domains = ARRAY_SIZE(sm8550_adsp_domains),
 };
 
 static const struct adsp_data sm8550_cdsp_resource = {
