@@ -120,7 +120,6 @@
 		compatible = "hdmi-connector";
 		type = "d";
 		hpd-gpios = <&tlmm 9 GPIO_ACTIVE_HIGH>;
-		// ddc-i2c-bus = <&i2c_hub_0>;
 
 		port {
 			hdmi_con: endpoint {
@@ -222,8 +221,8 @@
 		compatible = "regulator-fixed";
 		regulator-name = "hdmi_pwr";
 
-		regulator-min-microvolt = <3700000>;
-		regulator-max-microvolt = <3700000>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
 
 		gpio = <&tlmm 10 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
@@ -704,6 +703,11 @@
 	zap-shader {
 		firmware-name = "qcom/sm8550/ayn/odin2/a740_zap.mbn";
 	};
+};
+
+&hub_i2c0_data_clk {
+	/delete-property/ bias-pull-up;
+	bias-disable;
 };
 
 &i2c4 {
