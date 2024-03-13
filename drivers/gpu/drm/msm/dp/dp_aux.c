@@ -305,26 +305,14 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *dp_aux,
 	}
 
 	/*
-	 * For eDP it's important to give a reasonably long wait here for HPD
-	 * to be asserted. This is because the panel driver may have _just_
-	 * turned on the panel and then tried to do an AUX transfer. The panel
-	 * driver has no way of knowing when the panel is ready, so it's up
-	 * to us to wait. For DP we never get into this situation so let's
-	 * avoid ever doing the extra long wait for DP and just query HPD
-	 * directly.
+	 * If HPD isn't asserted then the transfer won't succeed. Return
+	 * right away. If we don't do this we can end up with long timeouts
+	 * if someone tries to access the DP AUX character device when no
+	 * DP device is connected.
 	 */
-	if (aux->is_edp) {
-		ret = dp_catalog_aux_wait_for_hpd_connect_state(aux->catalog,
-								500000);
-		if (ret) {
-			DRM_DEBUG_DP("Panel not ready for aux transactions\n");
-			goto exit;
-		}
-	} else {
-		if (!dp_catalog_aux_is_hpd_connected(aux->catalog)) {
-			ret = -ENXIO;
-			goto exit;
-		}
+	if (!dp_catalog_aux_is_hpd_connected(aux->catalog)) {
+		ret = -ENXIO;
+		goto exit;
 	}
 
 	dp_aux_update_offset_and_segment(aux, msg);
