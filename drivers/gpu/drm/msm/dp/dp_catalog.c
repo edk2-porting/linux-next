@@ -276,6 +276,16 @@ int dp_catalog_aux_wait_for_hpd_connect_state(struct dp_catalog *dp_catalog)
 				2000, 500000);
 }
 
+bool dp_catalog_aux_is_hpd_connected(struct dp_catalog *dp_catalog)
+{
+	struct dp_catalog_private *catalog = container_of(dp_catalog,
+				struct dp_catalog_private, dp_catalog);
+
+	/* poll for hpd connected status every 2ms and timeout after 500ms */
+	return readl(catalog->io->dp_controller.aux.base + REG_DP_DP_HPD_INT_STATUS) &
+	       DP_DP_HPD_STATE_STATUS_CONNECTED;
+}
+
 static void dump_regs(void __iomem *base, int len)
 {
 	int i;

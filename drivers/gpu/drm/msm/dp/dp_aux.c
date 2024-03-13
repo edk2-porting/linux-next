@@ -310,12 +310,18 @@ static ssize_t dp_aux_transfer(struct drm_dp_aux *dp_aux,
 	 * turned on the panel and then tried to do an AUX transfer. The panel
 	 * driver has no way of knowing when the panel is ready, so it's up
 	 * to us to wait. For DP we never get into this situation so let's
-	 * avoid ever doing the extra long wait for DP.
+	 * avoid ever doing the extra long wait for DP and just query HPD
+	 * directly.
 	 */
 	if (aux->is_edp) {
 		ret = dp_catalog_aux_wait_for_hpd_connect_state(aux->catalog);
 		if (ret) {
 			DRM_DEBUG_DP("Panel not ready for aux transactions\n");
+			goto exit;
+		}
+	} else {
+		if (!dp_catalog_aux_is_hpd_connected(aux->catalog)) {
+			ret = -ENXIO;
 			goto exit;
 		}
 	}
