@@ -55,6 +55,7 @@ config SND_SOC_ALL_CODECS
 	imply SND_SOC_AUDIO_IIO_AUX
 	imply SND_SOC_AW8738
 	imply SND_SOC_AW87390
+	imply SND_SOC_AW883XX
 	imply SND_SOC_AW88395
 	imply SND_SOC_AW88261
 	imply SND_SOC_AW88399
@@ -647,6 +648,19 @@ config SND_SOC_AW8738
 config SND_SOC_AW88395_LIB
 	select CRC8
 	tristate
+
+config SND_SOC_AW883XX
+	tristate "Soc Audio for awinic aw883xx"
+	depends on I2C
+	select CRC32
+	select REGMAP_I2C
+	select GPIOLIB
+	select SND_SOC_AW88395_LIB
+	help
+	  this option enables support for aw883xx Smart PA.
+	  The Awinic AW883xx is an I2S/TDM input, high efficiency
+	  digital Smart K audio amplifier with an integrated 10V
+	  smart boost convert.
 
 config SND_SOC_AW88395
 	tristate "Soc Audio for awinic aw88395"
