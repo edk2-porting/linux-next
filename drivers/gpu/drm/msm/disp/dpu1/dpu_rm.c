@@ -694,6 +694,83 @@ int dpu_rm_reserve(
 	return ret;
 }
 
+struct dpu_hw_sspp *dpu_rm_reserve_sspp(struct dpu_rm *rm,
+					struct dpu_global_state *global_state,
+					struct drm_crtc *crtc,
+					struct dpu_rm_sspp_requirements *reqs)
+{
+	uint32_t crtc_id = crtc->base.id;
+	unsigned int weight, best_weght = UINT_MAX;
+	struct dpu_hw_sspp *hw_sspp;
+	unsigned long mask = 0;
+	int i, best_idx = -1;
+
+	/*
+	 * Don't take cursor feature into consideration until there is proper support for SSPP_CURSORn.
+	 */
+	mask |= BIT(DPU_SSPP_CURSOR);
+
+	if (reqs->scale)
+		mask |= BIT(DPU_SSPP_SCALER_RGB) |
+			BIT(DPU_SSPP_SCALER_QSEED2) |
+			BIT(DPU_SSPP_SCALER_QSEED3_COMPATIBLE);
+
+	if (reqs->yuv)
+		mask |= BIT(DPU_SSPP_CSC) |
+			BIT(DPU_SSPP_CSC_10BIT);
+
+	if (reqs->rot90)
+		mask |= BIT(DPU_SSPP_INLINE_ROTATION);
+
+	for (i = 0; i < ARRAY_SIZE(rm->hw_sspp); i++) {
+		if (!rm->hw_sspp[i])
+			continue;
+
+		if (global_state->sspp_to_crtc_id[i])
+			continue;
+
+		hw_sspp = rm->hw_sspp[i];
+
+		/* skip incompatible planes */
+		if (reqs->scale && !hw_sspp->cap->sblk->scaler_blk.len)
+			continue;
+
+		if (reqs->yuv && !hw_sspp->cap->sblk->csc_blk.len)
+			continue;
+
+		if (reqs->rot90 && !(hw_sspp->cap->features & DPU_SSPP_INLINE_ROTATION))
+			continue;
+
+		/*
+		 * For non-yuv, non-scaled planes prefer simple (DMA or RGB)
+		 * plane, falling back to VIG only if there are no such planes.
+		 *
+		 * This way we'd leave VIG sspps to be later used for YUV formats.
+		 */
+		weight = hweight64(hw_sspp->cap->features & ~mask);
+		if (weight < best_weght) {
+			best_weght = weight;
+			best_idx = i;
+		}
+	}
+
+	if (best_idx < 0)
+		return NULL;
+
+	global_state->sspp_to_crtc_id[best_idx] = crtc_id;
+
+	return rm->hw_sspp[best_idx];
+}
+
+void dpu_rm_release_all_sspp(struct dpu_global_state *global_state,
+			     struct drm_crtc *crtc)
+{
+	uint32_t crtc_id = crtc->base.id;
+
+	_dpu_rm_clear_mapping(global_state->sspp_to_crtc_id,
+		ARRAY_SIZE(global_state->sspp_to_crtc_id), crtc_id);
+}
+
 int dpu_rm_get_assigned_resources(struct dpu_rm *rm,
 	struct dpu_global_state *global_state, uint32_t enc_id,
 	enum dpu_hw_blk_type type, struct dpu_hw_blk **blks, int blks_size)
