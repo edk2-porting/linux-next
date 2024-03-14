@@ -51,6 +51,16 @@ snd-soc-aw87390-objs := aw87390.o
 snd-soc-aw88395-lib-objs := aw88395/aw88395_lib.o
 snd-soc-aw88395-objs := aw88395/aw88395.o \
 			aw88395/aw88395_device.o
+snd-soc-aw883xx-objs := aw883xx/aw883xx.o \
+			aw883xx/aw883xx_monitor.o \
+			aw883xx/aw883xx_init.o \
+			aw883xx/aw883xx_device.o \
+			aw883xx/aw883xx_calib.o \
+			aw883xx/aw883xx_bin_parse.o \
+			aw883xx/aw883xx_spin.o \
+			aw883xx/aw883xx_pid_2049_init.o \
+			aw883xx/aw883xx_pid_2066_init.o \
+			aw883xx/aw883xx_pid_2183_init.o
 snd-soc-aw88261-objs := aw88261.o
 snd-soc-aw88399-objs := aw88399.o
 snd-soc-bd28623-objs := bd28623.o
@@ -447,6 +457,7 @@ obj-$(CONFIG_SND_SOC_AW8738)	+= snd-soc-aw8738.o
 obj-$(CONFIG_SND_SOC_AW87390)	+= snd-soc-aw87390.o
 obj-$(CONFIG_SND_SOC_AW88395_LIB) += snd-soc-aw88395-lib.o
 obj-$(CONFIG_SND_SOC_AW88395)	+=snd-soc-aw88395.o
+obj-$(CONFIG_SND_SOC_AW883XX)	+=snd-soc-aw883xx.o
 obj-$(CONFIG_SND_SOC_AW88261)	+=snd-soc-aw88261.o
 obj-$(CONFIG_SND_SOC_AW88399)	+= snd-soc-aw88399.o
 obj-$(CONFIG_SND_SOC_BD28623)	+= snd-soc-bd28623.o
