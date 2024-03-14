@@ -47,7 +47,7 @@
 		serial2 = &uart15;
 	};
 
-/*
+
 	wcd938x: audio-codec {
 		compatible = "qcom,wcd9385-codec";
 
@@ -73,7 +73,7 @@
 
 		#sound-dai-cells = <1>;
 	};
-*/
+
 
 	backlight: backlight {
 		compatible = "pwm-backlight";
@@ -328,7 +328,6 @@
 		enable-active-high;
 	};
 
-/*
 	sound {
 		compatible = "qcom,sm8550-sndcard", "qcom,sm8450-sndcard";
 		model = "QCS8550-AYN-ODIN2";
@@ -405,7 +404,6 @@
 			};
 		};
 	};
-*/
 
 	usb0-sbu-mux {
 		compatible = "gpio-sbu-mux";
@@ -922,25 +920,29 @@
 &i2c_hub_2 {
 	status = "okay";
 
-	/* No driver. aw883xx chip id = 2066 */
+	aw883xx_smartpa@34 {
+		status = "okay";
+		re-max = <40000>;
+		re-min = <1000>;
+		sound-channel = <0>;
+		sync-load = <1>;
+		irq-gpio = <&tlmm 97 GPIO_ACTIVE_HIGH>;
+		reset-gpio = <&tlmm 103 GPIO_ACTIVE_HIGH>;
+		reg = <0x34>;
+		compatible = "awinic,aw883xx_smartpa";
+	};
 
-	// audio-codec@34 {
-	// 	compatible = "awinic,aw88395";
-	// 	reg = <0x34>;
-	// 	#sound-dai-cells = <0>;
-	// 	reset-gpios = <&tlmm 103 GPIO_ACTIVE_HIGH>;
-	// 	awinic,audio-channel = <0>;
-	// 	awinic,sync-flag;
-	// };
-
-	// audio-codec@35 {
-	// 	compatible = "awinic,aw88395";
-	// 	reg = <0x35>;
-	// 	#sound-dai-cells = <0>;
-	// 	reset-gpios = <&tlmm 100 GPIO_ACTIVE_HIGH>;
-	// 	awinic,audio-channel = <1>;
-	// 	awinic,sync-flag;
-	// };
+	aw883xx_smartpa@35 {
+		status = "okay";
+		re-max = <40000>;
+		re-min = <1000>;
+		sound-channel = <1>;
+		sync-load = <1>;
+		irq-gpio = <&tlmm 98 GPIO_ACTIVE_HIGH>;
+		reset-gpio = <&tlmm 100 GPIO_ACTIVE_HIGH>;
+		reg = <0x35>;
+		compatible = "awinic,aw883xx_smartpa";
+	};
 
 	// typec-mux@42 {
 	// 	compatible = "fcs,fsa4480";
@@ -965,11 +967,11 @@
 };
 
 // &lpass_vamacro {
-	/* For recording I guess */
-	// pinctrl-0 = <&dmic01_default>, <&dmic02_default>;
-	// pinctrl-names = "default";
-	// vdd-micb-supply = <&vreg_s10b_1p8>;
-	// qcom,dmic-sample-rate = <4800000>;
+// 	/* For recording I guess */
+// 	pinctrl-0 = <&dmic01_default>, <&dmic02_default>;
+// 	pinctrl-names = "default";
+// 	vdd-micb-supply = <&vreg_s10b_1p8>;
+// 	qcom,dmic-sample-rate = <4800000>;
 // };
 
 // &lpass_wsamacro {
@@ -1219,27 +1221,27 @@
 	clock-frequency = <32000>;
 };
 
-// &swr1 {
-// 	status = "okay";
+&swr1 {
+	status = "okay";
 
-// 	/* WCD9385 RX */
-// 	wcd_rx: codec@0,4 {
-// 		compatible = "sdw20217010d00";
-// 		reg = <0 4>;
-// 		qcom,rx-port-mapping = <1 2 3 4 5>;
-// 	};
-// };
+	/* WCD9385 RX */
+	wcd_rx: codec@0,4 {
+		compatible = "sdw20217010d00";
+		reg = <0 4>;
+		qcom,rx-port-mapping = <1 2 3 4 5>;
+	};
+};
 
-// &swr2 {
-// 	status = "okay";
+&swr2 {
+	status = "okay";
 
-// 	/* WCD9385 TX */
-// 	wcd_tx: codec@0,3 {
-// 		compatible = "sdw20217010d00";
-// 		reg = <0 3>;
-// 		qcom,tx-port-mapping = <2 2 3 4>;
-// 	};
-// };
+	/* WCD9385 TX */
+	wcd_tx: codec@0,3 {
+		compatible = "sdw20217010d00";
+		reg = <0 3>;
+		qcom,tx-port-mapping = <2 2 3 4>;
+	};
+};
 
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
