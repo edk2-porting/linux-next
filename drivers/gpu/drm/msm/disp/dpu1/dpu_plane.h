@@ -30,6 +30,7 @@
  * @plane_fetch_bw: calculated BW per plane
  * @plane_clk: calculated clk per plane
  * @needs_dirtyfb: whether attached CRTC needs pixel data explicitly flushed
+ * @saved_fmt: format used by the plane's FB, saved for for virtual plane support
  */
 struct dpu_plane_state {
 	struct drm_plane_state base;
@@ -46,6 +47,8 @@ struct dpu_plane_state {
 	u64 plane_clk;
 
 	bool needs_dirtyfb;
+
+	const struct dpu_format *saved_fmt;
 };
 
 #define to_dpu_plane_state(x) \
@@ -76,6 +79,16 @@ struct drm_plane *dpu_plane_init(struct drm_device *dev,
 		unsigned long possible_crtcs);
 
 /**
+ * dpu_plane_init_virtual - create new dpu virtualized plane
+ * @dev:   Pointer to DRM device
+ * @type:  Plane type - PRIMARY/OVERLAY/CURSOR
+ * @possible_crtcs: bitmask of crtc that can be attached to the given pipe
+ */
+struct drm_plane *dpu_plane_init_virtual(struct drm_device *dev,
+					 enum drm_plane_type type,
+					 unsigned long possible_crtcs);
+
+/**
  * dpu_plane_color_fill - enables color fill on plane
  * @plane:  Pointer to DRM plane object
  * @color:  RGB fill color value, [23..16] Blue, [15..8] Green, [7..0] Red
@@ -90,5 +103,11 @@ void dpu_plane_danger_signal_ctrl(struct drm_plane *plane, bool enable);
 #else
 static inline void dpu_plane_danger_signal_ctrl(struct drm_plane *plane, bool enable) {}
 #endif
+
+int dpu_assign_plane_resources(struct dpu_global_state *global_state,
+			       struct drm_atomic_state *state,
+			       struct drm_crtc *crtc,
+			       struct drm_plane_state **states,
+			       unsigned int num_planes);
 
 #endif /* _DPU_PLANE_H_ */
