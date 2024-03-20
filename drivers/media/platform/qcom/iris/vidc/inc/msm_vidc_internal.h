@@ -24,9 +24,6 @@
 struct msm_vidc_core;
 struct msm_vidc_inst;
 
-static const char video_banner[] = "Video-Banner: (" __stringify(VIDEO_COMPILE_BY) "@"
-	__stringify(VIDEO_COMPILE_HOST) ") (" __stringify(VIDEO_COMPILE_TIME) ")";
-
 #define MAX_NAME_LENGTH   128
 #define VENUS_VERSION_LENGTH 128
 #define MAX_MATRIX_COEFFS 9
