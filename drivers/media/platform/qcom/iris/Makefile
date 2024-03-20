@@ -1,14 +1,5 @@
 KBUILD_OPTIONS+= VIDEO_ROOT=$(KERNEL_SRC)/$(M)
 
-VIDEO_COMPILE_TIME = $(shell date)
-VIDEO_COMPILE_BY = $(shell whoami | sed 's/\\/\\\\/')
-VIDEO_COMPILE_HOST = $(shell uname -n)
-VIDEO_GEN_PATH = $(srctree)/$(src)/vidc/inc/video_generated_h
-
-$(shell echo '#define VIDEO_COMPILE_TIME "$(VIDEO_COMPILE_TIME)"' > $(VIDEO_GEN_PATH))
-$(shell echo '#define VIDEO_COMPILE_BY "$(VIDEO_COMPILE_BY)"' >> $(VIDEO_GEN_PATH))
-$(shell echo '#define VIDEO_COMPILE_HOST "$(VIDEO_COMPILE_HOST)"' >> $(VIDEO_GEN_PATH))
-
 iris-objs += vidc/src/msm_vidc_v4l2.o \
                   vidc/src/msm_vidc_vb2.o \
                   vidc/src/msm_vidc.o \
