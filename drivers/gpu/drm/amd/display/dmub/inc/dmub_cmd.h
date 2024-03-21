@@ -194,6 +194,11 @@ union abm_flags {
 		 * of user backlight level.
 		 */
 		unsigned int abm_gradual_bl_change : 1;
+
+		/**
+		 * @abm_new_frame: Indicates if a new frame update needed for ABM to ramp up into steady
+		 */
+		unsigned int abm_new_frame : 1;
 	} bitfields;
 
 	unsigned int u32All;
@@ -724,7 +729,13 @@ union dmub_shared_state_ips_driver_signals {
  */
 struct dmub_shared_state_ips_fw {
 	union dmub_shared_state_ips_fw_signals signals; /**< 4 bytes, IPS signal bits */
-	uint32_t reserved[61]; /**< Reversed, to be updated when adding new fields. */
+	uint32_t rcg_entry_count; /**< Entry counter for RCG */
+	uint32_t rcg_exit_count; /**< Exit counter for RCG */
+	uint32_t ips1_entry_count; /**< Entry counter for IPS1 */
+	uint32_t ips1_exit_count; /**< Exit counter for IPS1 */
+	uint32_t ips2_entry_count; /**< Entry counter for IPS2 */
+	uint32_t ips2_exit_count; /**< Exit counter for IPS2 */
+	uint32_t reserved[55]; /**< Reversed, to be updated when adding new fields. */
 }; /* 248-bytes, fixed */
 
 /**
@@ -2931,18 +2942,49 @@ struct dmub_rb_cmd_psr_set_power_opt {
 	struct dmub_cmd_psr_set_power_opt_data psr_set_power_opt_data;
 };
 
+/**
+ * Definition of Replay Residency GPINT command.
+ * Bit[0] - Residency mode for Revision 0
+ * Bit[1] - Enable/Disable state
+ * Bit[2-3] - Revision number
+ * Bit[4-7] - Residency mode for Revision 1
+ * Bit[8] - Panel instance
+ * Bit[9-15] - Reserved
+ */
+
+enum pr_residency_mode {
+	PR_RESIDENCY_MODE_PHY = 0x0,
+	PR_RESIDENCY_MODE_ALPM,
+	PR_RESIDENCY_MODE_IPS2,
+	PR_RESIDENCY_MODE_FRAME_CNT,
+	PR_RESIDENCY_MODE_ENABLEMENT_PERIOD,
+};
+
 #define REPLAY_RESIDENCY_MODE_SHIFT            (0)
 #define REPLAY_RESIDENCY_ENABLE_SHIFT          (1)
+#define REPLAY_RESIDENCY_REVISION_SHIFT        (2)
+#define REPLAY_RESIDENCY_MODE2_SHIFT           (4)
 
 #define REPLAY_RESIDENCY_MODE_MASK             (0x1 << REPLAY_RESIDENCY_MODE_SHIFT)
-# define REPLAY_RESIDENCY_MODE_PHY             (0x0 << REPLAY_RESIDENCY_MODE_SHIFT)
-# define REPLAY_RESIDENCY_MODE_ALPM            (0x1 << REPLAY_RESIDENCY_MODE_SHIFT)
-# define REPLAY_RESIDENCY_MODE_IPS             0x10
+# define REPLAY_RESIDENCY_FIELD_MODE_PHY       (0x0 << REPLAY_RESIDENCY_MODE_SHIFT)
+# define REPLAY_RESIDENCY_FIELD_MODE_ALPM      (0x1 << REPLAY_RESIDENCY_MODE_SHIFT)
+
+#define REPLAY_RESIDENCY_MODE2_MASK            (0xF << REPLAY_RESIDENCY_MODE2_SHIFT)
+# define REPLAY_RESIDENCY_FIELD_MODE2_IPS      (0x1 << REPLAY_RESIDENCY_MODE2_SHIFT)
+# define REPLAY_RESIDENCY_FIELD_MODE2_FRAME_CNT    (0x2 << REPLAY_RESIDENCY_MODE2_SHIFT)
+# define REPLAY_RESIDENCY_FIELD_MODE2_EN_PERIOD	(0x3 << REPLAY_RESIDENCY_MODE2_SHIFT)
 
 #define REPLAY_RESIDENCY_ENABLE_MASK           (0x1 << REPLAY_RESIDENCY_ENABLE_SHIFT)
 # define REPLAY_RESIDENCY_DISABLE              (0x0 << REPLAY_RESIDENCY_ENABLE_SHIFT)
 # define REPLAY_RESIDENCY_ENABLE               (0x1 << REPLAY_RESIDENCY_ENABLE_SHIFT)
 
+#define REPLAY_RESIDENCY_REVISION_MASK         (0x3 << REPLAY_RESIDENCY_REVISION_SHIFT)
+# define REPLAY_RESIDENCY_REVISION_0           (0x0 << REPLAY_RESIDENCY_REVISION_SHIFT)
+# define REPLAY_RESIDENCY_REVISION_1           (0x1 << REPLAY_RESIDENCY_REVISION_SHIFT)
+
+/**
+ * Definition of a replay_state.
+ */
 enum replay_state {
 	REPLAY_STATE_0			= 0x0,
 	REPLAY_STATE_1			= 0x10,
@@ -3238,6 +3280,14 @@ struct dmub_cmd_replay_set_coasting_vtotal_data {
 	 * Currently the support is only for 0 or 1
 	 */
 	uint8_t panel_inst;
+	/**
+	 * 16-bit value dicated by driver that indicates the coasting vtotal high byte part.
+	 */
+	uint16_t coasting_vtotal_high;
+	/**
+	 * Explicit padding to 4 byte boundary.
+	 */
+	uint8_t pad[2];
 };
 
 /**

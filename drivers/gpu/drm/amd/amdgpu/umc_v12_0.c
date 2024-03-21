@@ -404,10 +404,16 @@ static int umc_v12_0_err_cnt_init_per_channel(struct amdgpu_device *adev,
 static void umc_v12_0_ecc_info_query_ras_error_count(struct amdgpu_device *adev,
 					void *ras_error_status)
 {
+	struct ras_query_context qctx;
+
+	memset(&qctx, 0, sizeof(qctx));
+	qctx.event_id = amdgpu_ras_acquire_event_id(adev, amdgpu_ras_intr_triggered() ?
+						    RAS_EVENT_TYPE_ISR : RAS_EVENT_TYPE_INVALID);
+
 	amdgpu_mca_smu_log_ras_error(adev,
-		AMDGPU_RAS_BLOCK__UMC, AMDGPU_MCA_ERROR_TYPE_CE, ras_error_status);
+		AMDGPU_RAS_BLOCK__UMC, AMDGPU_MCA_ERROR_TYPE_CE, ras_error_status, &qctx);
 	amdgpu_mca_smu_log_ras_error(adev,
-		AMDGPU_RAS_BLOCK__UMC, AMDGPU_MCA_ERROR_TYPE_UE, ras_error_status);
+		AMDGPU_RAS_BLOCK__UMC, AMDGPU_MCA_ERROR_TYPE_UE, ras_error_status, &qctx);
 }
 
 static void umc_v12_0_ecc_info_query_ras_error_address(struct amdgpu_device *adev,
@@ -498,43 +504,39 @@ const struct amdgpu_ras_block_hw_ops umc_v12_0_ras_hw_ops = {
 	.query_ras_error_address = umc_v12_0_query_ras_error_address,
 };
 
-static int umc_v12_0_aca_bank_generate_report(struct aca_handle *handle, struct aca_bank *bank, enum aca_error_type type,
-					      struct aca_bank_report *report, void *data)
+static int umc_v12_0_aca_bank_parser(struct aca_handle *handle, struct aca_bank *bank,
+				     enum aca_smu_type type, void *data)
 {
 	struct amdgpu_device *adev = handle->adev;
+	struct aca_bank_info info;
+	enum aca_error_type err_type;
 	u64 status;
 	int ret;
 
-	ret = aca_bank_info_decode(bank, &report->info);
+	status = bank->regs[ACA_REG_IDX_STATUS];
+	if (umc_v12_0_is_deferred_error(adev, status))
+		err_type = ACA_ERROR_TYPE_DEFERRED;
+	else if (umc_v12_0_is_uncorrectable_error(adev, status))
+		err_type = ACA_ERROR_TYPE_UE;
+	else if (umc_v12_0_is_correctable_error(adev, status))
+		err_type = ACA_ERROR_TYPE_CE;
+	else
+		return 0;
+
+	ret = aca_bank_info_decode(bank, &info);
 	if (ret)
 		return ret;
 
-	status = bank->regs[ACA_REG_IDX_STATUS];
-	switch (type) {
-	case ACA_ERROR_TYPE_UE:
-		if (umc_v12_0_is_uncorrectable_error(adev, status)) {
-			report->count[type] = 1;
-		}
-		break;
-	case ACA_ERROR_TYPE_CE:
-		if (umc_v12_0_is_correctable_error(adev, status)) {
-			report->count[type] = 1;
-		}
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
+	return aca_error_cache_log_bank_error(handle, &info, err_type, 1ULL);
 }
 
 static const struct aca_bank_ops umc_v12_0_aca_bank_ops = {
-	.aca_bank_generate_report = umc_v12_0_aca_bank_generate_report,
+	.aca_bank_parser = umc_v12_0_aca_bank_parser,
 };
 
 const struct aca_info umc_v12_0_aca_info = {
 	.hwip = ACA_HWIP_TYPE_UMC,
-	.mask = ACA_ERROR_UE_MASK | ACA_ERROR_CE_MASK,
+	.mask = ACA_ERROR_UE_MASK | ACA_ERROR_CE_MASK | ACA_ERROR_DEFERRED_MASK,
 	.bank_ops = &umc_v12_0_aca_bank_ops,
 };
 

@@ -431,15 +431,10 @@ static void sdma_v4_4_2_inst_gfx_stop(struct amdgpu_device *adev,
 	struct amdgpu_ring *sdma[AMDGPU_MAX_SDMA_INSTANCES];
 	u32 doorbell_offset, doorbell;
 	u32 rb_cntl, ib_cntl;
-	int i, unset = 0;
+	int i;
 
 	for_each_inst(i, inst_mask) {
 		sdma[i] = &adev->sdma.instance[i].ring;
-
-		if ((adev->mman.buffer_funcs_ring == sdma[i]) && unset != 1) {
-			amdgpu_ttm_set_buffer_funcs_status(adev, false);
-			unset = 1;
-		}
 
 		rb_cntl = RREG32_SDMA(i, regSDMA_GFX_RB_CNTL);
 		rb_cntl = REG_SET_FIELD(rb_cntl, SDMA_GFX_RB_CNTL, RB_ENABLE, 0);
@@ -487,20 +482,10 @@ static void sdma_v4_4_2_inst_rlc_stop(struct amdgpu_device *adev,
 static void sdma_v4_4_2_inst_page_stop(struct amdgpu_device *adev,
 				       uint32_t inst_mask)
 {
-	struct amdgpu_ring *sdma[AMDGPU_MAX_SDMA_INSTANCES];
 	u32 rb_cntl, ib_cntl;
 	int i;
-	bool unset = false;
 
 	for_each_inst(i, inst_mask) {
-		sdma[i] = &adev->sdma.instance[i].page;
-
-		if ((adev->mman.buffer_funcs_ring == sdma[i]) &&
-			(!unset)) {
-			amdgpu_ttm_set_buffer_funcs_status(adev, false);
-			unset = true;
-		}
-
 		rb_cntl = RREG32_SDMA(i, regSDMA_PAGE_RB_CNTL);
 		rb_cntl = REG_SET_FIELD(rb_cntl, SDMA_PAGE_RB_CNTL,
 					RB_ENABLE, 0);
@@ -950,13 +935,7 @@ static int sdma_v4_4_2_inst_start(struct amdgpu_device *adev,
 			r = amdgpu_ring_test_helper(page);
 			if (r)
 				return r;
-
-			if (adev->mman.buffer_funcs_ring == page)
-				amdgpu_ttm_set_buffer_funcs_status(adev, true);
 		}
-
-		if (adev->mman.buffer_funcs_ring == ring)
-			amdgpu_ttm_set_buffer_funcs_status(adev, true);
 	}
 
 	return r;
@@ -2210,35 +2189,39 @@ static const struct amdgpu_ras_block_hw_ops sdma_v4_4_2_ras_hw_ops = {
 	.reset_ras_error_count = sdma_v4_4_2_reset_ras_error_count,
 };
 
-static int sdma_v4_4_2_aca_bank_generate_report(struct aca_handle *handle,
-						struct aca_bank *bank, enum aca_error_type type,
-						struct aca_bank_report *report, void *data)
+static int sdma_v4_4_2_aca_bank_parser(struct aca_handle *handle, struct aca_bank *bank,
+				       enum aca_smu_type type, void *data)
 {
-	u64 status, misc0;
+	struct aca_bank_info info;
+	u64 misc0;
 	int ret;
 
-	status = bank->regs[ACA_REG_IDX_STATUS];
-	if ((type == ACA_ERROR_TYPE_UE &&
-	     ACA_REG__STATUS__ERRORCODEEXT(status) == ACA_EXTERROR_CODE_FAULT) ||
-	    (type == ACA_ERROR_TYPE_CE &&
-	     ACA_REG__STATUS__ERRORCODEEXT(status) == ACA_EXTERROR_CODE_CE)) {
+	ret = aca_bank_info_decode(bank, &info);
+	if (ret)
+		return ret;
 
-		ret = aca_bank_info_decode(bank, &report->info);
-		if (ret)
-			return ret;
-
-		misc0 = bank->regs[ACA_REG_IDX_MISC0];
-		report->count[type] = ACA_REG__MISC0__ERRCNT(misc0);
+	misc0 = bank->regs[ACA_REG_IDX_MISC0];
+	switch (type) {
+	case ACA_SMU_TYPE_UE:
+		ret = aca_error_cache_log_bank_error(handle, &info, ACA_ERROR_TYPE_UE,
+						     1ULL);
+		break;
+	case ACA_SMU_TYPE_CE:
+		ret = aca_error_cache_log_bank_error(handle, &info, ACA_ERROR_TYPE_CE,
+						     ACA_REG__MISC0__ERRCNT(misc0));
+		break;
+	default:
+		return -EINVAL;
 	}
 
-	return 0;
+	return ret;
 }
 
 /* CODE_SDMA0 - CODE_SDMA4, reference to smu driver if header file */
 static int sdma_v4_4_2_err_codes[] = { 33, 34, 35, 36 };
 
 static bool sdma_v4_4_2_aca_bank_is_valid(struct aca_handle *handle, struct aca_bank *bank,
-					  enum aca_error_type type, void *data)
+					  enum aca_smu_type type, void *data)
 {
 	u32 instlo;
 
@@ -2257,7 +2240,7 @@ static bool sdma_v4_4_2_aca_bank_is_valid(struct aca_handle *handle, struct aca_
 }
 
 static const struct aca_bank_ops sdma_v4_4_2_aca_bank_ops = {
-	.aca_bank_generate_report = sdma_v4_4_2_aca_bank_generate_report,
+	.aca_bank_parser = sdma_v4_4_2_aca_bank_parser,
 	.aca_bank_is_valid = sdma_v4_4_2_aca_bank_is_valid,
 };
 

@@ -29,6 +29,42 @@
 #include "sienna_cichlid.h"
 #include "smu_v13_0_10.h"
 
+const char *hw_ip_names[MAX_HWIP] = {
+	[GC_HWIP]		= "GC",
+	[HDP_HWIP]		= "HDP",
+	[SDMA0_HWIP]		= "SDMA0",
+	[SDMA1_HWIP]		= "SDMA1",
+	[SDMA2_HWIP]		= "SDMA2",
+	[SDMA3_HWIP]		= "SDMA3",
+	[SDMA4_HWIP]		= "SDMA4",
+	[SDMA5_HWIP]		= "SDMA5",
+	[SDMA6_HWIP]		= "SDMA6",
+	[SDMA7_HWIP]		= "SDMA7",
+	[LSDMA_HWIP]		= "LSDMA",
+	[MMHUB_HWIP]		= "MMHUB",
+	[ATHUB_HWIP]		= "ATHUB",
+	[NBIO_HWIP]		= "NBIO",
+	[MP0_HWIP]		= "MP0",
+	[MP1_HWIP]		= "MP1",
+	[UVD_HWIP]		= "UVD/JPEG/VCN",
+	[VCN1_HWIP]		= "VCN1",
+	[VCE_HWIP]		= "VCE",
+	[VPE_HWIP]		= "VPE",
+	[DF_HWIP]		= "DF",
+	[DCE_HWIP]		= "DCE",
+	[OSSSYS_HWIP]		= "OSSSYS",
+	[SMUIO_HWIP]		= "SMUIO",
+	[PWR_HWIP]		= "PWR",
+	[NBIF_HWIP]		= "NBIF",
+	[THM_HWIP]		= "THM",
+	[CLK_HWIP]		= "CLK",
+	[UMC_HWIP]		= "UMC",
+	[RSMU_HWIP]		= "RSMU",
+	[XGMI_HWIP]		= "XGMI",
+	[DCI_HWIP]		= "DCI",
+	[PCIE_HWIP]		= "PCIE",
+};
+
 int amdgpu_reset_init(struct amdgpu_device *adev)
 {
 	int ret = 0;
@@ -175,7 +211,8 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 	struct drm_printer p;
 	struct amdgpu_coredump_info *coredump = data;
 	struct drm_print_iterator iter;
-	int i;
+	struct amdgpu_vm_fault_info *fault_info;
+	int i, ver;
 
 	iter.data = buffer;
 	iter.offset = 0;
@@ -196,11 +233,60 @@ amdgpu_devcoredump_read(char *buffer, loff_t offset, size_t count,
 			   coredump->reset_task_info.process_name,
 			   coredump->reset_task_info.pid);
 
+	/* GPU IP's information of the SOC */
+	drm_printf(&p, "\nIP Information\n");
+	drm_printf(&p, "SOC Family: %d\n", coredump->adev->family);
+	drm_printf(&p, "SOC Revision id: %d\n", coredump->adev->rev_id);
+	drm_printf(&p, "SOC External Revision id: %d\n", coredump->adev->external_rev_id);
+
+	for (int i = 1; i < MAX_HWIP; i++) {
+		for (int j = 0; j < HWIP_MAX_INSTANCE; j++) {
+			ver = coredump->adev->ip_versions[i][j];
+			if (ver)
+				drm_printf(&p, "HWIP: %s[%d][%d]: v%d.%d.%d.%d.%d\n",
+					   hw_ip_names[i], i, j,
+					   IP_VERSION_MAJ(ver),
+					   IP_VERSION_MIN(ver),
+					   IP_VERSION_REV(ver),
+					   IP_VERSION_VARIANT(ver),
+					   IP_VERSION_SUBREV(ver));
+		}
+	}
+
 	if (coredump->ring) {
 		drm_printf(&p, "\nRing timed out details\n");
 		drm_printf(&p, "IP Type: %d Ring Name: %s\n",
 			   coredump->ring->funcs->type,
 			   coredump->ring->name);
+	}
+
+	/* Add page fault information */
+	fault_info = &coredump->adev->vm_manager.fault_info;
+	drm_printf(&p, "\n[%s] Page fault observed\n",
+		   fault_info->vmhub ? "mmhub" : "gfxhub");
+	drm_printf(&p, "Faulty page starting at address: 0x%016llx\n", fault_info->addr);
+	drm_printf(&p, "Protection fault status register: 0x%x\n\n", fault_info->status);
+
+	/* Add ring buffer information */
+	drm_printf(&p, "Ring buffer information\n");
+	for (int i = 0; i < coredump->adev->num_rings; i++) {
+		int j = 0;
+		struct amdgpu_ring *ring = coredump->adev->rings[i];
+
+		drm_printf(&p, "ring name: %s\n", ring->name);
+		drm_printf(&p, "Rptr: 0x%llx Wptr: 0x%llx RB mask: %x\n",
+			   amdgpu_ring_get_rptr(ring),
+			   amdgpu_ring_get_wptr(ring),
+			   ring->buf_mask);
+		drm_printf(&p, "Ring size in dwords: %d\n",
+			   ring->ring_size / 4);
+		drm_printf(&p, "Ring contents\n");
+		drm_printf(&p, "Offset \t Value\n");
+
+		while (j < ring->ring_size) {
+			drm_printf(&p, "0x%x \t 0x%x\n", j, ring->ring[j/4]);
+			j += 4;
+		}
 	}
 
 	if (coredump->reset_vram_lost)

@@ -720,6 +720,7 @@ void dcn35_init_pipes(struct dc *dc, struct dc_state *context)
 	struct hubbub *hubbub = dc->res_pool->hubbub;
 	struct pg_cntl *pg_cntl = dc->res_pool->pg_cntl;
 	bool can_apply_seamless_boot = false;
+	bool tg_enabled[MAX_PIPES] = {false};
 
 	for (i = 0; i < context->stream_count; i++) {
 		if (context->streams[i]->apply_seamless_boot_optimization) {
@@ -801,6 +802,7 @@ void dcn35_init_pipes(struct dc *dc, struct dc_state *context)
 			// requesting data while in PSR.
 			tg->funcs->tg_init(tg);
 			hubp->power_gated = true;
+			tg_enabled[i] = true;
 			continue;
 		}
 
@@ -840,6 +842,20 @@ void dcn35_init_pipes(struct dc *dc, struct dc_state *context)
 		}
 
 		tg->funcs->tg_init(tg);
+	}
+
+	/* Clean up MPC tree */
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		if (tg_enabled[i]) {
+			if (dc->res_pool->opps[i]->mpc_tree_params.opp_list) {
+				if (dc->res_pool->opps[i]->mpc_tree_params.opp_list->mpcc_bot) {
+					int bot_id = dc->res_pool->opps[i]->mpc_tree_params.opp_list->mpcc_bot->mpcc_id;
+
+					if ((bot_id < MAX_MPCC) && (bot_id < MAX_PIPES) && (!tg_enabled[bot_id]))
+						dc->res_pool->opps[i]->mpc_tree_params.opp_list = NULL;
+				}
+			}
+		}
 	}
 
 	if (pg_cntl != NULL) {
@@ -1019,8 +1035,7 @@ void dcn35_calc_blocks_to_gate(struct dc *dc, struct dc_state *context,
 		if (pipe_ctx->plane_res.dpp)
 			update_state->pg_pipe_res_update[PG_DPP][pipe_ctx->plane_res.hubp->inst] = false;
 
-		if ((pipe_ctx->plane_res.dpp || pipe_ctx->stream_res.opp) &&
-			pipe_ctx->plane_res.mpcc_inst >= 0)
+		if (pipe_ctx->plane_res.dpp || pipe_ctx->stream_res.opp)
 			update_state->pg_pipe_res_update[PG_MPCC][pipe_ctx->plane_res.mpcc_inst] = false;
 
 		if (pipe_ctx->stream_res.dsc)
@@ -1393,4 +1408,32 @@ void dcn35_set_static_screen_control(struct pipe_ctx **pipe_ctx,
 		pipe_ctx[i]->stream_res.tg->funcs->
 			set_static_screen_control(pipe_ctx[i]->stream_res.tg,
 					triggers, params->num_frames);
+}
+
+void dcn35_set_long_vblank(struct pipe_ctx **pipe_ctx,
+		int num_pipes, uint32_t v_total_min, uint32_t v_total_max)
+{
+	int i = 0;
+	struct long_vtotal_params params = {0};
+
+	params.vertical_total_max = v_total_max;
+	params.vertical_total_min = v_total_min;
+
+	for (i = 0; i < num_pipes; i++) {
+		if (!pipe_ctx[i])
+			continue;
+
+		if (pipe_ctx[i]->stream) {
+			struct dc_crtc_timing *timing = &pipe_ctx[i]->stream->timing;
+
+			if (timing)
+				params.vertical_blank_start = timing->v_total - timing->v_front_porch;
+			else
+				params.vertical_blank_start = 0;
+
+			if ((pipe_ctx[i]->stream_res.tg != NULL) && pipe_ctx[i]->stream_res.tg->funcs &&
+				pipe_ctx[i]->stream_res.tg->funcs->set_long_vtotal)
+				pipe_ctx[i]->stream_res.tg->funcs->set_long_vtotal(pipe_ctx[i]->stream_res.tg, &params);
+		}
+	}
 }
