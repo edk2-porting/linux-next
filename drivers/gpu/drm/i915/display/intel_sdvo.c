@@ -193,7 +193,7 @@ to_intel_sdvo_connector(struct drm_connector *connector)
 }
 
 #define to_intel_sdvo_connector_state(conn_state) \
-	container_of((conn_state), struct intel_sdvo_connector_state, base.base)
+	container_of_const((conn_state), struct intel_sdvo_connector_state, base.base)
 
 static bool
 intel_sdvo_output_setup(struct intel_sdvo *intel_sdvo);
@@ -1842,8 +1842,6 @@ static void intel_disable_sdvo(struct intel_atomic_state *state,
 	struct intel_crtc *crtc = to_intel_crtc(old_crtc_state->uapi.crtc);
 	u32 temp;
 
-	encoder->audio_disable(encoder, old_crtc_state, conn_state);
-
 	intel_sdvo_set_active_outputs(intel_sdvo, 0);
 	if (0)
 		intel_sdvo_set_encoder_power_state(intel_sdvo,
@@ -1935,8 +1933,6 @@ static void intel_enable_sdvo(struct intel_atomic_state *state,
 		intel_sdvo_set_encoder_power_state(intel_sdvo,
 						   DRM_MODE_DPMS_ON);
 	intel_sdvo_set_active_outputs(intel_sdvo, intel_sdvo_connector->output_flag);
-
-	encoder->audio_enable(encoder, pipe_config, conn_state);
 }
 
 static enum drm_mode_status
@@ -2382,7 +2378,7 @@ intel_sdvo_connector_atomic_get_property(struct drm_connector *connector,
 					 u64 *val)
 {
 	struct intel_sdvo_connector *intel_sdvo_connector = to_intel_sdvo_connector(connector);
-	const struct intel_sdvo_connector_state *sdvo_state = to_intel_sdvo_connector_state((void *)state);
+	const struct intel_sdvo_connector_state *sdvo_state = to_intel_sdvo_connector_state(state);
 
 	if (property == intel_sdvo_connector->tv_format) {
 		int i;
