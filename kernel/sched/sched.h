@@ -2397,7 +2397,7 @@ extern struct task_struct *pick_next_task_idle(struct rq *rq);
 
 extern void update_group_capacity(struct sched_domain *sd, int cpu);
 
-extern void trigger_load_balance(struct rq *rq);
+extern void sched_balance_trigger(struct rq *rq);
 
 extern void set_cpus_allowed_common(struct task_struct *p, struct affinity_context *ctx);
 
@@ -2904,7 +2904,7 @@ extern void cfs_bandwidth_usage_dec(void);
 #define NOHZ_NEWILB_KICK_BIT	2
 #define NOHZ_NEXT_KICK_BIT	3
 
-/* Run rebalance_domains() */
+/* Run sched_balance_domains() */
 #define NOHZ_BALANCE_KICK	BIT(NOHZ_BALANCE_KICK_BIT)
 /* Update blocked load */
 #define NOHZ_STATS_KICK		BIT(NOHZ_STATS_KICK_BIT)
