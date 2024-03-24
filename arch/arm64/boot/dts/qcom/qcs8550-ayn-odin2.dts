@@ -334,14 +334,24 @@
 	sound {
 		compatible = "qcom,sm8550-sndcard", "qcom,sm8450-sndcard";
 		model = "QCS8550-AYN-ODIN2";
-		audio-routing = "IN1_HPHL", "HPHL_OUT",
+		audio-routing =
+				"IN1_HPHL", "HPHL_OUT",
 				"IN2_HPHR", "HPHR_OUT",
+				"IN3_AUX", "AUX_OUT",
 				"AMIC1", "MIC BIAS1",
 				"AMIC2", "MIC BIAS2",
 				"AMIC5", "MIC BIAS4",
 				"TX SWR_INPUT0", "ADC1_OUTPUT",
 				"TX SWR_INPUT1", "ADC2_OUTPUT",
-				"TX SWR_INPUT1", "ADC4_OUTPUT";
+				"TX SWR_INPUT1", "ADC4_OUTPUT",
+				"RX_TX DEC0_INP", "TX DEC0 MUX",
+				"RX_TX DEC1_INP", "TX DEC1 MUX",
+				"RX_TX DEC2_INP", "TX DEC2 MUX",
+				"RX_TX DEC3_INP", "TX DEC3 MUX";
+		pinctrl-names = "default";
+		pinctrl-0 = <&prim_mi2s_default>;
+		// pinctrl-0 = <&tert_mi2s_active>;
+
 
 		wcd-playback-dai-link {
 			link-name = "WCD Playback";
@@ -375,27 +385,27 @@
 			};
 		};
 
-		// wsa-dai-link {
-		// 	link-name = "WSA Playback";
+		speaker-dai-link {
+			link-name = "Primary MI2S Playback";
 
-		// 	cpu {
-		// 		sound-dai = <&q6apmbedai WSA_CODEC_DMA_RX_0>;
-		// 	};
+			cpu {
+				sound-dai = <&q6apmbedai PRIMARY_MI2S_RX>;
+			};
 
-		// 	codec {
-		// 		sound-dai = <&north_spkr>, <&south_spkr>, <&swr0 0>, <&lpass_wsamacro 0>;
-		// 	};
+			codec {
+				sound-dai = <&spk_amp_l 0>, <&spk_amp_r 0>;
+			};
 
-		// 	platform {
-		// 		sound-dai = <&q6apm>;
-		// 	};
-		// };
+			platform {
+				sound-dai = <&q6apm>;
+			};
+		};
 
 		va-dai-link {
 			link-name = "VA Capture";
 
 			cpu {
-				sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+				sound-dai = <&q6apmbedai VA_CODEC_DMA_TX_0>;
 			};
 
 			codec {
@@ -435,6 +445,13 @@
 
 		regulator-always-on;
 		regulator-boot-on;
+	};
+};
+
+&q6apmbedai {
+	dai@16 {
+		reg = <PRIMARY_MI2S_RX>;
+		qcom,sd-lines = <0>;
 	};
 };
 
@@ -996,28 +1013,36 @@
 &i2c_hub_2 {
 	status = "okay";
 
-	aw883xx_smartpa@34 {
+	spk_amp_l: aw883xx_smartpa@34 {
 		status = "okay";
 		re-max = <40000>;
 		re-min = <1000>;
 		sound-channel = <0>;
 		sync-load = <1>;
+		fade-enable = <1>;
+		aw-cali-mode = "none";
 		irq-gpio = <&tlmm 97 GPIO_ACTIVE_HIGH>;
 		reset-gpio = <&tlmm 103 GPIO_ACTIVE_HIGH>;
 		reg = <0x34>;
 		compatible = "awinic,aw883xx_smartpa";
+		sound-name-prefix = "SpkrLeft";
+		#sound-dai-cells = <1>;
 	};
 
-	aw883xx_smartpa@35 {
+	spk_amp_r: aw883xx_smartpa@35 {
 		status = "okay";
 		re-max = <40000>;
 		re-min = <1000>;
 		sound-channel = <1>;
 		sync-load = <1>;
+		fade-enable = <1>;
+		aw-cali-mode = "none";
 		irq-gpio = <&tlmm 98 GPIO_ACTIVE_HIGH>;
 		reset-gpio = <&tlmm 100 GPIO_ACTIVE_HIGH>;
 		reg = <0x35>;
 		compatible = "awinic,aw883xx_smartpa";
+		sound-name-prefix = "SpkrRight";
+		#sound-dai-cells = <1>;
 	};
 
 	// typec-mux@42 {
@@ -1050,9 +1075,9 @@
 // 	qcom,dmic-sample-rate = <4800000>;
 // };
 
-// &lpass_wsamacro {
-// 	status = "disabled";
-// };
+&lpass_wsamacro {
+	status = "disabled";
+};
 
 &mdss {
 	status = "okay";
@@ -1320,8 +1345,69 @@
 	};
 };
 
+/* It seems that the LPI-I2S3 might be in use? */
+// &lpass_tlmm {
+// 	tert_mi2s_active: tert-mi2s-active-state {
+// 		sck-pins {
+// 			pins = "gpio12";
+// 			function = "i2s3_clk";
+// 			drive-strength = <8>;
+// 			bias-disable;
+// 			output-high;
+// 		};
+
+// 		ws-pins {
+// 			pins = "gpio13";
+// 			function = "i2s3_ws";
+// 			drive-strength = <8>;
+// 			bias-disable;
+// 			output-high;
+// 		};
+
+// 		data-pins {
+// 			pins = "gpio17","gpio18";
+// 			function = "i2s3_data";
+// 			drive-strength = <8>;
+// 			bias-disable;
+// 		};
+// 	};
+
+// };
+
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
+
+	prim_mi2s_default: prim-mi2s-default-state {
+		sck-pins {
+			pins = "gpio121";
+			function = "i2s1_sck";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+
+		ws-pins {
+			pins = "gpio123";
+			function = "i2s1_ws";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+
+		data0-pins {
+			pins = "gpio122";
+			function = "i2s1_data0";
+			drive-strength = <8>;
+			bias-disable;
+		};
+
+		data1-pins {
+			pins = "gpio124";
+			function = "i2s1_data1";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
 
 	m1_m2_keys_default: m1-m2-keys-default-state {
 		pins = "gpio57", "gpio58";
