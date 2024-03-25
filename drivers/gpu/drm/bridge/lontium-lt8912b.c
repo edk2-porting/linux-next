@@ -440,25 +440,19 @@ lt8912_connector_mode_valid(struct drm_connector *connector,
 
 static int lt8912_connector_get_modes(struct drm_connector *connector)
 {
-	const struct drm_edid *drm_edid;
-	struct lt8912 *lt = connector_to_lt8912(connector);
-	u32 bus_format = MEDIA_BUS_FMT_RGB888_1X24;
-	int ret, num;
+	const struct drm_edid *drm_edid = NULL;
+	int ret;
 
-	drm_edid = drm_bridge_edid_read(lt->hdmi_port, connector);
 	drm_edid_connector_update(connector, drm_edid);
-	if (!drm_edid)
-		return 0;
 
-	num = drm_edid_connector_add_modes(connector);
+	ret = drm_add_modes_noedid(connector, 1920, 1080);
+	drm_set_preferred_mode(connector, 1920, 1080);
 
-	ret = drm_display_info_set_bus_formats(&connector->display_info,
-					       &bus_format, 1);
-	if (ret < 0)
-		num = 0;
+	ret = drm_edid_connector_add_modes(connector);
 
 	drm_edid_free(drm_edid);
-	return num;
+
+	return ret;
 }
 
 static const struct drm_connector_helper_funcs lt8912_connector_helper_funcs = {
@@ -565,6 +559,9 @@ static int lt8912_bridge_attach(struct drm_bridge *bridge,
 	struct lt8912 *lt = bridge_to_lt8912(bridge);
 	int ret;
 
+	if (flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR)
+		return -EINVAL;
+
 	ret = drm_bridge_attach(bridge->encoder, lt->hdmi_port, bridge,
 				DRM_BRIDGE_ATTACH_NO_CONNECTOR);
 	if (ret < 0) {
@@ -616,29 +613,12 @@ lt8912_bridge_detect(struct drm_bridge *bridge)
 	return lt8912_check_cable_status(lt);
 }
 
-static const struct drm_edid *lt8912_bridge_edid_read(struct drm_bridge *bridge,
-						      struct drm_connector *connector)
-{
-	struct lt8912 *lt = bridge_to_lt8912(bridge);
-
-	/*
-	 * edid must be read through the ddc bus but it must be
-	 * given to the hdmi connector node.
-	 */
-	if (lt->hdmi_port->ops & DRM_BRIDGE_OP_EDID)
-		return drm_bridge_edid_read(lt->hdmi_port, connector);
-
-	dev_warn(lt->dev, "The connected bridge does not supports DRM_BRIDGE_OP_EDID\n");
-	return NULL;
-}
-
 static const struct drm_bridge_funcs lt8912_bridge_funcs = {
 	.attach = lt8912_bridge_attach,
 	.detach = lt8912_bridge_detach,
 	.mode_set = lt8912_bridge_mode_set,
 	.enable = lt8912_bridge_enable,
 	.detect = lt8912_bridge_detect,
-	.edid_read = lt8912_bridge_edid_read,
 };
 
 static int lt8912_bridge_resume(struct device *dev)
@@ -778,8 +758,7 @@ static int lt8912_probe(struct i2c_client *client)
 
 	lt->bridge.funcs = &lt8912_bridge_funcs;
 	lt->bridge.of_node = dev->of_node;
-	lt->bridge.ops = (DRM_BRIDGE_OP_EDID |
-			  DRM_BRIDGE_OP_DETECT);
+	lt->bridge.ops = DRM_BRIDGE_OP_DETECT;
 
 	drm_bridge_add(&lt->bridge);
 
