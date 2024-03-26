@@ -979,7 +979,7 @@ static u32 rhashtable_jhash2(const void *key, u32 length, u32 seed)
 }
 
 /**
- * rhashtable_init_noprof - initialize a new hash table
+ * rhashtable_init - initialize a new hash table
  * @ht:		hash table to be initialized
  * @params:	configuration parameters
  *
@@ -1085,13 +1085,13 @@ int rhashtable_init_noprof(struct rhashtable *ht,
 EXPORT_SYMBOL_GPL(rhashtable_init_noprof);
 
 /**
- * rhltable_init_noprof - initialize a new hash list table
+ * rhltable_init - initialize a new hash list table
  * @hlt:	hash list table to be initialized
  * @params:	configuration parameters
  *
  * Initializes a new hash list table.
  *
- * See documentation for rhashtable_init_noprof.
+ * See documentation for rhashtable_init.
  */
 int rhltable_init_noprof(struct rhltable *hlt, const struct rhashtable_params *params)
 {
