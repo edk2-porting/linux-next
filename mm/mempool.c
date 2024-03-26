@@ -366,7 +366,7 @@ out:
 EXPORT_SYMBOL(mempool_resize);
 
 /**
- * mempool_alloc_noprof - allocate an element from a specific memory pool
+ * mempool_alloc - allocate an element from a specific memory pool
  * @pool:      pointer to the memory pool which was allocated via
  *             mempool_create().
  * @gfp_mask:  the usual allocation bitmask.
