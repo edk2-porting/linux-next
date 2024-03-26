@@ -2209,7 +2209,7 @@ static struct page *alloc_pages_preferred_many(gfp_t gfp, unsigned int order,
 }
 
 /**
- * alloc_pages_mpol_noprof - Allocate pages according to NUMA mempolicy.
+ * alloc_pages_mpol - Allocate pages according to NUMA mempolicy.
  * @gfp: GFP flags.
  * @order: Order of the page allocation.
  * @pol: Pointer to the NUMA mempolicy.
@@ -2278,7 +2278,7 @@ struct page *alloc_pages_mpol_noprof(gfp_t gfp, unsigned int order,
 }
 
 /**
- * vma_alloc_folio_noprof - Allocate a folio for a VMA.
+ * vma_alloc_folio - Allocate a folio for a VMA.
  * @gfp: GFP flags.
  * @order: Order of the folio.
  * @vma: Pointer to VMA.
@@ -2309,7 +2309,7 @@ struct folio *vma_alloc_folio_noprof(gfp_t gfp, int order, struct vm_area_struct
 EXPORT_SYMBOL(vma_alloc_folio_noprof);
 
 /**
- * alloc_pages_noprof - Allocate pages.
+ * alloc_pages - Allocate pages.
  * @gfp: GFP flags.
  * @order: Power of two of number of pages to allocate.
  *
