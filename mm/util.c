@@ -715,7 +715,7 @@ void *kvrealloc_noprof(const void *p, size_t oldsize, size_t newsize, gfp_t flag
 EXPORT_SYMBOL(kvrealloc_noprof);
 
 /**
- * __vmalloc_array_noprof - allocate memory for a virtually contiguous array.
+ * __vmalloc_array - allocate memory for a virtually contiguous array.
  * @n: number of elements.
  * @size: element size.
  * @flags: the type of memory to allocate (see kmalloc).
@@ -731,7 +731,7 @@ void *__vmalloc_array_noprof(size_t n, size_t size, gfp_t flags)
 EXPORT_SYMBOL(__vmalloc_array_noprof);
 
 /**
- * vmalloc_array_noprof - allocate memory for a virtually contiguous array.
+ * vmalloc_array - allocate memory for a virtually contiguous array.
  * @n: number of elements.
  * @size: element size.
  */
@@ -754,7 +754,7 @@ void *__vcalloc_noprof(size_t n, size_t size, gfp_t flags)
 EXPORT_SYMBOL(__vcalloc_noprof);
 
 /**
- * vcalloc_noprof - allocate and zero memory for a virtually contiguous array.
+ * vcalloc - allocate and zero memory for a virtually contiguous array.
  * @n: number of elements.
  * @size: element size.
  */
