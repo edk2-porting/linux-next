@@ -1152,8 +1152,7 @@ static int dpu_kms_hw_init(struct msm_kms *kms)
 	 * max crtc width is equal to the max mixer width * 2 and max height is
 	 * is 4K
 	 */
-	dev->mode_config.max_width =
-			dpu_kms->catalog->caps->max_mixer_width * 2;
+	dev->mode_config.max_width = 16384;
 	dev->mode_config.max_height = 4096;
 
 	dev->max_vblank_count = 0xffffffff;
