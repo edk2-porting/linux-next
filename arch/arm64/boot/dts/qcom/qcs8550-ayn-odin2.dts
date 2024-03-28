@@ -488,6 +488,7 @@
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		/* Sensors vddio */
 		vreg_l1b_1p8: ldo1 {
 			regulator-name = "vreg_l1b_1p8";
 			regulator-min-microvolt = <1800000>;
@@ -498,6 +499,7 @@
 						   RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		/* Sensors vdd */
 		vreg_l2b_3p0: ldo2 {
 			regulator-name = "vreg_l2b_3p0";
 			regulator-min-microvolt = <3008000>;
@@ -610,6 +612,7 @@
 						   RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		/* Speaker dvdd */
 		vreg_l15b_1p8: ldo15 {
 			regulator-name = "vreg_l15b_1p8";
 			regulator-min-microvolt = <1800000>;
