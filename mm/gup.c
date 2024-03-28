@@ -2858,7 +2858,7 @@ static int gup_hugepte(pte_t *ptep, unsigned long sz, unsigned long addr,
  * GUP updates.  When hugepd will be extended to support non-hugetlbfs or
  * even anonymous memory, we need to do extra check as what we do with most
  * of the other folios. See writable_file_mapping_allowed() and
- * folio_fast_pin_allowed() for more information.
+ * gup_fast_folio_allowed() for more information.
  */
 static int gup_huge_pd(hugepd_t hugepd, unsigned long addr,
 		unsigned int pdshift, unsigned long end, unsigned int flags,
