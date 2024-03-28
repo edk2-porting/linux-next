@@ -1582,7 +1582,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 		 * Initialize zone->managed_pages as 0 , it will be reset
 		 * when memblock allocator frees pages into buddy system.
 		 */
-		zone_init_internals(zone, j, nid, 0);
+		zone_init_internals(zone, j, nid, zone->present_pages);
 
 		if (!size)
 			continue;
