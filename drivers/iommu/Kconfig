@@ -374,6 +374,15 @@ config ARM_SMMU_QCOM
 	  When running on a Qualcomm platform that has the custom variant
 	  of the ARM SMMU, this needs to be built into the SMMU driver.
 
+config ARM_SMMU_QCOM_TBU
+	bool "Qualcomm TBU driver"
+	depends on ARM_SMMU_QCOM
+	help
+	  The SMMUs on Qualcomm platforms may include Translation Buffer
+	  Units (TBUs) for each master. Enabling support for these units
+	  allows to operate the TBUs and obtain additional information
+	  when debugging memory management issues like context faults.
+
 config ARM_SMMU_QCOM_DEBUG
 	bool "ARM SMMU QCOM implementation defined debug support"
 	depends on ARM_SMMU_QCOM
