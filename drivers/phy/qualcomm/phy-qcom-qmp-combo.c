@@ -2275,8 +2275,10 @@ static int qmp_v3_configure_dp_phy(struct qmp_combo *qmp)
 	writel(0x05, qmp->dp_dp_phy + QSERDES_V3_DP_PHY_TX2_TX3_LANE_CTL);
 
 	ret = qmp_combo_configure_dp_clocks(qmp);
-	if (ret)
+	if (ret) {
+		dev_err(qmp->dev, "dp phy configure failed, err=%d\n", ret);
 		return ret;
+	}
 
 	writel(0x04, qmp->dp_dp_phy + QSERDES_DP_PHY_AUX_CFG2);
 	writel(0x01, qmp->dp_dp_phy + QSERDES_DP_PHY_CFG);
@@ -2451,8 +2453,10 @@ static int qmp_v4_configure_dp_phy(struct qmp_combo *qmp)
 	int ret;
 
 	ret = qmp_v456_configure_dp_phy(qmp);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(qmp->dev, "dp phy configure failed, err=%d\n", ret);
 		return ret;
+	}
 
 	/*
 	 * At least for 7nm DP PHY this has to be done after enabling link
@@ -2705,6 +2709,7 @@ static int qmp_combo_dp_power_on(struct phy *phy)
 	const struct qmp_phy_cfg *cfg = qmp->cfg;
 	void __iomem *tx = qmp->dp_tx;
 	void __iomem *tx2 = qmp->dp_tx2;
+	int ret;
 
 	mutex_lock(&qmp->phy_mutex);
 
@@ -2717,13 +2722,13 @@ static int qmp_combo_dp_power_on(struct phy *phy)
 	cfg->configure_dp_tx(qmp);
 
 	/* Configure link rate, swing, etc. */
-	cfg->configure_dp_phy(qmp);
+	ret = cfg->configure_dp_phy(qmp);
 
 	qmp->dp_powered_on = true;
 
 	mutex_unlock(&qmp->phy_mutex);
 
-	return 0;
+	return ret;
 }
 
 static int qmp_combo_dp_power_off(struct phy *phy)
