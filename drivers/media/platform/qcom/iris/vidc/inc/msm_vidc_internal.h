@@ -12,6 +12,7 @@
 #include <linux/sync_file.h>
 #include <linux/version.h>
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h> 
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
