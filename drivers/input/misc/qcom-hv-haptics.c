@@ -30,6 +30,7 @@
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h>
 #include <linux/soc/qcom/qcom-pbs.h>
 
 // #include <linux/soc/qcom/battery_charger.h>
