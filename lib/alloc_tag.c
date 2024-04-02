@@ -9,6 +9,9 @@
 
 static struct codetag_type *alloc_tag_cttype;
 
+DEFINE_PER_CPU(struct alloc_tag_counters, _shared_alloc_tag);
+EXPORT_SYMBOL(_shared_alloc_tag);
+
 DEFINE_STATIC_KEY_MAYBE(CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT,
 			mem_alloc_profiling_key);
 
