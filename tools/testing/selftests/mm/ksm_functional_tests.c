@@ -502,7 +502,7 @@ static void test_child_ksm_err(int status)
 	else if (status == -2)
 		ksft_test_result_fail("Merge in child failed\n");
 	else if (status == -3)
-		ksft_test_result_skip("Merge in child skiped\n");
+		ksft_test_result_skip("Merge in child skipped\n");
 }
 
 /* Verify that prctl ksm flag is inherited. */
