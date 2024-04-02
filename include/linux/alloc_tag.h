@@ -39,9 +39,17 @@ static inline struct alloc_tag *ct_to_alloc_tag(struct codetag *ct)
 /*
  * When percpu variables are required to be defined as weak, static percpu
  * variables can't be used inside a function (see comments for DECLARE_PER_CPU_SECTION).
+ * Instead we will accound all module allocations to a single counter.
  */
-#error "Memory allocation profiling is incompatible with ARCH_NEEDS_WEAK_PER_CPU"
-#endif
+DECLARE_PER_CPU(struct alloc_tag_counters, _shared_alloc_tag);
+
+#define DEFINE_ALLOC_TAG(_alloc_tag)						\
+	static struct alloc_tag _alloc_tag __used __aligned(8)			\
+	__section("alloc_tags") = {						\
+		.ct = CODE_TAG_INIT,						\
+		.counters = &_shared_alloc_tag };
+
+#else /* ARCH_NEEDS_WEAK_PER_CPU */
 
 #define DEFINE_ALLOC_TAG(_alloc_tag)						\
 	static DEFINE_PER_CPU(struct alloc_tag_counters, _alloc_tag_cntr);	\
@@ -49,6 +57,8 @@ static inline struct alloc_tag *ct_to_alloc_tag(struct codetag *ct)
 	__section("alloc_tags") = {						\
 		.ct = CODE_TAG_INIT,						\
 		.counters = &_alloc_tag_cntr };
+
+#endif /* ARCH_NEEDS_WEAK_PER_CPU */
 
 DECLARE_STATIC_KEY_MAYBE(CONFIG_MEM_ALLOC_PROFILING_ENABLED_BY_DEFAULT,
 			mem_alloc_profiling_key);
