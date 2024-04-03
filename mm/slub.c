@@ -2172,7 +2172,7 @@ bool memcg_slab_post_alloc_hook(struct kmem_cache *s, struct list_lru *lru,
 		return true;
 
 	if (likely(size == 1)) {
-		memcg_alloc_abort_single(s, p);
+		memcg_alloc_abort_single(s, *p);
 		*p = NULL;
 	} else {
 		kmem_cache_free_bulk(s, size, p);
