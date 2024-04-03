@@ -153,7 +153,7 @@ u64 stable_page_flags(const struct page *page)
 	 * to make sure a given page is a thp, not a non-huge compound page.
 	 */
 	else if (folio_test_large(folio)) {
-		if ((k & PG_lru) || is_anon)
+		if ((k & (1 << PG_lru)) || is_anon)
 			u |= 1 << KPF_THP;
 		else if (is_huge_zero_page(&folio->page)) {
 			u |= 1 << KPF_ZERO_PAGE;
@@ -204,7 +204,7 @@ u64 stable_page_flags(const struct page *page)
 	u |= kpf_copy_bit(k, KPF_MLOCKED,	PG_mlocked);
 
 #ifdef CONFIG_MEMORY_FAILURE
-	if (u & KPF_HUGE)
+	if (u & (1 << KPF_HUGE))
 		u |= kpf_copy_bit(k, KPF_HWPOISON,	PG_hwpoison);
 	else
 		u |= kpf_copy_bit(page->flags, KPF_HWPOISON,	PG_hwpoison);
