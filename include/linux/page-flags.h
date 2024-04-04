@@ -1096,11 +1096,10 @@ static __always_inline int PageAnonExclusive(const struct page *page)
 {
 	VM_BUG_ON_PGFLAGS(!PageAnon(page), page);
 	/*
-	 * Allow the anon-exclusive check to work on hugetlb tail pages.
-	 * Here hugetlb pages will always guarantee the anon-exclusiveness
-	 * of the head page represents the tail pages.
+	 * HugeTLB stores this information on the head page; THP keeps it per
+	 * page
 	 */
-	if (PageHuge(page) && !PageHead(page))
+	if (PageHuge(page))
 		page = compound_head(page);
 	return test_bit(PG_anon_exclusive, &PF_ANY(page, 1)->flags);
 }
