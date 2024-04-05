@@ -158,10 +158,11 @@ void put_pages_list(struct list_head *pages)
 	list_for_each_entry_safe(folio, next, pages, lru) {
 		if (!folio_put_testzero(folio))
 			continue;
-		if (folio_test_large(folio)) {
-			__folio_put_large(folio);
+		if (folio_test_hugetlb(folio)) {
+			free_huge_folio(folio);
 			continue;
 		}
+		VM_BUG_ON_FOLIO(folio_memcg(folio), folio);
 		/* LRU flag must be clear because it's passed using the lru */
 		if (folio_batch_add(&fbatch, folio) > 0)
 			continue;
