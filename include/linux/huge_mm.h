@@ -267,6 +267,8 @@ unsigned long thp_vma_allowable_orders(struct vm_area_struct *vma,
 enum mthp_stat_item {
 	MTHP_STAT_ANON_ALLOC,
 	MTHP_STAT_ANON_ALLOC_FALLBACK,
+	MTHP_STAT_ANON_SWPOUT,
+	MTHP_STAT_ANON_SWPOUT_FALLBACK,
 	__MTHP_STAT_COUNT
 };
 
