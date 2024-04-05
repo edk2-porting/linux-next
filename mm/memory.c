@@ -4374,8 +4374,10 @@ static struct folio *alloc_anon_folio(struct vm_fault *vmf)
 			}
 			folio_throttle_swaprate(folio, gfp);
 			clear_huge_page(&folio->page, vmf->address, 1 << order);
+			count_mthp_stat(order, MTHP_STAT_ANON_ALLOC);
 			return folio;
 		}
+		count_mthp_stat(order, MTHP_STAT_ANON_ALLOC_FALLBACK);
 next:
 		order = next_order(&orders, order);
 	}
