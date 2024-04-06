@@ -1266,6 +1266,25 @@ unsigned int block_size(struct block_device *bdev)
 }
 EXPORT_SYMBOL_GPL(block_size);
 
+/**
+ * bdev_read_folio - Read into block device page cache.
+ * @bdev: the block device which holds the cache to read.
+ * @pos: the offset that allocated folio will contain.
+ *
+ * Read one page into the block device page cache. If it succeeds, the folio
+ * returned will contain @pos;
+ *
+ * This is only used for scsi_bios_ptable(), the bdev is not opened as files.
+ *
+ * Return: Uptodate folio on success, ERR_PTR() on failure.
+ */
+struct folio *bdev_read_folio(struct block_device *bdev, loff_t pos)
+{
+	return mapping_read_folio_gfp(bdev_mapping(bdev),
+				      pos >> PAGE_SHIFT, GFP_KERNEL);
+}
+EXPORT_SYMBOL_GPL(bdev_read_folio);
+
 static int __init setup_bdev_allow_write_mounted(char *str)
 {
 	if (kstrtobool(str, &bdev_allow_write_mounted))
