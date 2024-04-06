@@ -163,15 +163,16 @@ err:
 }
 
 
-static const char *read_super(struct cache_sb *sb, struct block_device *bdev,
+static const char *read_super(struct cache_sb *sb, struct file *bdev_file,
 			      struct cache_sb_disk **res)
 {
 	const char *err;
+	struct block_device *bdev = file_bdev(bdev_file);
 	struct cache_sb_disk *s;
 	struct page *page;
 	unsigned int i;
 
-	page = read_cache_page_gfp(bdev->bd_inode->i_mapping,
+	page = read_cache_page_gfp(file_mapping(bdev_file),
 				   SB_OFFSET >> PAGE_SHIFT, GFP_KERNEL);
 	if (IS_ERR(page))
 		return "IO error";
@@ -2558,7 +2559,7 @@ static ssize_t register_bcache(struct kobject *k, struct kobj_attribute *attr,
 	if (set_blocksize(file_bdev(bdev_file), 4096))
 		goto out_blkdev_put;
 
-	err = read_super(sb, file_bdev(bdev_file), &sb_disk);
+	err = read_super(sb, bdev_file, &sb_disk);
 	if (err)
 		goto out_blkdev_put;
 
