@@ -188,14 +188,6 @@ int sb_min_blocksize(struct super_block *sb, int size)
 
 EXPORT_SYMBOL(sb_min_blocksize);
 
-int sync_blockdev_nowait(struct block_device *bdev)
-{
-	if (!bdev)
-		return 0;
-	return filemap_flush(bdev->bd_inode->i_mapping);
-}
-EXPORT_SYMBOL_GPL(sync_blockdev_nowait);
-
 /*
  * Write out and wait upon all the dirty data associated with a block
  * device via its mapping.  Does not take the superblock lock.
