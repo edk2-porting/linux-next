@@ -526,7 +526,7 @@ static const struct kobj_type thpsize_ktype = {
 	.sysfs_ops = &kobj_sysfs_ops,
 };
 
-DEFINE_PER_CPU(struct mthp_stat, mthp_stats) = {{{0}}};
+struct mthp_stat __percpu *mthp_stats;
 
 static unsigned long sum_mthp_stat(int order, enum mthp_stat_item item)
 {
@@ -534,7 +534,7 @@ static unsigned long sum_mthp_stat(int order, enum mthp_stat_item item)
 	int cpu;
 
 	for_each_online_cpu(cpu) {
-		struct mthp_stat *this = &per_cpu(mthp_stats, cpu);
+		struct mthp_stat *this = per_cpu_ptr(mthp_stats, cpu);
 
 		sum += this->stats[order][item];
 	}
@@ -636,6 +636,13 @@ static int __init hugepage_init_sysfs(struct kobject **hugepage_kobj)
 		goto remove_hp_group;
 	}
 
+	mthp_stats = __alloc_percpu((PMD_ORDER + 1) * sizeof(mthp_stats->stats[0]),
+			sizeof(unsigned long));
+	if (!mthp_stats) {
+		err = -ENOMEM;
+		goto remove_hp_group;
+	}
+
 	orders = THP_ORDERS_ALL_ANON;
 	order = highest_order(orders);
 	while (orders) {
@@ -673,6 +680,7 @@ static void __init hugepage_exit_sysfs(struct kobject *hugepage_kobj)
 	sysfs_remove_group(hugepage_kobj, &khugepaged_attr_group);
 	sysfs_remove_group(hugepage_kobj, &hugepage_attr_group);
 	kobject_put(hugepage_kobj);
+	free_percpu(mthp_stats);
 }
 #else
 static inline int hugepage_init_sysfs(struct kobject **hugepage_kobj)

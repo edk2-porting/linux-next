@@ -271,16 +271,15 @@ enum mthp_stat_item {
 };
 
 struct mthp_stat {
-	unsigned long stats[PMD_ORDER + 1][__MTHP_STAT_COUNT];
+	unsigned long stats[0][__MTHP_STAT_COUNT];
 };
 
-DECLARE_PER_CPU(struct mthp_stat, mthp_stats);
+extern struct mthp_stat __percpu *mthp_stats;
 
 static inline void count_mthp_stat(int order, enum mthp_stat_item item)
 {
-	if (unlikely(order > PMD_ORDER))
-		return;
-	this_cpu_inc(mthp_stats.stats[order][item]);
+	if (likely(order <= PMD_ORDER))
+		raw_cpu_ptr(mthp_stats)->stats[order][item]++;
 }
 
 #define transparent_hugepage_use_zero_page()				\
