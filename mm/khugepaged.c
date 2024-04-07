@@ -1865,7 +1865,7 @@ static int collapse_file(struct mm_struct *mm, unsigned long addr,
 				/* drain lru cache to help isolate_lru_page() */
 				lru_add_drain();
 				folio = filemap_lock_folio(mapping, index);
-				if (unlikely(folio == NULL)) {
+				if (IS_ERR(folio)) {
 					result = SCAN_FAIL;
 					goto xa_unlocked;
 				}
