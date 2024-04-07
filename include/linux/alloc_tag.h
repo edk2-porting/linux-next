@@ -12,6 +12,7 @@
 #include <asm/percpu.h>
 #include <linux/cpumask.h>
 #include <linux/static_key.h>
+#include <linux/irqflags.h>
 
 struct alloc_tag_counters {
 	u64 bytes;
