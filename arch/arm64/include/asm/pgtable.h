@@ -1223,6 +1223,34 @@ static inline void __wrprotect_ptes(struct mm_struct *mm, unsigned long address,
 		__ptep_set_wrprotect(mm, address, ptep);
 }
 
+static inline void ___ptep_mkold_clean(struct mm_struct *mm, unsigned long addr,
+				       pte_t *ptep, pte_t pte)
+{
+	pte_t old_pte;
+
+	do {
+		old_pte = pte;
+		pte = pte_mkclean(pte_mkold(pte));
+		pte_val(pte) = cmpxchg_relaxed(&pte_val(*ptep),
+					       pte_val(old_pte), pte_val(pte));
+	} while (pte_val(pte) != pte_val(old_pte));
+}
+
+static inline void __ptep_mkold_clean(struct mm_struct *mm, unsigned long addr,
+				      pte_t *ptep)
+{
+	___ptep_mkold_clean(mm, addr, ptep, __ptep_get(ptep));
+}
+
+static inline void __mkold_clean_ptes(struct mm_struct *mm, unsigned long addr,
+				      pte_t *ptep, unsigned int nr)
+{
+	unsigned int i;
+
+	for (i = 0; i < nr; i++, addr += PAGE_SIZE, ptep++)
+		__ptep_mkold_clean(mm, addr, ptep);
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 #define __HAVE_ARCH_PMDP_SET_WRPROTECT
 static inline void pmdp_set_wrprotect(struct mm_struct *mm,
@@ -1379,6 +1407,8 @@ extern void contpte_wrprotect_ptes(struct mm_struct *mm, unsigned long addr,
 extern int contpte_ptep_set_access_flags(struct vm_area_struct *vma,
 				unsigned long addr, pte_t *ptep,
 				pte_t entry, int dirty);
+extern void contpte_mkold_clean_ptes(struct mm_struct *mm, unsigned long addr,
+				pte_t *ptep, unsigned int nr);
 
 static __always_inline void contpte_try_fold(struct mm_struct *mm,
 				unsigned long addr, pte_t *ptep, pte_t pte)
@@ -1603,6 +1633,30 @@ static inline int ptep_set_access_flags(struct vm_area_struct *vma,
 	return contpte_ptep_set_access_flags(vma, addr, ptep, entry, dirty);
 }
 
+#define mkold_clean_ptes mkold_clean_ptes
+static inline void mkold_clean_ptes(struct mm_struct *mm, unsigned long addr,
+				    pte_t *ptep, unsigned int nr)
+{
+	if (likely(nr == 1)) {
+		/*
+		 * Optimization: mkold_clean_ptes() can only be called for present
+		 * ptes so we only need to check contig bit as condition for unfold,
+		 * and we can remove the contig bit from the pte we read to avoid
+		 * re-reading. This speeds up madvise(MADV_FREE) which is sensitive
+		 * for order-0 folios. Equivalent to contpte_try_unfold().
+		 */
+		pte_t orig_pte = __ptep_get(ptep);
+
+		if (unlikely(pte_cont(orig_pte))) {
+			__contpte_try_unfold(mm, addr, ptep, orig_pte);
+			orig_pte = pte_mknoncont(orig_pte);
+		}
+		___ptep_mkold_clean(mm, addr, ptep, orig_pte);
+	} else {
+		contpte_mkold_clean_ptes(mm, addr, ptep, nr);
+	}
+}
+
 #else /* CONFIG_ARM64_CONTPTE */
 
 #define ptep_get				__ptep_get
@@ -1622,6 +1676,7 @@ static inline int ptep_set_access_flags(struct vm_area_struct *vma,
 #define wrprotect_ptes				__wrprotect_ptes
 #define __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
 #define ptep_set_access_flags			__ptep_set_access_flags
+#define mkold_clean_ptes			__mkold_clean_ptes
 
 #endif /* CONFIG_ARM64_CONTPTE */
 
