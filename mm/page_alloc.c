@@ -805,8 +805,10 @@ static inline void __free_one_page(struct page *page,
 	while (order < MAX_PAGE_ORDER) {
 		int buddy_mt = migratetype;
 
-		if (compaction_capture(capc, page, order, migratetype))
+		if (compaction_capture(capc, page, order, migratetype)) {
+			account_freepages(zone, -(1 << order), migratetype);
 			return;
+		}
 
 		buddy = find_buddy_page_pfn(page, pfn, order, &buddy_pfn);
 		if (!buddy)
