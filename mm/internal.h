@@ -241,7 +241,8 @@ static inline pte_t pte_next_swp_offset(pte_t pte)
  *
  * Return: the number of table entries in the batch.
  */
-static inline int swap_pte_batch(pte_t *start_ptep, int max_nr, pte_t pte)
+static inline int swap_pte_batch(pte_t *start_ptep, int max_nr, pte_t pte,
+				bool *any_shared)
 {
 	pte_t expected_pte = pte_next_swp_offset(pte);
 	const pte_t *end_ptep = start_ptep + max_nr;
@@ -251,11 +252,17 @@ static inline int swap_pte_batch(pte_t *start_ptep, int max_nr, pte_t pte)
 	VM_WARN_ON(!is_swap_pte(pte));
 	VM_WARN_ON(non_swap_entry(pte_to_swp_entry(pte)));
 
+	if (any_shared)
+		*any_shared |= !pte_swp_exclusive(pte);
+
 	while (ptep < end_ptep) {
 		pte = ptep_get(ptep);
 
 		if (!pte_same(pte, expected_pte))
 			break;
+
+		if (any_shared)
+			*any_shared |= !pte_swp_exclusive(pte);
 
 		expected_pte = pte_next_swp_offset(expected_pte);
 		ptep++;

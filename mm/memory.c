@@ -1637,7 +1637,7 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 			folio_put(folio);
 		} else if (!non_swap_entry(entry)) {
 			max_nr = (end - addr) / PAGE_SIZE;
-			nr = swap_pte_batch(pte, max_nr, ptent);
+			nr = swap_pte_batch(pte, max_nr, ptent, NULL);
 			/* Genuine swap entries, hence a private anon pages */
 			if (!should_zap_cows(details))
 				continue;
