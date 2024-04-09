@@ -49,7 +49,7 @@ static int squashfs_new_inode(struct super_block *sb, struct inode *inode,
 	int err;
 
 	inode->i_ino = le32_to_cpu(sqsh_ino->inode_number);
-	if(inode->i_ino == 0)
+	if (inode->i_ino == 0)
 		return -EINVAL;
 
 	err = squashfs_get_id(sb, le16_to_cpu(sqsh_ino->uid), &i_uid);
