@@ -1229,11 +1229,10 @@ static inline void page_mapcount_reset(struct page *page)
  */
 static inline int page_mapcount(struct page *page)
 {
-	int mapcount = atomic_read(&page->_mapcount) + 1;
+	int mapcount = atomic_read(&page->_mapcount);
 
 	/* Handle page_has_type() pages */
-	if (mapcount < 0)
-		mapcount = 0;
+	mapcount = page_type_has_type(mapcount) ? 0 : mapcount + 1;
 	if (unlikely(PageCompound(page)))
 		mapcount += folio_entire_mapcount(page_folio(page));
 
