@@ -4166,6 +4166,7 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 		nr_pages = nr;
 		entry = folio->swap;
 		page = &folio->page;
+		count_mthp_stat(folio_order(folio), MTHP_STAT_ANON_SWPIN_REFAULT);
 	}
 
 check_pte:
