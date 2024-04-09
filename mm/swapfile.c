@@ -1357,6 +1357,57 @@ void swap_free(swp_entry_t entry)
 }
 
 /*
+ * Free up the maximum number of swap entries at once to limit the
+ * maximum kernel stack usage.
+ */
+#define SWAP_BATCH_NR (SWAPFILE_CLUSTER > 512 ? 512 : SWAPFILE_CLUSTER)
+
+/*
+ * Called after swapping in a large folio, batched free swap entries
+ * for this large folio, entry should be for the first subpage and
+ * its offset is aligned with nr_pages
+ */
+void swap_free_nr(swp_entry_t entry, int nr_pages)
+{
+	int i, j;
+	struct swap_cluster_info *ci;
+	struct swap_info_struct *p;
+	unsigned int type = swp_type(entry);
+	unsigned long offset = swp_offset(entry);
+	int batch_nr, remain_nr;
+	DECLARE_BITMAP(usage, SWAP_BATCH_NR) = { 0 };
+
+	/* all swap entries are within a cluster for mTHP */
+	VM_BUG_ON(offset % SWAPFILE_CLUSTER + nr_pages > SWAPFILE_CLUSTER);
+
+	if (nr_pages == 1) {
+		swap_free(entry);
+		return;
+	}
+
+	remain_nr = nr_pages;
+	p = _swap_info_get(entry);
+	if (p) {
+		for (i = 0; i < nr_pages; i += batch_nr) {
+			batch_nr = min_t(int, SWAP_BATCH_NR, remain_nr);
+
+			ci = lock_cluster_or_swap_info(p, offset);
+			for (j = 0; j < batch_nr; j++) {
+				if (__swap_entry_free_locked(p, offset + i * SWAP_BATCH_NR + j, 1))
+					__bitmap_set(usage, j, 1);
+			}
+			unlock_cluster_or_swap_info(p, ci);
+
+			for_each_clear_bit(j, usage, batch_nr)
+				free_swap_slot(swp_entry(type, offset + i * SWAP_BATCH_NR + j));
+
+			bitmap_clear(usage, 0, SWAP_BATCH_NR);
+			remain_nr -= batch_nr;
+		}
+	}
+}
+
+/*
  * Called after dropping swapcache to decrease refcnt to swap entries.
  */
 void put_swap_folio(struct folio *folio, swp_entry_t entry)
