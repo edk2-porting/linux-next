@@ -252,6 +252,8 @@ void gfs2_gl_dq_holders(struct gfs2_sbd *sdp);
 void gfs2_glock_thaw(struct gfs2_sbd *sdp);
 void gfs2_glock_add_to_lru(struct gfs2_glock *gl);
 void gfs2_glock_free(struct gfs2_glock *gl);
+void gfs2_glock_free_later(struct gfs2_glock *gl);
+void gfs2_free_dead_glocks(struct gfs2_sbd *sdp);
 
 int __init gfs2_glock_init(void);
 void gfs2_glock_exit(void);
