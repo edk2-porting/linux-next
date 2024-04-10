@@ -1840,7 +1840,14 @@ void __init free_area_init(unsigned long *max_zone_pfn)
 		pgdat = NODE_DATA(nid);
 		free_area_init_node(nid);
 
-		/* Any memory on that node */
+		/*
+		 * No sysfs hierarcy will be created via register_one_node()
+		 *for memory-less node because here it's not marked as N_MEMORY
+		 *and won't be set online later. The benefit is userspace
+		 *program won't be confused by sysfs files/directories of
+		 *memory-less node. The pgdat will get fully initialized by
+		 *hotadd_init_pgdat() when memory is hotplugged into this node.
+		 */
 		if (pgdat->node_present_pages) {
 			node_set_state(nid, N_MEMORY);
 			check_for_memory(pgdat);
