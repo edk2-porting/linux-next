@@ -365,7 +365,7 @@ done:
 	if (likely(!(fault & VM_FAULT_ERROR)))
 		return 0;
 
-        code = SEGV_MAPERR;
+	code = SEGV_MAPERR;
 bad_area:
 	/*
 	 * If we are in kernel mode at this point, we
