@@ -1669,6 +1669,15 @@ static void __init bhi_select_mitigation(void)
 	if (!IS_ENABLED(CONFIG_X86_64))
 		return;
 
+	/*
+	 * There's no hardware mitigation in place, so mark indirect branches
+	 * as unsafe.
+	 *
+	 * One could argue the SW loop makes indirect branches safe again, but
+	 * Linus prefers it this way.
+	 */
+	setup_clear_cpu_cap(X86_FEATURE_INDIRECT_SAFE);
+
 	/* Mitigate KVM by default */
 	setup_force_cpu_cap(X86_FEATURE_CLEAR_BHB_LOOP_ON_VMEXIT);
 	pr_info("Spectre BHI mitigation: SW BHB clearing on vm exit\n");
@@ -1685,6 +1694,21 @@ static void __init spectre_v2_select_mitigation(void)
 {
 	enum spectre_v2_mitigation_cmd cmd = spectre_v2_parse_cmdline();
 	enum spectre_v2_mitigation mode = SPECTRE_V2_NONE;
+
+	/*
+	 * X86_FEATURE_INDIRECT_SAFE indicates whether indirect calls can be
+	 * considered safe.  That means either:
+	 *
+	 *   - the CPU isn't vulnerable to Spectre v2 or its variants;
+	 *
+	 *   - a hardware mitigation is in place (e.g., IBRS, BHI_DIS_S); or
+	 *
+	 *   - the user turned off mitigations altogether.
+	 *
+	 * Assume innocence until proven guilty: set the cap bit now, then
+	 * clear it later if/when needed.
+	 */
+	setup_force_cpu_cap(X86_FEATURE_INDIRECT_SAFE);
 
 	/*
 	 * If the CPU is not affected and the command line mode is NONE or AUTO
@@ -1720,6 +1744,7 @@ static void __init spectre_v2_select_mitigation(void)
 
 	case SPECTRE_V2_CMD_RETPOLINE_LFENCE:
 		pr_err(SPECTRE_V2_LFENCE_MSG);
+		setup_clear_cpu_cap(X86_FEATURE_INDIRECT_SAFE);
 		mode = SPECTRE_V2_LFENCE;
 		break;
 
@@ -1772,11 +1797,16 @@ static void __init spectre_v2_select_mitigation(void)
 		break;
 
 	case SPECTRE_V2_LFENCE:
+		setup_clear_cpu_cap(X86_FEATURE_INDIRECT_SAFE);
+		fallthrough;
 	case SPECTRE_V2_EIBRS_LFENCE:
 		setup_force_cpu_cap(X86_FEATURE_RETPOLINE_LFENCE);
-		fallthrough;
+		setup_force_cpu_cap(X86_FEATURE_RETPOLINE);
+		break;
 
 	case SPECTRE_V2_RETPOLINE:
+		setup_clear_cpu_cap(X86_FEATURE_INDIRECT_SAFE);
+		fallthrough;
 	case SPECTRE_V2_EIBRS_RETPOLINE:
 		setup_force_cpu_cap(X86_FEATURE_RETPOLINE);
 		break;
