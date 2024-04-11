@@ -57,9 +57,12 @@ int sync_filesystem(struct super_block *sb)
 		if (ret)
 			return ret;
 	}
-	ret = sync_blockdev_nowait(sb->s_bdev);
-	if (ret)
-		return ret;
+
+	if (sb->s_bdev_file) {
+		ret = filemap_flush(sb->s_bdev_file->f_mapping);
+		if (ret)
+			return ret;
+	}
 
 	sync_inodes_sb(sb);
 	if (sb->s_op->sync_fs) {

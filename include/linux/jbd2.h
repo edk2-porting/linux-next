@@ -969,6 +969,11 @@ struct journal_s
 	struct block_device	*j_dev;
 
 	/**
+	 * @j_dev_file: Opended device @j_dev.
+	 */
+	struct file		*j_dev_file;
+
+	/**
 	 * @j_blocksize: Block size for the location where we store the journal.
 	 */
 	int			j_blocksize;
@@ -992,6 +997,11 @@ struct journal_s
 	 * equal to j_dev.
 	 */
 	struct block_device	*j_fs_dev;
+
+	/**
+	 * @j_fs_dev_file: Opened device @j_fs_dev.
+	 */
+	struct file		*j_fs_dev_file;
 
 	/**
 	 * @j_fs_dev_wb_err:
@@ -1533,8 +1543,8 @@ extern void	 jbd2_journal_unlock_updates (journal_t *);
 
 void jbd2_journal_wait_updates(journal_t *);
 
-extern journal_t * jbd2_journal_init_dev(struct block_device *bdev,
-				struct block_device *fs_dev,
+extern journal_t *jbd2_journal_init_dev(struct file *bdev_file,
+				struct file *fs_dev_file,
 				unsigned long long start, int len, int bsize);
 extern journal_t * jbd2_journal_init_inode (struct inode *);
 extern int	   jbd2_journal_update_format (journal_t *);
@@ -1696,7 +1706,7 @@ static inline void jbd2_journal_abort_handle(handle_t *handle)
 
 static inline void jbd2_init_fs_dev_write_error(journal_t *journal)
 {
-	struct address_space *mapping = journal->j_fs_dev->bd_inode->i_mapping;
+	struct address_space *mapping = file_mapping(journal->j_fs_dev_file);
 
 	/*
 	 * Save the original wb_err value of client fs's bdev mapping which
@@ -1707,7 +1717,7 @@ static inline void jbd2_init_fs_dev_write_error(journal_t *journal)
 
 static inline int jbd2_check_fs_dev_write_error(journal_t *journal)
 {
-	struct address_space *mapping = journal->j_fs_dev->bd_inode->i_mapping;
+	struct address_space *mapping = file_mapping(journal->j_fs_dev_file);
 
 	return errseq_check(&mapping->wb_err,
 			    READ_ONCE(journal->j_fs_dev_wb_err));

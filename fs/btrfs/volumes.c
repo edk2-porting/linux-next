@@ -1287,7 +1287,7 @@ static struct btrfs_super_block *btrfs_read_disk_super(struct block_device *bdev
 		return ERR_PTR(-EINVAL);
 
 	/* pull in the page with our super */
-	page = read_cache_page_gfp(bdev->bd_inode->i_mapping, index, GFP_KERNEL);
+	page = read_cache_page_gfp(bdev_mapping(bdev), index, GFP_KERNEL);
 
 	if (IS_ERR(page))
 		return ERR_CAST(page);
@@ -2067,14 +2067,14 @@ static u64 btrfs_num_devices(struct btrfs_fs_info *fs_info)
 }
 
 static void btrfs_scratch_superblock(struct btrfs_fs_info *fs_info,
-				     struct block_device *bdev, int copy_num)
+				     struct file *bdev_file, int copy_num)
 {
 	struct btrfs_super_block *disk_super;
 	const size_t len = sizeof(disk_super->magic);
 	const u64 bytenr = btrfs_sb_offset(copy_num);
 	int ret;
 
-	disk_super = btrfs_read_disk_super(bdev, bytenr, bytenr);
+	disk_super = btrfs_read_disk_super(file_bdev(bdev_file), bytenr, bytenr);
 	if (IS_ERR(disk_super))
 		return;
 
@@ -2082,7 +2082,8 @@ static void btrfs_scratch_superblock(struct btrfs_fs_info *fs_info,
 	folio_mark_dirty(virt_to_folio(disk_super));
 	btrfs_release_disk_super(disk_super);
 
-	ret = sync_blockdev_range(bdev, bytenr, bytenr + len - 1);
+	ret = filemap_write_and_wait_range(bdev_file->f_mapping,
+					   bytenr, bytenr + len - 1);
 	if (ret)
 		btrfs_warn(fs_info, "error clearing superblock number %d (%d)",
 			copy_num, ret);
@@ -2092,15 +2093,16 @@ void btrfs_scratch_superblocks(struct btrfs_fs_info *fs_info, struct btrfs_devic
 {
 	int copy_num;
 	struct block_device *bdev = device->bdev;
+	struct file *bdev_file = device->bdev_file;
 
-	if (!bdev)
+	if (!bdev || !bdev_file)
 		return;
 
 	for (copy_num = 0; copy_num < BTRFS_SUPER_MIRROR_MAX; copy_num++) {
 		if (bdev_is_zoned(bdev))
 			btrfs_reset_sb_log_zones(bdev, copy_num);
 		else
-			btrfs_scratch_superblock(fs_info, bdev, copy_num);
+			btrfs_scratch_superblock(fs_info, bdev_file, copy_num);
 	}
 
 	/* Notify udev that device has changed */

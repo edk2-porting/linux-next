@@ -296,7 +296,7 @@ int exfat_zeroed_cluster(struct inode *dir, unsigned int clu)
 	}
 
 	if (IS_DIRSYNC(dir))
-		return sync_blockdev_range(sb->s_bdev,
+		return filemap_write_and_wait_range(sb->s_bdev_file->f_mapping,
 				EXFAT_BLK_TO_B(blknr, sb),
 				EXFAT_BLK_TO_B(last_blknr, sb) - 1);
 

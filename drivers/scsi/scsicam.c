@@ -32,11 +32,10 @@
  */
 unsigned char *scsi_bios_ptable(struct block_device *dev)
 {
-	struct address_space *mapping = bdev_whole(dev)->bd_inode->i_mapping;
 	unsigned char *res = NULL;
 	struct folio *folio;
 
-	folio = read_mapping_folio(mapping, 0, NULL);
+	folio = bdev_read_folio(bdev_whole(dev), 0);
 	if (IS_ERR(folio))
 		return NULL;
 
