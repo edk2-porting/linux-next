@@ -361,6 +361,21 @@ void contpte_wrprotect_ptes(struct mm_struct *mm, unsigned long addr,
 }
 EXPORT_SYMBOL_GPL(contpte_wrprotect_ptes);
 
+void contpte_mkold_clean_ptes(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, unsigned int nr)
+{
+	/*
+	 * If clearing the young and dirty bits for an entire contig range, we can
+	 * avoid unfolding. Just set old/clean and wait for the later mmu_gather
+	 * flush to invalidate the tlb. If it's a partial range though, we need to
+	 * unfold.
+	 */
+
+	contpte_try_unfold_partial(mm, addr, ptep, nr);
+	__mkold_clean_ptes(mm, addr, ptep, nr);
+}
+EXPORT_SYMBOL_GPL(contpte_mkold_clean_ptes);
+
 int contpte_ptep_set_access_flags(struct vm_area_struct *vma,
 					unsigned long addr, pte_t *ptep,
 					pte_t entry, int dirty)
