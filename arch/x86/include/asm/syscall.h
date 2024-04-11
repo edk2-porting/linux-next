@@ -30,6 +30,10 @@ extern const sys_call_ptr_t ia32_sys_call_table[];
 extern const sys_call_ptr_t x32_sys_call_table[];
 #endif
 
+extern long ia32_sys_call(const struct pt_regs *, unsigned int nr);
+extern long x32_sys_call(const struct pt_regs *, unsigned int nr);
+extern long x64_sys_call(const struct pt_regs *, unsigned int nr);
+
 /*
  * Only the low 32 bits of orig_ax are meaningful, so we return int.
  * This importantly ignores the high bits on 64-bit, so comparisons
@@ -127,6 +131,7 @@ static inline int syscall_get_arch(struct task_struct *task)
 }
 
 bool do_syscall_64(struct pt_regs *regs, int nr);
+void do_int80_emulation(struct pt_regs *regs);
 
 #endif	/* CONFIG_X86_32 */
 
