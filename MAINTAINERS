@@ -5256,6 +5256,7 @@ CODE TAGGING
 M:	Suren Baghdasaryan <surenb@google.com>
 M:	Kent Overstreet <kent.overstreet@linux.dev>
 S:	Maintained
+F:	include/asm-generic/codetag.lds.h
 F:	include/linux/codetag.h
 F:	lib/codetag.c
 
@@ -14163,10 +14164,10 @@ M:	Suren Baghdasaryan <surenb@google.com>
 M:	Kent Overstreet <kent.overstreet@linux.dev>
 L:	linux-mm@kvack.org
 S:	Maintained
+F:	Documentation/mm/allocation-profiling.rst
 F:	include/linux/alloc_tag.h
-F:	include/linux/codetag_ctx.h
+F:	include/linux/pgalloc_tag.h
 F:	lib/alloc_tag.c
-F:	lib/pgalloc_tag.c
 
 MEMORY CONTROLLER DRIVERS
 M:	Krzysztof Kozlowski <krzk@kernel.org>
