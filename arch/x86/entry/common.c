@@ -39,6 +39,28 @@
 
 #ifdef CONFIG_X86_64
 
+/*
+ * Do either a direct or an indirect call, depending on whether indirect calls
+ * are considered safe.
+ */
+#define __do_syscall(table, func_direct, nr, regs)			\
+({									\
+	unsigned long __rax, __rdi, __rsi;				\
+									\
+	asm_inline volatile(						\
+		ALTERNATIVE("call " __stringify(func_direct) "\n\t",	\
+			    ANNOTATE_RETPOLINE_SAFE			\
+			    "call *%[func_ptr]\n\t",			\
+			    X86_FEATURE_INDIRECT_SAFE)			\
+		: "=D" (__rdi), "=S" (__rsi), "=a" (__rax),		\
+		  ASM_CALL_CONSTRAINT					\
+		: "0" (regs), "1" (nr), [func_ptr] "r" (table[nr])	\
+		: "rdx", "rcx", "r8", "r9", "r10", "r11",		\
+		  "cc", "memory");					\
+									\
+	__rax;								\
+})
+
 static __always_inline bool do_syscall_x64(struct pt_regs *regs, int nr)
 {
 	/*
@@ -49,7 +71,7 @@ static __always_inline bool do_syscall_x64(struct pt_regs *regs, int nr)
 
 	if (likely(unr < NR_syscalls)) {
 		unr = array_index_nospec(unr, NR_syscalls);
-		regs->ax = x64_sys_call(regs, unr);
+		regs->ax = __do_syscall(sys_call_table, x64_sys_call, unr, regs);
 		return true;
 	}
 	return false;
@@ -66,7 +88,7 @@ static __always_inline bool do_syscall_x32(struct pt_regs *regs, int nr)
 
 	if (IS_ENABLED(CONFIG_X86_X32_ABI) && likely(xnr < X32_NR_syscalls)) {
 		xnr = array_index_nospec(xnr, X32_NR_syscalls);
-		regs->ax = x32_sys_call(regs, xnr);
+		regs->ax = __do_syscall(x32_sys_call_table, x32_sys_call, xnr, regs);
 		return true;
 	}
 	return false;
@@ -147,6 +169,8 @@ static int ia32_emulation_override_cmdline(char *arg)
 	return kstrtobool(arg, &__ia32_enabled);
 }
 early_param("ia32_emulation", ia32_emulation_override_cmdline);
+#else
+#define __do_syscall(table, func_direct, nr, regs) table[nr](regs)
 #endif
 
 /*
@@ -162,7 +186,7 @@ static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs, int nr)
 
 	if (likely(unr < IA32_NR_syscalls)) {
 		unr = array_index_nospec(unr, IA32_NR_syscalls);
-		regs->ax = ia32_sys_call(regs, unr);
+		regs->ax = __do_syscall(ia32_sys_call_table, ia32_sys_call, unr, regs);
 	} else if (nr != -1) {
 		regs->ax = __ia32_sys_ni_syscall(regs);
 	}
