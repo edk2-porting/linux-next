@@ -70,7 +70,7 @@ void erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb)
 	if (erofs_is_fscache_mode(sb))
 		buf->inode = EROFS_SB(sb)->s_fscache->inode;
 	else
-		buf->inode = sb->s_bdev->bd_inode;
+		buf->inode = file_inode(sb->s_bdev_file);
 }
 
 void *erofs_read_metabuf(struct erofs_buf *buf, struct super_block *sb,

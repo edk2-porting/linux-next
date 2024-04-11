@@ -1516,11 +1516,12 @@ static int journal_load_superblock(journal_t *journal)
  * very few fields yet: that has to wait until we have created the
  * journal structures from from scratch, or loaded them from disk. */
 
-static journal_t *journal_init_common(struct block_device *bdev,
-			struct block_device *fs_dev,
+static journal_t *journal_init_common(struct file *bdev_file,
+			struct file *fs_dev_file,
 			unsigned long long start, int len, int blocksize)
 {
 	static struct lock_class_key jbd2_trans_commit_key;
+	struct block_device *bdev = file_bdev(bdev_file);
 	journal_t *journal;
 	int err;
 	int n;
@@ -1531,7 +1532,9 @@ static journal_t *journal_init_common(struct block_device *bdev,
 
 	journal->j_blocksize = blocksize;
 	journal->j_dev = bdev;
-	journal->j_fs_dev = fs_dev;
+	journal->j_dev_file = bdev_file;
+	journal->j_fs_dev = file_bdev(fs_dev_file);
+	journal->j_fs_dev_file = fs_dev_file;
 	journal->j_blk_offset = start;
 	journal->j_total_len = len;
 	jbd2_init_fs_dev_write_error(journal);
@@ -1628,8 +1631,8 @@ err_cleanup:
 
 /**
  *  journal_t * jbd2_journal_init_dev() - creates and initialises a journal structure
- *  @bdev: Block device on which to create the journal
- *  @fs_dev: Device which hold journalled filesystem for this journal.
+ *  @bdev_file: Opened block device on which to create the journal
+ *  @fs_dev_file: Opened device which hold journalled filesystem for this journal.
  *  @start: Block nr Start of journal.
  *  @len:  Length of the journal in blocks.
  *  @blocksize: blocksize of journalling device
@@ -1640,13 +1643,13 @@ err_cleanup:
  *  range of blocks on an arbitrary block device.
  *
  */
-journal_t *jbd2_journal_init_dev(struct block_device *bdev,
-			struct block_device *fs_dev,
+journal_t *jbd2_journal_init_dev(struct file *bdev_file,
+			struct file *fs_dev_file,
 			unsigned long long start, int len, int blocksize)
 {
 	journal_t *journal;
 
-	journal = journal_init_common(bdev, fs_dev, start, len, blocksize);
+	journal = journal_init_common(bdev_file, fs_dev_file, start, len, blocksize);
 	if (IS_ERR(journal))
 		return ERR_CAST(journal);
 
@@ -1683,8 +1686,9 @@ journal_t *jbd2_journal_init_inode(struct inode *inode)
 		  inode->i_sb->s_id, inode->i_ino, (long long) inode->i_size,
 		  inode->i_sb->s_blocksize_bits, inode->i_sb->s_blocksize);
 
-	journal = journal_init_common(inode->i_sb->s_bdev, inode->i_sb->s_bdev,
-			blocknr, inode->i_size >> inode->i_sb->s_blocksize_bits,
+	journal = journal_init_common(inode->i_sb->s_bdev_file,
+			inode->i_sb->s_bdev_file, blocknr,
+			inode->i_size >> inode->i_sb->s_blocksize_bits,
 			inode->i_sb->s_blocksize);
 	if (IS_ERR(journal))
 		return ERR_CAST(journal);
@@ -2009,7 +2013,7 @@ static int __jbd2_journal_erase(journal_t *journal, unsigned int flags)
 		byte_count = (block_stop - block_start + 1) *
 				journal->j_blocksize;
 
-		truncate_inode_pages_range(journal->j_dev->bd_inode->i_mapping,
+		truncate_inode_pages_range(file_mapping(journal->j_dev_file),
 				byte_start, byte_stop);
 
 		if (flags & JBD2_JOURNAL_FLUSH_DISCARD) {

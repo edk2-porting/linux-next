@@ -426,6 +426,8 @@ static inline int blkdev_zone_mgmt_ioctl(struct block_device *bdev,
 }
 #endif /* CONFIG_BLK_DEV_ZONED */
 
+struct inode *bdev_inode(struct block_device *bdev);
+struct address_space *bdev_mapping(struct block_device *bdev);
 struct block_device *bdev_alloc(struct gendisk *disk, u8 partno);
 void bdev_add(struct block_device *bdev, dev_t dev);
 

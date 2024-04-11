@@ -1074,6 +1074,11 @@ static inline struct inode *file_inode(const struct file *f)
 	return f->f_inode;
 }
 
+static inline struct address_space *file_mapping(const struct file *f)
+{
+	return f->f_mapping;
+}
+
 /*
  * file_dentry() is a relic from the days that overlayfs was using files with a
  * "fake" path, meaning, f_path on overlayfs and f_inode on underlying fs.
