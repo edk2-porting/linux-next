@@ -57,6 +57,7 @@ struct address_space *bdev_mapping(struct block_device *bdev)
 {
 	return BDEV_B(bdev)->vfs_inode.i_mapping;
 }
+EXPORT_SYMBOL_GPL(bdev_mapping);
 
 struct block_device *I_BDEV(struct inode *inode)
 {
