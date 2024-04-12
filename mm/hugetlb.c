@@ -2378,7 +2378,7 @@ static struct folio *remove_pool_hugetlb_folio(struct hstate *h,
 
 /*
  * Dissolve a given free hugetlb folio into free buddy pages. This function
- * does nothing for in-use hugepages and non-hugepages.
+ * does nothing for in-use hugetlb folios and non-hugetlb folios.
  * This function returns values like below:
  *
  *  -ENOMEM: failed to allocate vmemmap pages to free the freed hugepages
@@ -2470,7 +2470,7 @@ out:
  * Note that this will dissolve a free gigantic hugepage completely, if any
  * part of it lies within the given range.
  * Also note that if dissolve_free_hugetlb_folio() returns with an error, all
- * free hugepages that were dissolved before that error are lost.
+ * free hugetlb folios that were dissolved before that error are lost.
  */
 int dissolve_free_huge_pages(unsigned long start_pfn, unsigned long end_pfn)
 {
