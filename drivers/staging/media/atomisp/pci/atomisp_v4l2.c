@@ -823,13 +823,6 @@ static int atomisp_subdev_probe(struct atomisp_device *isp)
 			isp->sensor_lanes[mipi_port] = subdevs->lanes;
 			isp->sensor_subdevs[subdevs->port] = subdevs->subdev;
 			break;
-		case CAMERA_MOTOR:
-			if (isp->motor) {
-				dev_warn(isp->dev, "too many atomisp motors\n");
-				continue;
-			}
-			isp->motor = subdevs->subdev;
-			break;
 		case LED_FLASH:
 			if (isp->flash) {
 				dev_warn(isp->dev, "too many atomisp flash devices\n");
@@ -1066,14 +1059,6 @@ int atomisp_register_device_nodes(struct atomisp_device *isp)
 
 		atomisp_init_sensor(input);
 
-		/*
-		 * HACK: Currently VCM belongs to primary sensor only, but correct
-		 * approach must be to acquire from platform code which sensor
-		 * owns it.
-		 */
-		if (i == ATOMISP_CAMERA_PORT_PRIMARY)
-			input->motor = isp->motor;
-
 		err = media_create_pad_link(&input->camera->entity, 0,
 					    &isp->csi2_port[i].subdev.entity,
 					    CSI2_PAD_SINK,
@@ -1105,7 +1090,8 @@ int atomisp_register_device_nodes(struct atomisp_device *isp)
 		return err;
 
 	err = media_create_pad_link(&isp->asd.subdev.entity, ATOMISP_SUBDEV_PAD_SOURCE,
-				    &isp->asd.video_out.vdev.entity, 0, 0);
+				    &isp->asd.video_out.vdev.entity, 0,
+				    MEDIA_LNK_FL_ENABLED | MEDIA_LNK_FL_IMMUTABLE);
 	if (err)
 		return err;
 
@@ -1363,7 +1349,7 @@ static int atomisp_pci_probe(struct pci_dev *pdev, const struct pci_device_id *i
 	}
 
 	if (pdev->revision <= ATOMISP_PCI_REV_BYT_A0_MAX) {
-		dev_err(&pdev->dev, "revision %d is not unsupported\n", pdev->revision);
+		dev_err(&pdev->dev, "revision %d is not supported\n", pdev->revision);
 		return -ENODEV;
 	}
 
