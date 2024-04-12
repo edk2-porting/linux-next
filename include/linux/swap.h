@@ -565,7 +565,7 @@ static inline void swap_free(swp_entry_t swp)
 {
 }
 
-void swap_free_nr(swp_entry_t entry, int nr_pages)
+static inline void swap_free_nr(swp_entry_t entry, int nr_pages)
 {
 }
 
