@@ -873,9 +873,6 @@ static struct gpio_desc *acpi_get_gpiod_by_index(struct acpi_device *adev,
 	struct acpi_gpio_lookup lookup;
 	int ret;
 
-	if (!adev)
-		return ERR_PTR(-ENODEV);
-
 	memset(&lookup, 0, sizeof(lookup));
 	lookup.index = index;
 
@@ -976,10 +973,11 @@ struct gpio_desc *acpi_find_gpio(struct fwnode_handle *fwnode,
 		else
 			desc = acpi_get_gpiod_from_data(fwnode,
 						        propname, idx, &info);
-		if (!IS_ERR(desc))
-			break;
 		if (PTR_ERR(desc) == -EPROBE_DEFER)
 			return ERR_CAST(desc);
+
+		if (!IS_ERR(desc))
+			break;
 	}
 
 	/* Then from plain _CRS GPIOs */
