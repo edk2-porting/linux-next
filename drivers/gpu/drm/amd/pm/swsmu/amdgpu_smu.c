@@ -737,6 +737,7 @@ static int smu_early_init(void *handle)
 	smu->is_apu = false;
 	smu->smu_baco.state = SMU_BACO_STATE_NONE;
 	smu->smu_baco.platform_support = false;
+	smu->smu_baco.maco_support = false;
 	smu->user_dpm_profile.fan_mode = -1;
 
 	mutex_init(&smu->message_lock);
@@ -3223,17 +3224,17 @@ static int smu_set_xgmi_pstate(void *handle,
 	return ret;
 }
 
-static bool smu_get_baco_capability(void *handle)
+static int smu_get_baco_capability(void *handle)
 {
 	struct smu_context *smu = handle;
 
 	if (!smu->pm_enabled)
 		return false;
 
-	if (!smu->ppt_funcs || !smu->ppt_funcs->baco_is_support)
+	if (!smu->ppt_funcs || !smu->ppt_funcs->get_bamaco_support)
 		return false;
 
-	return smu->ppt_funcs->baco_is_support(smu);
+	return smu->ppt_funcs->get_bamaco_support(smu);
 }
 
 static int smu_baco_set_state(void *handle, int state)
