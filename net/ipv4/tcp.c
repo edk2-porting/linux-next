@@ -290,6 +290,9 @@ enum {
 DEFINE_PER_CPU(unsigned int, tcp_orphan_count);
 EXPORT_PER_CPU_SYMBOL_GPL(tcp_orphan_count);
 
+DEFINE_PER_CPU(u32, tcp_tw_isn);
+EXPORT_PER_CPU_SYMBOL_GPL(tcp_tw_isn);
+
 long sysctl_tcp_mem[3] __read_mostly;
 EXPORT_SYMBOL(sysctl_tcp_mem);
 
@@ -1721,7 +1724,7 @@ int tcp_set_rcvlowat(struct sock *sk, int val)
 	space = tcp_space_from_win(sk, val);
 	if (space > sk->sk_rcvbuf) {
 		WRITE_ONCE(sk->sk_rcvbuf, space);
-		tcp_sk(sk)->window_clamp = val;
+		WRITE_ONCE(tcp_sk(sk)->window_clamp, val);
 	}
 	return 0;
 }
@@ -3379,7 +3382,7 @@ int tcp_set_window_clamp(struct sock *sk, int val)
 	if (!val) {
 		if (sk->sk_state != TCP_CLOSE)
 			return -EINVAL;
-		tp->window_clamp = 0;
+		WRITE_ONCE(tp->window_clamp, 0);
 	} else {
 		u32 new_rcv_ssthresh, old_window_clamp = tp->window_clamp;
 		u32 new_window_clamp = val < SOCK_MIN_RCVBUF / 2 ?
@@ -3388,7 +3391,7 @@ int tcp_set_window_clamp(struct sock *sk, int val)
 		if (new_window_clamp == old_window_clamp)
 			return 0;
 
-		tp->window_clamp = new_window_clamp;
+		WRITE_ONCE(tp->window_clamp, new_window_clamp);
 		if (new_window_clamp < old_window_clamp) {
 			/* need to apply the reserved mem provisioning only
 			 * when shrinking the window clamp
@@ -4057,7 +4060,7 @@ int do_tcp_getsockopt(struct sock *sk, int level,
 				      TCP_RTO_MAX / HZ);
 		break;
 	case TCP_WINDOW_CLAMP:
-		val = tp->window_clamp;
+		val = READ_ONCE(tp->window_clamp);
 		break;
 	case TCP_INFO: {
 		struct tcp_info info;
@@ -4648,16 +4651,16 @@ static void __init tcp_struct_check(void)
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, lsndtime);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, mdev_us);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, tcp_wstamp_ns);
-	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, tcp_clock_cache);
-	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, tcp_mstamp);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, rtt_seq);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, tsorted_sent_queue);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, highest_sack);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_tx, ecn_flags);
-	CACHELINE_ASSERT_GROUP_SIZE(struct tcp_sock, tcp_sock_write_tx, 105);
+	CACHELINE_ASSERT_GROUP_SIZE(struct tcp_sock, tcp_sock_write_tx, 89);
 
 	/* TXRX read-write hotpath cache lines */
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, pred_flags);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, tcp_clock_cache);
+	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, tcp_mstamp);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, rcv_nxt);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, snd_nxt);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, snd_una);
@@ -4670,7 +4673,11 @@ static void __init tcp_struct_check(void)
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, app_limited);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, rcv_wnd);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_txrx, rx_opt);
-	CACHELINE_ASSERT_GROUP_SIZE(struct tcp_sock, tcp_sock_write_txrx, 76);
+
+	/* 32bit arches with 8byte alignment on u64 fields might need padding
+	 * before tcp_clock_cache.
+	 */
+	CACHELINE_ASSERT_GROUP_SIZE(struct tcp_sock, tcp_sock_write_txrx, 92 + 4);
 
 	/* RX read-write hotpath cache lines */
 	CACHELINE_ASSERT_GROUP_MEMBER(struct tcp_sock, tcp_sock_write_rx, bytes_received);
