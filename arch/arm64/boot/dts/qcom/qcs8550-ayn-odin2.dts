@@ -306,20 +306,37 @@
 		gpio = <&tlmm 109 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
 
+		pinctrl-names = "default";
+		pinctrl-0 = <&telec_pwr_en>;
+
 		regulator-state-mem {
 			regulator-off-in-suspend;
 		};
 	};
 
 	fan: pwm-fan {
+		// 40 -> 1550 RPM
+		// 65 -> 2450 RPM
+		// 75 -> 2750 RPM
+		// 90 -> 3250 RPM
+		// 100 -> 3550 RPM
+		// 130 -> 4400 RPM
+		// 150 -> 4850 RPM
+		// 180 -> 5500 RPM
+		// 255 -> 6000 RPM
 		compatible = "pwm-fan";
-		cooling-levels = <255>;
+		/* level (0, 1, 2, 3, 4, 5, 6, 7, 8, 9) */
+		cooling-levels = <0 40 65 75 90 100 130 150 180 255>;
 		#cooling-cells = <2>;
 		fan-supply = <&fan_pwr>;
-		pwms = <&pm8550_pwm 3 50000>;
+		pwms = <&pm8550_pwm 3 100000>;
 
 		pinctrl-names = "default";
-		pinctrl-0 = <&pwm_out_default>;
+		pinctrl-0 = <&pwm_out_default &fan_int>;
+
+		pulses-per-revolution = <4>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <13 IRQ_TYPE_EDGE_FALLING>;
 	};
 
 	hdmi_pwr: hdmi-pwr-regulator {
@@ -414,6 +431,125 @@
 
 			platform {
 				sound-dai = <&q6apm>;
+			};
+		};
+	};
+
+	thermal-zones {
+		cpu7-middle-thermal {
+			// thermal-sensors = <&tsens0 14>;
+
+			trips {
+				// cpu7_middle_alert0: trip-point0 {
+				// 	temperature = <90000>;
+				// 	hysteresis = <2000>;
+				// 	type = "passive";
+				// };
+
+				// cpu7_middle_alert1: trip-point1 {
+				// 	temperature = <95000>;
+				// 	hysteresis = <2000>;
+				// 	type = "passive";
+				// };
+
+				// cpu7_middle_crit: cpu-critical {
+				// 	temperature = <110000>;
+				// 	hysteresis = <1000>;
+				// 	type = "critical";
+				// };
+
+				cpu7_middle_fan0: trip-point2 {
+					temperature = <40000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan1: trip-point3 {
+					temperature = <45000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan2: trip-point4 {
+					temperature = <50000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan3: trip-point5 {
+					temperature = <55000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan4: trip-point6 {
+					temperature = <60000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan5: trip-point7 {
+					temperature = <65000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan6: trip-point8 {
+					temperature = <70000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan7: trip-point9 {
+					temperature = <75000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+
+				cpu7_middle_fan8: trip-point10 {
+					temperature = <80000>;
+					hysteresis = <2000>;
+					type = "active";
+				};
+			};
+
+			cooling-maps {
+				map0 {
+					trip = <&cpu7_middle_fan0>;
+					cooling-device = <&fan 0 1>;
+				};
+				map1 {
+					trip = <&cpu7_middle_fan1>;
+					cooling-device = <&fan 1 2>;
+				};
+				map2 {
+					trip = <&cpu7_middle_fan2>;
+					cooling-device = <&fan 2 3>;
+				};
+				map3 {
+					trip = <&cpu7_middle_fan3>;
+					cooling-device = <&fan 3 4>;
+				};
+				map4 {
+					trip = <&cpu7_middle_fan4>;
+					cooling-device = <&fan 4 5>;
+				};
+				map5 {
+					trip = <&cpu7_middle_fan5>;
+					cooling-device = <&fan 5 6>;
+				};
+				map6 {
+					trip = <&cpu7_middle_fan6>;
+					cooling-device = <&fan 6 7>;
+				};
+				map7 {
+					trip = <&cpu7_middle_fan7>;
+					cooling-device = <&fan 7 8>;
+				};
+				map8 {
+					trip = <&cpu7_middle_fan8>;
+					cooling-device = <&fan 8 9>;
+				};
 			};
 		};
 	};
@@ -1240,12 +1376,14 @@
 };
 
 &pm8550_gpios {
-	volume_up_n: volume-up-n-state {
-		pins = "gpio6";
-		function = "normal";
+	pwm_out_default: pwm-out-default-state {
+		pins = "gpio8";
+		function = "func1";
+		input-disable;
+		output-enable;
+		output-low;
+		bias-disable;
 		power-source = <1>;
-		bias-pull-up;
-		input-enable;
 	};
 
 	sdc2_card_det_n: sdc2-card-det-state {
@@ -1257,13 +1395,12 @@
 		power-source = <1>; /* 1.8 V */
 	};
 
-	pwm_out_default: pwm-out-default-state {
-		pins = "gpio8";
-		function = "func1";
-		input-disable;
-		output-enable;
-		bias-disable;
+	volume_up_n: volume-up-n-state {
+		pins = "gpio6";
+		function = "normal";
 		power-source = <1>;
+		bias-pull-up;
+		input-enable;
 	};
 };
 
@@ -1432,6 +1569,13 @@
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
 
+	fan_int: fan-int-state {
+		pins = "gpio13";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
 	prim_mi2s_active: prim-mi2s-active-state {
 		sck-pins {
 			pins = "gpio121";
@@ -1563,6 +1707,16 @@
 		function = "gpio";
 		drive-strength = <8>;
 		bias-pull-down;
+	};
+
+	telec_pwr_en: telec-pwr-en-state {
+		pins = "gpio109";
+		function = "gpio";
+		drive-strength = <2>;
+		output-low;
+
+		bias-disable;
+		// drive-strength = <16>;
 	};
 };
 

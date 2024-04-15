@@ -10,15 +10,39 @@
     status = "disabled";
 };
 
-&fan_pwr {
-    status = "disabled";
-};
+// &fan_pwr {
+//     status = "disabled";
+// };
 
-&fan {
+// &fan {
+//     status = "disabled";
+// };
+
+&i2c0 {
     status = "disabled";
 };
 
 &i2c4 {
+    status = "disabled";
+};
+
+&i2c12 {
+    status = "disabled";
+};
+
+&led_left_side {
+    status = "disabled";
+};
+
+&led_left_joystick {
+    status = "disabled";
+};
+
+&led_right_side {
+    status = "disabled";
+};
+
+&led_right_joystick {
     status = "disabled";
 };
 
@@ -30,9 +54,9 @@
     status = "disabled";
 };
 
-&pm8550_pwm {
-    status = "disabled";
-};
+// &pm8550_pwm {
+//     status = "disabled";
+// };
 
 &uart15 {
 	status = "disabled";
