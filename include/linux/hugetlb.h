@@ -862,7 +862,7 @@ static inline int hstate_index(struct hstate *h)
 }
 
 int dissolve_free_hugetlb_folio(struct folio *folio);
-extern int dissolve_free_hugetlb_folios(unsigned long start_pfn,
+int dissolve_free_hugetlb_folios(unsigned long start_pfn,
 				    unsigned long end_pfn);
 
 #ifdef CONFIG_MEMORY_FAILURE
