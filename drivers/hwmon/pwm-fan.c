@@ -524,7 +524,7 @@ static int pwm_fan_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
-	ctx->enable_mode = pwm_disable_reg_enable;
+	ctx->enable_mode = pwm_disable_reg_disable;
 
 	/*
 	 * Set duty cycle to maximum allowed and enable PWM output as well as
