@@ -99,12 +99,12 @@ static int ntfs_read_ea(struct ntfs_inode *ni, struct EA_FULL **ea,
 
 	/* Check Ea limit. */
 	size = le32_to_cpu((*info)->size);
-	if (size > sbi->ea_max_size) {
+	if (size > sbi->attrdef.ea_max_size) {
 		err = -EFBIG;
 		goto out;
 	}
 
-	if (attr_size(attr_ea) > sbi->ea_max_size) {
+	if (attr_size(attr_ea) > sbi->attrdef.ea_max_size) {
 		err = -EFBIG;
 		goto out;
 	}
@@ -430,7 +430,7 @@ static noinline int ntfs_set_ea(struct inode *inode, const char *name,
 	 * 1. Check ea_info.size_pack for overflow.
 	 * 2. New attribute size must fit value from $AttrDef
 	 */
-	if (new_pack > 0xffff || size > sbi->ea_max_size) {
+	if (new_pack > 0xffff || size > sbi->attrdef.ea_max_size) {
 		ntfs_inode_warn(
 			inode,
 			"The size of extended attributes must not exceed 64KiB");

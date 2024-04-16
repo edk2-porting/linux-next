@@ -201,6 +201,15 @@ struct ntfs_index {
 	u8 type; // index_mutex_classed
 };
 
+/* NOT ondisk!. Just a small copy of $AttrDef file entry. */
+struct ATTR_DEF_ENTRY_SMALL {
+	enum ATTR_TYPE type;
+	__le32 flags;
+	u64 min_sz;
+	u64 max_sz;
+};
+static_assert(sizeof(struct ATTR_DEF_ENTRY_SMALL) == 0x18);
+
 /* Minimum MFT zone. */
 #define NTFS_MIN_MFT_ZONE 100
 /* Step to increase the MFT. */
@@ -242,9 +251,13 @@ struct ntfs_sb_info {
 	CLST reparse_no;
 	CLST usn_jrnl_no;
 
-	struct ATTR_DEF_ENTRY *def_table; // Attribute definition table.
-	u32 def_entries;
-	u32 ea_max_size;
+	struct {
+		u64 rp_max_size; // 16K
+		u32 entries;
+		u32 ea_max_size;
+		u32 label_max_size;
+		struct ATTR_DEF_ENTRY_SMALL *table; // 'entries'.
+	} attrdef;
 
 	struct MFT_REC *new_rec;
 
@@ -296,7 +309,6 @@ struct ntfs_sb_info {
 	struct {
 		struct ntfs_index index_r;
 		struct ntfs_inode *ni;
-		u64 max_size; // 16K
 	} reparse;
 
 	struct {
@@ -658,6 +670,8 @@ int run_deallocate(struct ntfs_sb_info *sbi, const struct runs_tree *run,
 		   bool trim);
 bool valid_windows_name(struct ntfs_sb_info *sbi, const struct le_str *name);
 int ntfs_set_label(struct ntfs_sb_info *sbi, u8 *label, int len);
+int ntfs_check_attr_def(struct ntfs_sb_info *sbi,
+			const struct ATTR_DEF_ENTRY *raw, u32 bytes);
 
 /* Globals from index.c */
 int indx_used_bit(struct ntfs_index *indx, struct ntfs_inode *ni, size_t *bit);
@@ -714,7 +728,7 @@ int ntfs3_write_inode(struct inode *inode, struct writeback_control *wbc);
 int ntfs_sync_inode(struct inode *inode);
 int ntfs_flush_inodes(struct super_block *sb, struct inode *i1,
 		      struct inode *i2);
-int inode_write_data(struct inode *inode, const void *data, size_t bytes);
+int inode_read_data(struct inode *inode, void *data, size_t bytes);
 int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
 		      struct dentry *dentry, const struct cpu_str *uni,
 		      umode_t mode, dev_t dev, const char *symname, u32 size,
@@ -906,22 +920,6 @@ static inline bool ntfs_is_meta_file(struct ntfs_sb_info *sbi, CLST rno)
 	return rno < MFT_REC_FREE || rno == sbi->objid_no ||
 	       rno == sbi->quota_no || rno == sbi->reparse_no ||
 	       rno == sbi->usn_jrnl_no;
-}
-
-static inline void ntfs_unmap_page(struct page *page)
-{
-	kunmap(page);
-	put_page(page);
-}
-
-static inline struct page *ntfs_map_page(struct address_space *mapping,
-					 unsigned long index)
-{
-	struct page *page = read_mapping_page(mapping, index, NULL);
-
-	if (!IS_ERR(page))
-		kmap(page);
-	return page;
 }
 
 static inline size_t wnd_zone_bit(const struct wnd_bitmap *wnd)

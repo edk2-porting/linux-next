@@ -624,7 +624,7 @@ static void ntfs3_free_sbi(struct ntfs_sb_info *sbi)
 {
 	kfree(sbi->new_rec);
 	kvfree(ntfs_put_shared(sbi->upcase));
-	kvfree(sbi->def_table);
+	kfree(sbi->attrdef.table);
 	kfree(sbi->compress.lznt);
 #ifdef CONFIG_NTFS3_LZX_XPRESS
 	xpress_free_decompressor(sbi->compress.xpress);
@@ -1157,8 +1157,6 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	CLST vcn, lcn, len;
 	struct ATTRIB *attr;
 	const struct VOLUME_INFO *info;
-	u32 idx, done, bytes;
-	struct ATTR_DEF_ENTRY *t;
 	u16 *shared;
 	struct MFT_REF ref;
 	bool ro = sb_rdonly(sb);
@@ -1199,7 +1197,7 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 
 	/*
 	 * Load $Volume. This should be done before $LogFile
-	 * 'cause 'sbi->volume.ni' is used 'ntfs_set_state'.
+	 * 'cause 'sbi->volume.ni' is used in 'ntfs_set_state'.
 	 */
 	ref.low = cpu_to_le32(MFT_REC_VOL);
 	ref.seq = cpu_to_le16(MFT_REC_VOL);
@@ -1422,54 +1420,28 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		goto put_inode_out;
 	}
 
-	bytes = inode->i_size;
-	sbi->def_table = t = kvmalloc(bytes, GFP_KERNEL);
-	if (!t) {
-		err = -ENOMEM;
-		goto put_inode_out;
-	}
+	{
+		u32 bytes = inode->i_size;
+		struct ATTR_DEF_ENTRY *def_table = kmalloc(bytes, GFP_KERNEL);
+		if (!def_table) {
+			err = -ENOMEM;
+			goto put_inode_out;
+		}
 
-	for (done = idx = 0; done < bytes; done += PAGE_SIZE, idx++) {
-		unsigned long tail = bytes - done;
-		struct page *page = ntfs_map_page(inode->i_mapping, idx);
-
-		if (IS_ERR(page)) {
-			err = PTR_ERR(page);
+		/* Read the entire file. */
+		err = inode_read_data(inode, def_table, bytes);
+		if (err) {
 			ntfs_err(sb, "Failed to read $AttrDef (%d).", err);
-			goto put_inode_out;
+		} else {
+			/* Check content and store sorted array. */
+			err = ntfs_check_attr_def(sbi, def_table, bytes);
+			if (err)
+				ntfs_err(sb, "$AttrDef is corrupted.");
 		}
-		memcpy(Add2Ptr(t, done), page_address(page),
-		       min(PAGE_SIZE, tail));
-		ntfs_unmap_page(page);
 
-		if (!idx && ATTR_STD != t->type) {
-			ntfs_err(sb, "$AttrDef is corrupted.");
-			err = -EINVAL;
+		kfree(def_table);
+		if (err)
 			goto put_inode_out;
-		}
-	}
-
-	t += 1;
-	sbi->def_entries = 1;
-	done = sizeof(struct ATTR_DEF_ENTRY);
-	sbi->reparse.max_size = MAXIMUM_REPARSE_DATA_BUFFER_SIZE;
-	sbi->ea_max_size = 0x10000; /* default formatter value */
-
-	while (done + sizeof(struct ATTR_DEF_ENTRY) <= bytes) {
-		u32 t32 = le32_to_cpu(t->type);
-		u64 sz = le64_to_cpu(t->max_sz);
-
-		if ((t32 & 0xF) || le32_to_cpu(t[-1].type) >= t32)
-			break;
-
-		if (t->type == ATTR_REPARSE)
-			sbi->reparse.max_size = sz;
-		else if (t->type == ATTR_EA)
-			sbi->ea_max_size = sz;
-
-		done += sizeof(struct ATTR_DEF_ENTRY);
-		t += 1;
-		sbi->def_entries += 1;
 	}
 	iput(inode);
 
@@ -1489,27 +1461,22 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		goto put_inode_out;
 	}
 
-	for (idx = 0; idx < (0x10000 * sizeof(short) >> PAGE_SHIFT); idx++) {
-		const __le16 *src;
-		u16 *dst = Add2Ptr(sbi->upcase, idx << PAGE_SHIFT);
-		struct page *page = ntfs_map_page(inode->i_mapping, idx);
-
-		if (IS_ERR(page)) {
-			err = PTR_ERR(page);
-			ntfs_err(sb, "Failed to read $UpCase (%d).", err);
-			goto put_inode_out;
-		}
-
-		src = page_address(page);
+	/* Read the entire file. */
+	err = inode_read_data(inode, sbi->upcase, 0x10000 * sizeof(short));
+	if (err) {
+		ntfs_err(sb, "Failed to read $UpCase (%d).", err);
+		goto put_inode_out;
+	}
 
 #ifdef __BIG_ENDIAN
-		for (i = 0; i < PAGE_SIZE / sizeof(u16); i++)
+	{
+		const __le16 *src = sbi->upcase;
+		u16 *dst = sbi->upcase;
+
+		for (i = 0; i < 0x10000; i++)
 			*dst++ = le16_to_cpu(*src++);
-#else
-		memcpy(dst, src, PAGE_SIZE);
-#endif
-		ntfs_unmap_page(page);
 	}
+#endif
 
 	shared = ntfs_set_shared(sbi->upcase, 0x10000 * sizeof(short));
 	if (shared && sbi->upcase != shared) {

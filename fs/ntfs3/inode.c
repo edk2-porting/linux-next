@@ -18,7 +18,7 @@
 #include "ntfs_fs.h"
 
 /*
- * ntfs_read_mft - Read record and parses MFT.
+ * ntfs_read_mft - Read record and parse MFT.
  */
 static struct inode *ntfs_read_mft(struct inode *inode,
 				   const struct cpu_str *name,
@@ -1090,29 +1090,27 @@ int ntfs_flush_inodes(struct super_block *sb, struct inode *i1,
 	return ret;
 }
 
-int inode_write_data(struct inode *inode, const void *data, size_t bytes)
+/*
+ * Helper function to read file.
+ */
+int inode_read_data(struct inode *inode, void *data, size_t bytes)
 {
 	pgoff_t idx;
+	struct address_space *mapping = inode->i_mapping;
 
-	/* Write non resident data. */
 	for (idx = 0; bytes; idx++) {
 		size_t op = bytes > PAGE_SIZE ? PAGE_SIZE : bytes;
-		struct page *page = ntfs_map_page(inode->i_mapping, idx);
+		struct page *page = read_mapping_page(mapping, idx, NULL);
+		void *kaddr;
 
 		if (IS_ERR(page))
 			return PTR_ERR(page);
 
-		lock_page(page);
-		WARN_ON(!PageUptodate(page));
-		ClearPageUptodate(page);
+		kaddr = kmap_atomic(page);
+		memcpy(data, kaddr, op);
+		kunmap_atomic(kaddr);
 
-		memcpy(page_address(page), data, op);
-
-		flush_dcache_page(page);
-		SetPageUptodate(page);
-		unlock_page(page);
-
-		ntfs_unmap_page(page);
+		put_page(page);
 
 		bytes -= op;
 		data = Add2Ptr(data, PAGE_SIZE);
@@ -1160,7 +1158,7 @@ ntfs_create_reparse_buffer(struct ntfs_sb_info *sbi, const char *symname,
 	/* err = the length of unicode name of symlink. */
 	*nsize = ntfs_reparse_bytes(err);
 
-	if (*nsize > sbi->reparse.max_size) {
+	if (*nsize > sbi->attrdef.rp_max_size) {
 		err = -EFBIG;
 		goto out;
 	}
@@ -1954,7 +1952,7 @@ static noinline int ntfs_readlink_hlp(const struct dentry *link_de,
 		rp = NULL;
 	}
 
-	if (size > sbi->reparse.max_size || size <= sizeof(u32))
+	if (size > sbi->attrdef.rp_max_size || size <= sizeof(u32))
 		goto out;
 
 	if (!rp) {
