@@ -293,7 +293,6 @@ struct ntfs_sb_info {
 		__le16 flags; // Cached current VOLUME_INFO::flags, VOLUME_FLAG_DIRTY.
 		u8 major_ver;
 		u8 minor_ver;
-		char label[256];
 		bool real_dirty; // Real fs state.
 	} volume;
 
@@ -465,6 +464,8 @@ int attr_collapse_range(struct ntfs_inode *ni, u64 vbo, u64 bytes);
 int attr_insert_range(struct ntfs_inode *ni, u64 vbo, u64 bytes);
 int attr_punch_hole(struct ntfs_inode *ni, u64 vbo, u64 bytes, u32 *frame_size);
 int attr_force_nonresident(struct ntfs_inode *ni);
+bool attr_check(const struct ATTRIB *attr, struct ntfs_sb_info *sbi,
+		struct ntfs_inode *ni);
 
 /* Functions from attrlist.c */
 void al_destroy(struct ntfs_inode *ni);
@@ -1150,6 +1151,30 @@ static inline int attr_load_runs_attr(struct ntfs_inode *ni,
 static inline void le64_sub_cpu(__le64 *var, u64 val)
 {
 	*var = cpu_to_le64(le64_to_cpu(*var) - val);
+}
+
+/*
+ * Attributes types: 0x10, 0x20, 0x30....
+ * indexes in attribute table:  0, 1, 2...
+ */
+static inline const struct ATTR_DEF_ENTRY_SMALL *
+ntfs_query_def(const struct ntfs_sb_info *sbi, enum ATTR_TYPE type)
+{
+	const struct ATTR_DEF_ENTRY_SMALL *q;
+	u32 idx = (le32_to_cpu(type) >> 4) - 1;
+
+	if (idx >= sbi->attrdef.entries) {
+		/* such attribute is not allowed in this ntfs. */
+		return NULL;
+	}
+
+	q = sbi->attrdef.table + idx;
+	if (!q->type) {
+		/* such attribute is not allowed in this ntfs. */
+		return NULL;
+	}
+
+	return q;
 }
 
 #endif /* _LINUX_NTFS3_NTFS_FS_H */

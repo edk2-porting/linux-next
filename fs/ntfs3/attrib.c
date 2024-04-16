@@ -228,6 +228,7 @@ int attr_make_nonresident(struct ntfs_inode *ni, struct ATTRIB *attr,
 			  u64 new_size, struct runs_tree *run,
 			  struct ATTRIB **ins_attr, struct page *page)
 {
+	const struct ATTR_DEF_ENTRY_SMALL *q;
 	struct ntfs_sb_info *sbi;
 	struct ATTRIB *attr_s;
 	struct MFT_REC *rec;
@@ -243,6 +244,22 @@ int attr_make_nonresident(struct ntfs_inode *ni, struct ATTRIB *attr,
 	}
 
 	sbi = mi->sbi;
+
+	/* Check if we can use nonresident form. */
+	q = ntfs_query_def(sbi, attr->type);
+	if (!q) {
+		ntfs_set_state(sbi, NTFS_DIRTY_ERROR);
+		return -EINVAL;
+	}
+
+	/* Check resident form. */
+	if (q->flags & NTFS_ATTR_MUST_BE_RESIDENT) {
+		ntfs_warn(sbi->sb,
+			  "attribute %x is not allowed to be nonresident",
+			  le32_to_cpu(attr->type));
+		return -EINVAL;
+	}
+
 	rec = mi->mrec;
 	attr_s = NULL;
 	used = le32_to_cpu(rec->used);
@@ -2589,4 +2606,58 @@ int attr_force_nonresident(struct ntfs_inode *ni)
 	up_write(&ni->file.run_lock);
 
 	return err;
+}
+
+/*
+ * Returns true if attribute is ok
+ */
+bool attr_check(const struct ATTRIB *attr, struct ntfs_sb_info *sbi,
+		struct ntfs_inode *ni)
+{
+	u64 size;
+	const char *hint;
+	const struct ATTR_DEF_ENTRY_SMALL *q = ntfs_query_def(sbi, attr->type);
+
+	if (!q) {
+		hint = "unknown";
+		goto out;
+	}
+
+	/* Check resident form. */
+	if ((q->flags & NTFS_ATTR_MUST_BE_RESIDENT) && attr->non_res) {
+		hint = "must be resident";
+		goto out;
+	}
+
+	/* Check name. */
+	if ((q->flags & NTFS_ATTR_MUST_BE_NAMED) && !attr->name_len) {
+		hint = "must be named";
+		goto out;
+	}
+
+	/* Check size. */
+	size = attr_size(attr);
+	if (size < q->min_sz) {
+		hint = "minimum size";
+		goto out;
+	}
+
+	if (size > q->max_sz) {
+		hint = "maximum size";
+		goto out;
+	}
+
+	/* ok. */
+	return true;
+
+out:
+	if (ni)
+		ntfs_inode_err(&ni->vfs_inode, "attribute type=%x, %s",
+			       le32_to_cpu(attr->type), hint);
+	else
+		ntfs_err(sbi->sb, "attribute type=%x, %s",
+			 le32_to_cpu(attr->type), hint);
+
+	ntfs_set_state(sbi, NTFS_DIRTY_ERROR);
+	return false;
 }

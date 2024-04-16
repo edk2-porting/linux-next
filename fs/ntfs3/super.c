@@ -481,11 +481,39 @@ static int ntfs3_volinfo_open(struct inode *inode, struct file *file)
 /* read /proc/fs/ntfs3/<dev>/label */
 static int ntfs3_label_show(struct seq_file *m, void *o)
 {
+	int len;
 	struct super_block *sb = m->private;
 	struct ntfs_sb_info *sbi = sb->s_fs_info;
+	struct ATTRIB *attr;
+	u8 *label = kmalloc(PAGE_SIZE, GFP_NOFS);
 
-	seq_printf(m, "%s\n", sbi->volume.label);
+	if (!label)
+		return -ENOMEM;
 
+	attr = ni_find_attr(sbi->volume.ni, NULL, NULL, ATTR_LABEL, NULL, 0,
+			    NULL, NULL);
+
+	if (!attr) {
+		/* It is ok if no ATTR_LABEL */
+		label[0] = 0;
+		len = 0;
+	} else if (!attr_check(attr, sbi, sbi->volume.ni)) {
+		len = sprintf(label, "%pg: failed to get label", sb->s_bdev);
+	} else {
+		len = ntfs_utf16_to_nls(sbi, resident_data(attr),
+					le32_to_cpu(attr->res.data_size) >> 1,
+					label, PAGE_SIZE);
+		if (len < 0) {
+			label[0] = 0;
+			len = 0;
+		} else if (len >= PAGE_SIZE) {
+			len = PAGE_SIZE - 1;
+		}
+	}
+
+	seq_printf(m, "%.*s\n", len, label);
+
+	kfree(label);
 	return 0;
 }
 
@@ -1209,25 +1237,6 @@ static int ntfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 
 	ni = ntfs_i(inode);
-
-	/* Load and save label (not necessary). */
-	attr = ni_find_attr(ni, NULL, NULL, ATTR_LABEL, NULL, 0, NULL, NULL);
-
-	if (!attr) {
-		/* It is ok if no ATTR_LABEL */
-	} else if (!attr->non_res && !is_attr_ext(attr)) {
-		/* $AttrDef allows labels to be up to 128 symbols. */
-		err = utf16s_to_utf8s(resident_data(attr),
-				      le32_to_cpu(attr->res.data_size) >> 1,
-				      UTF16_LITTLE_ENDIAN, sbi->volume.label,
-				      sizeof(sbi->volume.label));
-		if (err < 0)
-			sbi->volume.label[0] = 0;
-	} else {
-		/* Should we break mounting here? */
-		//err = -EINVAL;
-		//goto put_inode_out;
-	}
 
 	attr = ni_find_attr(ni, attr, NULL, ATTR_VOL_INFO, NULL, 0, NULL, NULL);
 	if (!attr || is_attr_ext(attr) ||
