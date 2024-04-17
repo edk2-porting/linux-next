@@ -141,7 +141,7 @@ static int __init alloc_tag_init(void)
 	};
 
 	alloc_tag_cttype = codetag_register_type(&desc);
-	if (IS_ERR_OR_NULL(alloc_tag_cttype))
+	if (IS_ERR(alloc_tag_cttype))
 		return PTR_ERR(alloc_tag_cttype);
 
 	register_sysctl_init("vm", memory_allocation_profiling_sysctls);
