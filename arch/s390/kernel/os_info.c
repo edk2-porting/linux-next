@@ -15,6 +15,7 @@
 #include <asm/checksum.h>
 #include <asm/abs_lowcore.h>
 #include <asm/os_info.h>
+#include <asm/physmem_info.h>
 #include <asm/maccess.h>
 #include <asm/asm-offsets.h>
 
@@ -43,13 +44,24 @@ void os_info_crashkernel_add(unsigned long base, unsigned long size)
 }
 
 /*
- * Add OS info entry and update checksum
+ * Add OS info data entry and update checksum
  */
-void os_info_entry_add(int nr, void *ptr, u64 size)
+void os_info_entry_add_data(int nr, void *ptr, u64 size)
 {
 	os_info.entry[nr].addr = __pa(ptr);
 	os_info.entry[nr].size = size;
 	os_info.entry[nr].csum = (__force u32)cksm(ptr, size, 0);
+	os_info.csum = os_info_csum(&os_info);
+}
+
+/*
+ * Add OS info value entry and update checksum
+ */
+void os_info_entry_add_val(int nr, u64 value)
+{
+	os_info.entry[nr].val = value;
+	os_info.entry[nr].size = 0;
+	os_info.entry[nr].csum = 0;
 	os_info.csum = os_info_csum(&os_info);
 }
 
@@ -63,6 +75,15 @@ void __init os_info_init(void)
 	os_info.version_major = OS_INFO_VERSION_MAJOR;
 	os_info.version_minor = OS_INFO_VERSION_MINOR;
 	os_info.magic = OS_INFO_MAGIC;
+	os_info_entry_add_val(OS_INFO_IDENTITY_BASE, __identity_base);
+	os_info_entry_add_val(OS_INFO_KASLR_OFFSET, kaslr_offset());
+	os_info_entry_add_val(OS_INFO_KASLR_OFF_PHYS, __kaslr_offset_phys);
+	os_info_entry_add_val(OS_INFO_VMEMMAP, (unsigned long)vmemmap);
+	os_info_entry_add_val(OS_INFO_AMODE31_START, AMODE31_START);
+	os_info_entry_add_val(OS_INFO_AMODE31_END, AMODE31_END);
+	os_info_entry_add_val(OS_INFO_IMAGE_START, (unsigned long)_stext);
+	os_info_entry_add_val(OS_INFO_IMAGE_END, (unsigned long)_end);
+	os_info_entry_add_val(OS_INFO_IMAGE_PHYS, __pa_symbol(_stext));
 	os_info.csum = os_info_csum(&os_info);
 	abs_lc = get_abs_lowcore();
 	abs_lc->os_info = __pa(&os_info);
