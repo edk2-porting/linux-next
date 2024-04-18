@@ -10,7 +10,7 @@
 #include <dt-bindings/arm/qcom,ids.h>
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
-#include "sm8550.dtsi"
+#include "qcs8550.dtsi"
 #include "pm8550.dtsi"
 #include "pm8550b.dtsi"
 #define PMK8550VE_SID 5
@@ -18,22 +18,20 @@
 #include "pm8550vs.dtsi"
 #include "pmk8550.dtsi"
 
+/*
+ * The SoC being used on this product doesn't feature modem
+ * and camera subsystem.
+ * Variant: 202-AB
+ * FEATURE_ID: 0x8
+ */
+
 /delete-node/ &mpss_mem;
 /delete-node/ &q6_mpss_dtb_mem;
+/delete-node/ &ipa_fw_mem;
+/delete-node/ &ipa_gsi_mem;
 /delete-node/ &camera_mem;
-/delete-node/ &rmtfs_mem;
 /delete-node/ &mpss_dsm_mem;
-/delete-node/ &trust_ui_vm_mem;
-/delete-node/ &trust_ui_vm_dump;
-/delete-node/ &trust_ui_vm_qrtr;
-/delete-node/ &trust_ui_vm_vblk0_ring;
-/delete-node/ &trust_ui_vm_vblk1_ring;
-/delete-node/ &trust_ui_vm_swiotlb;
-/delete-node/ &oem_vm_mem;
-/delete-node/ &oem_vm_vblk0_ring;
-/delete-node/ &oem_vm_swiotlb;
-/delete-node/ &hyp_ext_tags_mem;
-/delete-node/ &hyp_ext_reserved_mem;
+/delete-node/ &camcc;
 /delete-node/ &remoteproc_mpss;
 
 / {
@@ -89,6 +87,24 @@
 		status = "okay";
 	};
 
+	fan_pwr: fan-pwr-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "fan_pwr";
+
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+
+		gpio = <&tlmm 109 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&fan_pwr_en>;
+
+		regulator-state-mem {
+			regulator-off-in-suspend;
+		};
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 
@@ -129,6 +145,17 @@
 		};
 	};
 
+	hdmi_pwr: hdmi-pwr-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "hdmi_pwr";
+
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+
+		gpio = <&tlmm 10 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+	};
+
 	lcm_vdd_2v8: lcm-vdd-2v8-regulator {
 		compatible = "regulator-fixed";
 		regulator-name = "lcm_vdd_2v8";
@@ -138,6 +165,106 @@
 
 		gpio = <&tlmm 142 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
+	};
+
+	led_left_side: led-controller-1 {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "left-side";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_left 0>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_left 1>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_left 2>;
+			};
+		};
+	};
+
+	led_left_joystick: led-controller-2 {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "left-joystick";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_left 6>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_left 7>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_left 8>;
+			};
+		};
+	};
+
+	led_right_side: led-controller-3 {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "right-side";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_right 0>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_right 1>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_right 2>;
+			};
+		};
+	};
+
+	led_right_joystick: led-controller-4 {
+		compatible = "pwm-leds-multicolor";
+
+		multi-led {
+			label = "right-joystick";
+			color = <LED_COLOR_ID_RGB>;
+			max-brightness = <255>;
+
+			led-red {
+				color = <LED_COLOR_ID_RED>;
+				pwms = <&pwm_rgb_right 6>;
+			};
+
+			led-green {
+				color = <LED_COLOR_ID_GREEN>;
+				pwms = <&pwm_rgb_right 7>;
+			};
+
+			led-blue {
+				color = <LED_COLOR_ID_BLUE>;
+				pwms = <&pwm_rgb_right 8>;
+			};
+		};
 	};
 
 	mcu_3v3: mcu-3v3-regulator {
@@ -196,124 +323,6 @@
 		};
 	};
 
-	led_left_side: rgb-led-left-side {
-		compatible = "pwm-leds-multicolor";
-
-		multi-led {
-			label = "left-side";
-			color = <LED_COLOR_ID_RGB>;
-			max-brightness = <255>;
-
-			led-red {
-				color = <LED_COLOR_ID_RED>;
-				pwms = <&pwm_rgb_left 0>;
-			};
-
-			led-green {
-				color = <LED_COLOR_ID_GREEN>;
-				pwms = <&pwm_rgb_left 1>;
-			};
-
-			led-blue {
-				color = <LED_COLOR_ID_BLUE>;
-				pwms = <&pwm_rgb_left 2>;
-			};
-		};
-	};
-
-	led_left_joystick: rgb-led-left-joystick {
-		compatible = "pwm-leds-multicolor";
-
-		multi-led {
-			label = "left-joystick";
-			color = <LED_COLOR_ID_RGB>;
-			max-brightness = <255>;
-
-			led-red {
-				color = <LED_COLOR_ID_RED>;
-				pwms = <&pwm_rgb_left 6>;
-			};
-
-			led-green {
-				color = <LED_COLOR_ID_GREEN>;
-				pwms = <&pwm_rgb_left 7>;
-			};
-
-			led-blue {
-				color = <LED_COLOR_ID_BLUE>;
-				pwms = <&pwm_rgb_left 8>;
-			};
-		};
-	};
-
-	led_right_side: rgb-led-right-side {
-		compatible = "pwm-leds-multicolor";
-
-		multi-led {
-			label = "right-side";
-			color = <LED_COLOR_ID_RGB>;
-			max-brightness = <255>;
-
-			led-red {
-				color = <LED_COLOR_ID_RED>;
-				pwms = <&pwm_rgb_right 0>;
-			};
-
-			led-green {
-				color = <LED_COLOR_ID_GREEN>;
-				pwms = <&pwm_rgb_right 1>;
-			};
-
-			led-blue {
-				color = <LED_COLOR_ID_BLUE>;
-				pwms = <&pwm_rgb_right 2>;
-			};
-		};
-	};
-
-	led_right_joystick: rgb-led-right-joystick {
-		compatible = "pwm-leds-multicolor";
-
-		multi-led {
-			label = "right-joystick";
-			color = <LED_COLOR_ID_RGB>;
-			max-brightness = <255>;
-
-			led-red {
-				color = <LED_COLOR_ID_RED>;
-				pwms = <&pwm_rgb_right 6>;
-			};
-
-			led-green {
-				color = <LED_COLOR_ID_GREEN>;
-				pwms = <&pwm_rgb_right 7>;
-			};
-
-			led-blue {
-				color = <LED_COLOR_ID_BLUE>;
-				pwms = <&pwm_rgb_right 8>;
-			};
-		};
-	};
-
-	fan_pwr: fan-pwr-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "fan_pwr";
-
-		regulator-min-microvolt = <5000000>;
-		regulator-max-microvolt = <5000000>;
-
-		gpio = <&tlmm 109 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-
-		pinctrl-names = "default";
-		pinctrl-0 = <&telec_pwr_en>;
-
-		regulator-state-mem {
-			regulator-off-in-suspend;
-		};
-	};
-
 	fan: pwm-fan {
 		// 40 -> 1550 RPM
 		// 65 -> 2450 RPM
@@ -325,8 +334,8 @@
 		// 180 -> 5500 RPM
 		// 255 -> 6000 RPM
 		compatible = "pwm-fan";
-		/* level (0, 1, 2, 3, 4, 5, 6, 7, 8, 9) */
-		cooling-levels = <0 40 65 75 90 100 130 150 180 255>;
+		/* level (0, 1, 2, 3, 4, 5, 6, 7) */
+		cooling-levels = <0 40 65 75 90 100 130 150>;
 		#cooling-cells = <2>;
 		fan-supply = <&fan_pwr>;
 		pwms = <&pm8550_pwm 3 100000>;
@@ -337,17 +346,6 @@
 		pulses-per-revolution = <4>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <13 IRQ_TYPE_EDGE_FALLING>;
-	};
-
-	hdmi_pwr: hdmi-pwr-regulator {
-		compatible = "regulator-fixed";
-		regulator-name = "hdmi_pwr";
-
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-
-		gpio = <&tlmm 10 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
 	};
 
 	sound {
@@ -433,12 +431,25 @@
 				sound-dai = <&q6apm>;
 			};
 		};
+
+		dp0-dai-link {
+			link-name = "DP0 Playback";
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_0>;
+			};
+
+			platform {
+				sound-dai = <&q6apm>;
+			};
+
+			codec {
+				sound-dai = <&mdss_dp0>;
+			};
+		};
 	};
 
 	thermal-zones {
-		cpu7-middle-thermal {
-			// thermal-sensors = <&tsens0 14>;
-
+		cpuss2-thermal {
 			trips {
 				// cpu7_middle_alert0: trip-point0 {
 				// 	temperature = <90000>;
@@ -459,58 +470,58 @@
 				// };
 
 				cpu7_middle_fan0: trip-point2 {
-					temperature = <40000>;
-					hysteresis = <2000>;
-					type = "active";
-				};
-
-				cpu7_middle_fan1: trip-point3 {
-					temperature = <45000>;
-					hysteresis = <2000>;
-					type = "active";
-				};
-
-				cpu7_middle_fan2: trip-point4 {
 					temperature = <50000>;
 					hysteresis = <2000>;
 					type = "active";
 				};
 
-				cpu7_middle_fan3: trip-point5 {
+				cpu7_middle_fan1: trip-point3 {
 					temperature = <55000>;
 					hysteresis = <2000>;
 					type = "active";
 				};
 
-				cpu7_middle_fan4: trip-point6 {
+				cpu7_middle_fan2: trip-point4 {
 					temperature = <60000>;
 					hysteresis = <2000>;
 					type = "active";
 				};
 
-				cpu7_middle_fan5: trip-point7 {
+				cpu7_middle_fan3: trip-point5 {
 					temperature = <65000>;
 					hysteresis = <2000>;
 					type = "active";
 				};
 
-				cpu7_middle_fan6: trip-point8 {
+				cpu7_middle_fan4: trip-point6 {
 					temperature = <70000>;
 					hysteresis = <2000>;
 					type = "active";
 				};
 
-				cpu7_middle_fan7: trip-point9 {
+				cpu7_middle_fan5: trip-point7 {
 					temperature = <75000>;
 					hysteresis = <2000>;
 					type = "active";
 				};
 
-				cpu7_middle_fan8: trip-point10 {
+				cpu7_middle_fan6: trip-point8 {
 					temperature = <80000>;
 					hysteresis = <2000>;
 					type = "active";
 				};
+
+				// cpu7_middle_fan7: trip-point9 {
+				// 	temperature = <75000>;
+				// 	hysteresis = <2000>;
+				// 	type = "active";
+				// };
+
+				// cpu7_middle_fan8: trip-point10 {
+				// 	temperature = <80000>;
+				// 	hysteresis = <2000>;
+				// 	type = "active";
+				// };
 			};
 
 			cooling-maps {
@@ -542,14 +553,14 @@
 					trip = <&cpu7_middle_fan6>;
 					cooling-device = <&fan 6 7>;
 				};
-				map7 {
-					trip = <&cpu7_middle_fan7>;
-					cooling-device = <&fan 7 8>;
-				};
-				map8 {
-					trip = <&cpu7_middle_fan8>;
-					cooling-device = <&fan 8 9>;
-				};
+				// map7 {
+				// 	trip = <&cpu7_middle_fan7>;
+				// 	cooling-device = <&fan 7 8>;
+				// };
+				// map8 {
+				// 	trip = <&cpu7_middle_fan8>;
+				// 	cooling-device = <&fan 8 9>;
+				// };
 			};
 		};
 	};
@@ -1269,12 +1280,50 @@
 // 	qcom,dmic-sample-rate = <4800000>;
 // };
 
+&lpass_tlmm {
+	tert_mi2s_active: tert-mi2s-active-state {
+		sck-pins {
+			pins = "gpio12";
+			function = "i2s3_clk";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+
+		ws-pins {
+			pins = "gpio13";
+			function = "i2s3_ws";
+			drive-strength = <8>;
+			bias-disable;
+			output-high;
+		};
+
+		data-pins {
+			pins = "gpio17","gpio18";
+			function = "i2s3_data";
+			drive-strength = <8>;
+			bias-disable;
+		};
+	};
+};
+
 &lpass_wsamacro {
 	status = "disabled";
 };
 
 &mdss {
 	status = "okay";
+};
+
+&mdss_dp0 {
+	status = "okay";
+	sound-name-prefix = "Display Port0";
+};
+
+&mdss_dp0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&usb_dp_qmpphy_dp_in>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
 };
 
 &mdss_dsi0 {
@@ -1327,16 +1376,6 @@
 &mdss_dsi1_phy {
 	vdds-supply = <&vreg_l1e_0p88>;
 	status = "okay";
-};
-
-&mdss_dp0 {
-	status = "okay";
-};
-
-&mdss_dp0_out {
-	data-lanes = <0 1 2 3>;
-	remote-endpoint = <&usb_dp_qmpphy_dp_in>;
-	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
 };
 
 &pcie0 {
@@ -1538,34 +1577,6 @@
 	};
 };
 
-&lpass_tlmm {
-	tert_mi2s_active: tert-mi2s-active-state {
-		sck-pins {
-			pins = "gpio12";
-			function = "i2s3_clk";
-			drive-strength = <8>;
-			bias-disable;
-			output-high;
-		};
-
-		ws-pins {
-			pins = "gpio13";
-			function = "i2s3_ws";
-			drive-strength = <8>;
-			bias-disable;
-			output-high;
-		};
-
-		data-pins {
-			pins = "gpio17","gpio18";
-			function = "i2s3_data";
-			drive-strength = <8>;
-			bias-disable;
-		};
-	};
-
-};
-
 &tlmm {
 	gpio-reserved-ranges = <32 8>;
 
@@ -1709,14 +1720,12 @@
 		bias-pull-down;
 	};
 
-	telec_pwr_en: telec-pwr-en-state {
+	fan_pwr_en: fan-pwr-en-state {
 		pins = "gpio109";
 		function = "gpio";
 		drive-strength = <2>;
-		output-low;
-
 		bias-disable;
-		// drive-strength = <16>;
+		output-low;
 	};
 };
 
