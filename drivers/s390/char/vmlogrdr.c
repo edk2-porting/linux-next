@@ -722,6 +722,10 @@ static void vmlogrdr_unregister_driver(void)
 	iucv_unregister(&vmlogrdr_iucv_handler, 1);
 }
 
+static void vmlogrdr_free_dev(struct device *dev)
+{
+	kfree(dev);
+}
 
 static int vmlogrdr_register_device(struct vmlogrdr_priv_t *priv)
 {
@@ -736,14 +740,7 @@ static int vmlogrdr_register_device(struct vmlogrdr_priv_t *priv)
 		dev->driver = &vmlogrdr_driver;
 		dev->groups = vmlogrdr_attr_groups;
 		dev_set_drvdata(dev, priv);
-		/*
-		 * The release function could be called after the
-		 * module has been unloaded. It's _only_ task is to
-		 * free the struct. Therefore, we specify kfree()
-		 * directly here. (Probably a little bit obfuscating
-		 * but legitime ...).
-		 */
-		dev->release = (void (*)(struct device *))kfree;
+		dev->release = vmlogrdr_free_dev;
 	} else
 		return -ENOMEM;
 	ret = device_register(dev);

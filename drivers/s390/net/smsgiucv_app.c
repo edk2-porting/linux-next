@@ -64,6 +64,11 @@ static void smsg_app_event_free(struct smsg_app_event *ev)
 	kfree(ev);
 }
 
+static void smsg_app_free_dev(struct device *dev)
+{
+	kfree(dev);
+}
+
 static struct smsg_app_event *smsg_app_event_alloc(const char *from,
 						   const char *msg)
 {
@@ -173,7 +178,7 @@ static int __init smsgiucv_app_init(void)
 	}
 	smsg_app_dev->bus = &iucv_bus;
 	smsg_app_dev->parent = iucv_root;
-	smsg_app_dev->release = (void (*)(struct device *)) kfree;
+	smsg_app_dev->release = smsg_app_free_dev;
 	smsg_app_dev->driver = smsgiucv_drv;
 	rc = device_register(smsg_app_dev);
 	if (rc) {
