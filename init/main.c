@@ -900,6 +900,7 @@ void start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	early_security_init();
+	memblock_reserve(__pa(-PAGE_SIZE), PAGE_SIZE); /* reserve last page for ERR_PTR */
 	setup_arch(&command_line);
 	setup_boot_config();
 	setup_command_line(command_line);
