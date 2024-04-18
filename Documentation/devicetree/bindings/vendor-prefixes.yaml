@@ -196,6 +196,8 @@ patternProperties:
     description: Axentia Technologies AB
   "^axis,.*":
     description: Axis Communications AB
+  "^ayn,.*":
+    description: AYN Technologies Co., Ltd.
   "^azoteq,.*":
     description: Azoteq (Pty) Ltd
   "^azw,.*":
