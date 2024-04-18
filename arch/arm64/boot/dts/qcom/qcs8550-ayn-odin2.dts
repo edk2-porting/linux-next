@@ -1346,7 +1346,7 @@
 	status = "okay";
 
 	panel: panel@0 {
-		compatible = "odin,panel";
+		compatible = "syna,td4328";
 		reg = <0>;
 
 		pinctrl-0 = <&sde_dsi_active>, <&sde_te_active>;
