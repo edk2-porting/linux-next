@@ -154,21 +154,60 @@ struct dso {
 	size_t		 symbol_names_len;
 	struct rb_root_cached inlined_nodes;
 	struct rb_root_cached srclines;
-	struct rb_root	data_types;
+	struct rb_root	 data_types;
+	struct rb_root	 global_vars;
 
 	struct {
 		u64		addr;
 		struct symbol	*symbol;
 	} last_find_result;
+	struct build_id	 bid;
+	u64		 text_offset;
+	u64		 text_end;
+	const char	 *short_name;
+	const char	 *long_name;
 	void		 *a2l;
 	char		 *symsrc_filename;
+#if defined(__powerpc__)
+	void		*dwfl;			/* DWARF debug info */
+#endif
+	struct nsinfo	*nsinfo;
+	struct auxtrace_cache *auxtrace_cache;
+	union { /* Tool specific area */
+		void	 *priv;
+		u64	 db_id;
+	};
+	/* bpf prog information */
+	struct {
+		struct perf_env	*env;
+		u32		id;
+		u32		sub_id;
+	} bpf_prog;
+	/* dso data file */
+	struct {
+		struct rb_root	 cache;
+		struct list_head open_entry;
+		u64		 file_size;
+		u64		 elf_base_addr;
+		u64		 debug_frame_offset;
+		u64		 eh_frame_hdr_addr;
+		u64		 eh_frame_hdr_offset;
+		int		 fd;
+		int		 status;
+		u32		 status_seen;
+	} data;
+	struct dso_id	 id;
 	unsigned int	 a2l_fails;
-	enum dso_space_type	kernel;
-	bool			is_kmod;
-	enum dso_swap_type	needs_swap;
-	enum dso_binary_type	symtab_type;
-	enum dso_binary_type	binary_type;
+	int		 comp;
+	refcount_t	 refcnt;
 	enum dso_load_errno	load_errno;
+	u16		 long_name_len;
+	u16		 short_name_len;
+	enum dso_binary_type	symtab_type:8;
+	enum dso_binary_type	binary_type:8;
+	enum dso_space_type	kernel:2;
+	enum dso_swap_type	needs_swap:2;
+	bool			is_kmod:1;
 	u8		 adjust_symbols:1;
 	u8		 has_build_id:1;
 	u8		 header_build_id:1;
@@ -182,44 +221,6 @@ struct dso {
 	bool		 sorted_by_name;
 	bool		 loaded;
 	u8		 rel;
-	struct build_id	 bid;
-	u64		 text_offset;
-	u64		 text_end;
-	const char	 *short_name;
-	const char	 *long_name;
-	u16		 long_name_len;
-	u16		 short_name_len;
-	void		*dwfl;			/* DWARF debug info */
-	struct auxtrace_cache *auxtrace_cache;
-	int		 comp;
-
-	/* dso data file */
-	struct {
-		struct rb_root	 cache;
-		int		 fd;
-		int		 status;
-		u32		 status_seen;
-		u64		 file_size;
-		struct list_head open_entry;
-		u64		 elf_base_addr;
-		u64		 debug_frame_offset;
-		u64		 eh_frame_hdr_addr;
-		u64		 eh_frame_hdr_offset;
-	} data;
-	/* bpf prog information */
-	struct {
-		u32		id;
-		u32		sub_id;
-		struct perf_env	*env;
-	} bpf_prog;
-
-	union { /* Tool specific area */
-		void	 *priv;
-		u64	 db_id;
-	};
-	struct nsinfo	*nsinfo;
-	struct dso_id	 id;
-	refcount_t	 refcnt;
 	char		 name[];
 };
 
@@ -232,16 +233,13 @@ struct dso {
 #define dso__for_each_symbol(dso, pos, n)	\
 	symbols__for_each_entry(&(dso)->symbols, pos, n)
 
-#define dsos__for_each_with_build_id(pos, head)	\
-	list_for_each_entry(pos, head, node)	\
-		if (!pos->has_build_id)		\
-			continue;		\
-		else
-
 static inline void dso__set_loaded(struct dso *dso)
 {
 	dso->loaded = true;
 }
+
+int dso_id__cmp(struct dso_id *a, struct dso_id *b);
+bool dso_id__empty(struct dso_id *id);
 
 struct dso *dso__new_id(const char *name, struct dso_id *id);
 struct dso *dso__new(const char *name);
@@ -250,6 +248,7 @@ void dso__delete(struct dso *dso);
 int dso__cmp_id(struct dso *a, struct dso *b);
 void dso__set_short_name(struct dso *dso, const char *name, bool name_allocated);
 void dso__set_long_name(struct dso *dso, const char *name, bool name_allocated);
+void dso__inject_id(struct dso *dso, struct dso_id *id);
 
 int dso__name_len(const struct dso *dso);
 
@@ -410,5 +409,8 @@ enum dso_type dso__type(struct dso *dso, struct machine *machine);
 int dso__strerror_load(struct dso *dso, char *buf, size_t buflen);
 
 void reset_fd_limit(void);
+
+u64 dso__find_global_type(struct dso *dso, u64 addr);
+u64 dso__findnew_global_type(struct dso *dso, u64 addr, u64 offset);
 
 #endif /* __PERF_DSO */
