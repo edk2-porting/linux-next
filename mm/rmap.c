@@ -23,7 +23,7 @@
  * inode->i_rwsem	(while writing or truncating, not reading or faulting)
  *   mm->mmap_lock
  *     mapping->invalidate_lock (in filemap_fault)
- *       page->flags PG_locked (lock_page)
+ *       folio_lock
  *         hugetlbfs_i_mmap_rwsem_key (in huge_pmd_share, see hugetlbfs below)
  *           vma_start_write
  *             mapping->i_mmap_rwsem
@@ -50,7 +50,7 @@
  *   hugetlb_fault_mutex (hugetlbfs specific page fault mutex)
  *     vma_lock (hugetlb specific lock for pmd_sharing)
  *       mapping->i_mmap_rwsem (also used for hugetlb pmd sharing)
- *         page->flags PG_locked (lock_page)
+ *         folio_lock
  */
 
 #include <linux/mm.h>
@@ -775,6 +775,8 @@ static bool should_defer_flush(struct mm_struct *mm, enum ttu_flags flags)
 unsigned long page_address_in_vma(struct page *page, struct vm_area_struct *vma)
 {
 	struct folio *folio = page_folio(page);
+	pgoff_t pgoff;
+
 	if (folio_test_anon(folio)) {
 		struct anon_vma *page__anon_vma = folio_anon_vma(folio);
 		/*
@@ -790,7 +792,9 @@ unsigned long page_address_in_vma(struct page *page, struct vm_area_struct *vma)
 		return -EFAULT;
 	}
 
-	return vma_address(page, vma);
+	/* The !page__anon_vma above handles KSM folios */
+	pgoff = folio->index + folio_page_idx(folio, page);
+	return vma_address(vma, pgoff, 1);
 }
 
 /*
@@ -1128,33 +1132,10 @@ int pfn_mkclean_range(unsigned long pfn, unsigned long nr_pages, pgoff_t pgoff,
 	if (invalid_mkclean_vma(vma, NULL))
 		return 0;
 
-	pvmw.address = vma_pgoff_address(pgoff, nr_pages, vma);
+	pvmw.address = vma_address(vma, pgoff, nr_pages);
 	VM_BUG_ON_VMA(pvmw.address == -EFAULT, vma);
 
 	return page_vma_mkclean_one(&pvmw);
-}
-
-int folio_total_mapcount(struct folio *folio)
-{
-	int mapcount = folio_entire_mapcount(folio);
-	int nr_pages;
-	int i;
-
-	/* In the common case, avoid the loop when no pages mapped by PTE */
-	if (folio_nr_pages_mapped(folio) == 0)
-		return mapcount;
-	/*
-	 * Add all the PTE mappings of those pages mapped by PTE.
-	 * Limit the loop to folio_nr_pages_mapped()?
-	 * Perhaps: given all the raciness, that may be a good or a bad idea.
-	 */
-	nr_pages = folio_nr_pages(folio);
-	for (i = 0; i < nr_pages; i++)
-		mapcount += atomic_read(&folio_page(folio, i)->_mapcount);
-
-	/* But each of those _mapcounts was based on -1 */
-	mapcount += nr_pages;
-	return mapcount;
 }
 
 static __always_inline unsigned int __folio_add_rmap(struct folio *folio,
@@ -1162,22 +1143,27 @@ static __always_inline unsigned int __folio_add_rmap(struct folio *folio,
 		int *nr_pmdmapped)
 {
 	atomic_t *mapped = &folio->_nr_pages_mapped;
+	const int orig_nr_pages = nr_pages;
 	int first, nr = 0;
 
 	__folio_rmap_sanity_checks(folio, page, nr_pages, level);
 
 	switch (level) {
 	case RMAP_LEVEL_PTE:
+		if (!folio_test_large(folio)) {
+			nr = atomic_inc_and_test(&page->_mapcount);
+			break;
+		}
+
 		do {
 			first = atomic_inc_and_test(&page->_mapcount);
-			if (first && folio_test_large(folio)) {
+			if (first) {
 				first = atomic_inc_return_relaxed(mapped);
-				first = (first < ENTIRELY_MAPPED);
+				if (first < ENTIRELY_MAPPED)
+					nr++;
 			}
-
-			if (first)
-				nr++;
 		} while (page++, --nr_pages > 0);
+		atomic_add(orig_nr_pages, &folio->_large_mapcount);
 		break;
 	case RMAP_LEVEL_PMD:
 		first = atomic_inc_and_test(&folio->_entire_mapcount);
@@ -1194,6 +1180,7 @@ static __always_inline unsigned int __folio_add_rmap(struct folio *folio,
 				nr = 0;
 			}
 		}
+		atomic_inc(&folio->_large_mapcount);
 		break;
 	}
 	return nr;
@@ -1429,10 +1416,14 @@ void folio_add_new_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 			SetPageAnonExclusive(page);
 		}
 
+		/* increment count (starts at -1) */
+		atomic_set(&folio->_large_mapcount, nr - 1);
 		atomic_set(&folio->_nr_pages_mapped, nr);
 	} else {
 		/* increment count (starts at -1) */
 		atomic_set(&folio->_entire_mapcount, 0);
+		/* increment count (starts at -1) */
+		atomic_set(&folio->_large_mapcount, 0);
 		atomic_set(&folio->_nr_pages_mapped, ENTIRELY_MAPPED);
 		SetPageAnonExclusive(&folio->page);
 		__lruvec_stat_mod_folio(folio, NR_ANON_THPS, nr);
@@ -1510,18 +1501,23 @@ static __always_inline void __folio_remove_rmap(struct folio *folio,
 
 	switch (level) {
 	case RMAP_LEVEL_PTE:
+		if (!folio_test_large(folio)) {
+			nr = atomic_add_negative(-1, &page->_mapcount);
+			break;
+		}
+
+		atomic_sub(nr_pages, &folio->_large_mapcount);
 		do {
 			last = atomic_add_negative(-1, &page->_mapcount);
-			if (last && folio_test_large(folio)) {
+			if (last) {
 				last = atomic_dec_return_relaxed(mapped);
-				last = (last < ENTIRELY_MAPPED);
+				if (last < ENTIRELY_MAPPED)
+					nr++;
 			}
-
-			if (last)
-				nr++;
 		} while (page++, --nr_pages > 0);
 		break;
 	case RMAP_LEVEL_PMD:
+		atomic_dec(&folio->_large_mapcount);
 		last = atomic_add_negative(-1, &folio->_entire_mapcount);
 		if (last) {
 			nr = atomic_sub_return_relaxed(ENTIRELY_MAPPED, mapped);
@@ -2588,7 +2584,8 @@ static void rmap_walk_anon(struct folio *folio,
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
 			pgoff_start, pgoff_end) {
 		struct vm_area_struct *vma = avc->vma;
-		unsigned long address = vma_address(&folio->page, vma);
+		unsigned long address = vma_address(vma, pgoff_start,
+				folio_nr_pages(folio));
 
 		VM_BUG_ON_VMA(address == -EFAULT, vma);
 		cond_resched();
@@ -2649,7 +2646,8 @@ static void rmap_walk_file(struct folio *folio,
 lookup:
 	vma_interval_tree_foreach(vma, &mapping->i_mmap,
 			pgoff_start, pgoff_end) {
-		unsigned long address = vma_address(&folio->page, vma);
+		unsigned long address = vma_address(vma, pgoff_start,
+			       folio_nr_pages(folio));
 
 		VM_BUG_ON_VMA(address == -EFAULT, vma);
 		cond_resched();
@@ -2702,6 +2700,7 @@ void hugetlb_add_anon_rmap(struct folio *folio, struct vm_area_struct *vma,
 	VM_WARN_ON_FOLIO(!folio_test_anon(folio), folio);
 
 	atomic_inc(&folio->_entire_mapcount);
+	atomic_inc(&folio->_large_mapcount);
 	if (flags & RMAP_EXCLUSIVE)
 		SetPageAnonExclusive(&folio->page);
 	VM_WARN_ON_FOLIO(folio_entire_mapcount(folio) > 1 &&
@@ -2716,6 +2715,7 @@ void hugetlb_add_new_anon_rmap(struct folio *folio,
 	BUG_ON(address < vma->vm_start || address >= vma->vm_end);
 	/* increment count (starts at -1) */
 	atomic_set(&folio->_entire_mapcount, 0);
+	atomic_set(&folio->_large_mapcount, 0);
 	folio_clear_hugetlb_restore_reserve(folio);
 	__folio_set_anon(folio, vma, address, true);
 	SetPageAnonExclusive(&folio->page);

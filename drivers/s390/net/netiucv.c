@@ -1693,6 +1693,11 @@ static const struct attribute_group *netiucv_attr_groups[] = {
 	NULL,
 };
 
+static void netiucv_free_dev(struct device *dev)
+{
+	kfree(dev);
+}
+
 static int netiucv_register_device(struct net_device *ndev)
 {
 	struct netiucv_priv *priv = netdev_priv(ndev);
@@ -1706,14 +1711,7 @@ static int netiucv_register_device(struct net_device *ndev)
 		dev->bus = &iucv_bus;
 		dev->parent = iucv_root;
 		dev->groups = netiucv_attr_groups;
-		/*
-		 * The release function could be called after the
-		 * module has been unloaded. It's _only_ task is to
-		 * free the struct. Therefore, we specify kfree()
-		 * directly here. (Probably a little bit obfuscating
-		 * but legitime ...).
-		 */
-		dev->release = (void (*)(struct device *))kfree;
+		dev->release = netiucv_free_dev;
 		dev->driver = &netiucv_driver;
 	} else
 		return -ENOMEM;

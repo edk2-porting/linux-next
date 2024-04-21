@@ -141,7 +141,6 @@ static struct ctl_table memory_failure_table[] = {
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_ONE,
 	},
-	{ }
 };
 
 /*
@@ -156,7 +155,7 @@ static int __page_handle_poison(struct page *page)
 
 	/*
 	 * zone_pcp_disable() can't be used here. It will
-	 * hold pcp_batch_high_lock and dissolve_free_huge_page() might hold
+	 * hold pcp_batch_high_lock and dissolve_free_hugetlb_folio() might hold
 	 * cpu_hotplug_lock via static_key_slow_dec() when hugetlb vmemmap
 	 * optimization is enabled. This will break current lock dependency
 	 * chain and leads to deadlock.
@@ -166,7 +165,7 @@ static int __page_handle_poison(struct page *page)
 	 * but nothing guarantees that those pages do not get back to a PCP
 	 * queue if we need to refill those.
 	 */
-	ret = dissolve_free_huge_page(page);
+	ret = dissolve_free_hugetlb_folio(page_folio(page));
 	if (!ret) {
 		drain_all_pages(page_zone(page));
 		ret = take_page_off_buddy(page);
@@ -179,8 +178,8 @@ static bool page_handle_poison(struct page *page, bool hugepage_or_freepage, boo
 {
 	if (hugepage_or_freepage) {
 		/*
-		 * Doing this check for free pages is also fine since dissolve_free_huge_page
-		 * returns 0 for non-hugetlb pages as well.
+		 * Doing this check for free pages is also fine since
+		 * dissolve_free_hugetlb_folio() returns 0 for non-hugetlb folios as well.
 		 */
 		if (__page_handle_poison(page) <= 0)
 			/*
@@ -455,7 +454,7 @@ static void __add_to_kill(struct task_struct *tsk, struct page *p,
 	tk->addr = ksm_addr ? ksm_addr : page_address_in_vma(p, vma);
 	if (is_zone_device_page(p)) {
 		if (fsdax_pgoff != FSDAX_INVALID_PGOFF)
-			tk->addr = vma_pgoff_address(fsdax_pgoff, 1, vma);
+			tk->addr = vma_address(vma, fsdax_pgoff, 1);
 		tk->size_shift = dev_pagemap_mapping_shift(vma, tk->addr);
 	} else
 		tk->size_shift = page_shift(compound_head(p));
@@ -1251,7 +1250,6 @@ static int me_huge_page(struct page_state *ps, struct page *p)
 #define mlock		(1UL << PG_mlocked)
 #define lru		(1UL << PG_lru)
 #define head		(1UL << PG_head)
-#define slab		(1UL << PG_slab)
 #define reserved	(1UL << PG_reserved)
 
 static struct page_state error_states[] = {
@@ -1260,13 +1258,6 @@ static struct page_state error_states[] = {
 	 * free pages are specially detected outside this table:
 	 * PG_buddy pages only make a small fraction of all free pages.
 	 */
-
-	/*
-	 * Could in theory check if slab page is free or if we can drop
-	 * currently unused objects without touching them. But just
-	 * treat it as standard kernel for now.
-	 */
-	{ slab,		slab,		MF_MSG_SLAB,	me_kernel },
 
 	{ head,		head,		MF_MSG_HUGE,		me_huge_page },
 
@@ -1294,7 +1285,6 @@ static struct page_state error_states[] = {
 #undef mlock
 #undef lru
 #undef head
-#undef slab
 #undef reserved
 
 static void update_per_node_mf_stats(unsigned long pfn,
@@ -1644,8 +1634,8 @@ static bool hwpoison_user_mappings(struct page *p, unsigned long pfn,
 
 	unmap_success = !page_mapped(p);
 	if (!unmap_success)
-		pr_err("%#lx: failed to unmap page (mapcount=%d)\n",
-		       pfn, page_mapcount(p));
+		pr_err("%#lx: failed to unmap page (folio mapcount=%d)\n",
+		       pfn, folio_mapcount(page_folio(p)));
 
 	/*
 	 * try_to_unmap() might put mlocked page in lru cache, so call
@@ -2678,6 +2668,7 @@ static int soft_offline_in_use_page(struct page *page)
 	struct migration_target_control mtc = {
 		.nid = NUMA_NO_NODE,
 		.gfp_mask = GFP_USER | __GFP_MOVABLE | __GFP_RETRY_MAYFAIL,
+		.reason = MR_MEMORY_FAILURE,
 	};
 
 	if (!huge && folio_test_large(folio)) {
