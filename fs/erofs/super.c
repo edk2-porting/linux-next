@@ -581,7 +581,7 @@ static const struct export_operations erofs_export_ops = {
 static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 {
 	struct inode *inode;
-	struct erofs_sb_info *sbi;
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
 	struct erofs_fs_context *ctx = fc->fs_private;
 	int err;
 
@@ -590,15 +590,10 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_op = &erofs_sops;
 
-	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
-	if (!sbi)
-		return -ENOMEM;
-
 	sb->s_fs_info = sbi;
 	sbi->opt = ctx->opt;
 	sbi->devs = ctx->devs;
 	ctx->devs = NULL;
-	sbi->fsid = ctx->fsid;
 	ctx->fsid = NULL;
 	sbi->domain_id = ctx->domain_id;
 	ctx->domain_id = NULL;
@@ -707,8 +702,15 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 static int erofs_fc_get_tree(struct fs_context *fc)
 {
 	struct erofs_fs_context *ctx = fc->fs_private;
+	struct erofs_sb_info *sbi;
 
-	if (IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) && ctx->fsid)
+	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
+	if (!sbi)
+		return -ENOMEM;
+
+	fc->s_fs_info = sbi;
+	sbi->fsid = ctx->fsid;
+	if (IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) && sbi->fsid)
 		return get_tree_nodev(fc, erofs_fc_fill_super);
 
 	return get_tree_bdev(fc, erofs_fc_fill_super);
@@ -762,11 +764,15 @@ static void erofs_free_dev_context(struct erofs_dev_context *devs)
 static void erofs_fc_free(struct fs_context *fc)
 {
 	struct erofs_fs_context *ctx = fc->fs_private;
+	struct erofs_sb_info *sbi = fc->s_fs_info;
 
 	erofs_free_dev_context(ctx->devs);
 	kfree(ctx->fsid);
 	kfree(ctx->domain_id);
 	kfree(ctx);
+
+	if (sbi)
+		kfree(sbi);
 }
 
 static const struct fs_context_operations erofs_context_ops = {
@@ -783,6 +789,7 @@ static int erofs_init_fs_context(struct fs_context *fc)
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
+
 	ctx->devs = kzalloc(sizeof(struct erofs_dev_context), GFP_KERNEL);
 	if (!ctx->devs) {
 		kfree(ctx);
@@ -799,16 +806,12 @@ static int erofs_init_fs_context(struct fs_context *fc)
 
 static void erofs_kill_sb(struct super_block *sb)
 {
-	struct erofs_sb_info *sbi;
+	struct erofs_sb_info *sbi = EROFS_SB(sb);
 
-	if (erofs_is_fscache_mode(sb))
+	if (IS_ENABLED(CONFIG_EROFS_FS_ONDEMAND) && sbi->fsid)
 		kill_anon_super(sb);
 	else
 		kill_block_super(sb);
-
-	sbi = EROFS_SB(sb);
-	if (!sbi)
-		return;
 
 	erofs_free_dev_context(sbi->devs);
 	fs_put_dax(sbi->dax_dev, NULL);
