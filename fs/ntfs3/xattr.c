@@ -99,12 +99,12 @@ static int ntfs_read_ea(struct ntfs_inode *ni, struct EA_FULL **ea,
 
 	/* Check Ea limit. */
 	size = le32_to_cpu((*info)->size);
-	if (size > sbi->ea_max_size) {
+	if (size > sbi->attrdef.ea_max_size) {
 		err = -EFBIG;
 		goto out;
 	}
 
-	if (attr_size(attr_ea) > sbi->ea_max_size) {
+	if (attr_size(attr_ea) > sbi->attrdef.ea_max_size) {
 		err = -EFBIG;
 		goto out;
 	}
@@ -200,6 +200,7 @@ static ssize_t ntfs_list_ea(struct ntfs_inode *ni, char *buffer,
 	int err;
 	int ea_size;
 	size_t ret;
+	u8 name_len;
 
 	err = ntfs_read_ea(ni, &ea_all, 0, &info);
 	if (err)
@@ -215,28 +216,32 @@ static ssize_t ntfs_list_ea(struct ntfs_inode *ni, char *buffer,
 	for (off = 0; off + sizeof(struct EA_FULL) < size; off += ea_size) {
 		ea = Add2Ptr(ea_all, off);
 		ea_size = unpacked_ea_size(ea);
+		name_len = ea->name_len;
 
-		if (!ea->name_len)
+		if (!name_len)
 			break;
 
-		if (ea->name_len > ea_size)
+		if (name_len > ea_size) {
+			ntfs_set_state(ni->mi.sbi, NTFS_DIRTY_ERROR);
+			err = -EINVAL; /* corrupted fs. */
 			break;
+		}
 
 		if (buffer) {
 			/* Check if we can use field ea->name */
 			if (off + ea_size > size)
 				break;
 
-			if (ret + ea->name_len + 1 > bytes_per_buffer) {
+			if (ret + name_len + 1 > bytes_per_buffer) {
 				err = -ERANGE;
 				goto out;
 			}
 
-			memcpy(buffer + ret, ea->name, ea->name_len);
-			buffer[ret + ea->name_len] = 0;
+			memcpy(buffer + ret, ea->name, name_len);
+			buffer[ret + name_len] = 0;
 		}
 
-		ret += ea->name_len + 1;
+		ret += name_len + 1;
 	}
 
 out:
@@ -425,7 +430,7 @@ static noinline int ntfs_set_ea(struct inode *inode, const char *name,
 	 * 1. Check ea_info.size_pack for overflow.
 	 * 2. New attribute size must fit value from $AttrDef
 	 */
-	if (new_pack > 0xffff || size > sbi->ea_max_size) {
+	if (new_pack > 0xffff || size > sbi->attrdef.ea_max_size) {
 		ntfs_inode_warn(
 			inode,
 			"The size of extended attributes must not exceed 64KiB");

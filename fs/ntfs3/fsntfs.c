@@ -2650,8 +2650,8 @@ int ntfs_set_label(struct ntfs_sb_info *sbi, u8 *label, int len)
 {
 	int err;
 	struct ATTRIB *attr;
+	u32 uni_bytes;
 	struct ntfs_inode *ni = sbi->volume.ni;
-	const u8 max_ulen = 0x80; /* TODO: use attrdef to get maximum length */
 	/* Allocate PATH_MAX bytes. */
 	struct cpu_str *uni = __getname();
 
@@ -2663,7 +2663,8 @@ int ntfs_set_label(struct ntfs_sb_info *sbi, u8 *label, int len)
 	if (err < 0)
 		goto out;
 
-	if (uni->len > max_ulen) {
+	uni_bytes = uni->len * sizeof(u16);
+	if (uni_bytes > sbi->attrdef.label_max_size) {
 		ntfs_warn(sbi->sb, "new label is too long");
 		err = -EFBIG;
 		goto out;
@@ -2674,19 +2675,13 @@ int ntfs_set_label(struct ntfs_sb_info *sbi, u8 *label, int len)
 	/* Ignore any errors. */
 	ni_remove_attr(ni, ATTR_LABEL, NULL, 0, false, NULL);
 
-	err = ni_insert_resident(ni, uni->len * sizeof(u16), ATTR_LABEL, NULL,
-				 0, &attr, NULL, NULL);
+	err = ni_insert_resident(ni, uni_bytes, ATTR_LABEL, NULL, 0, &attr,
+				 NULL, NULL);
 	if (err < 0)
 		goto unlock_out;
 
 	/* write new label in on-disk struct. */
-	memcpy(resident_data(attr), uni->name, uni->len * sizeof(u16));
-
-	/* update cached value of current label. */
-	if (len >= ARRAY_SIZE(sbi->volume.label))
-		len = ARRAY_SIZE(sbi->volume.label) - 1;
-	memcpy(sbi->volume.label, label, len);
-	sbi->volume.label[len] = 0;
+	memcpy(resident_data(attr), uni->name, uni_bytes);
 	mark_inode_dirty_sync(&ni->vfs_inode);
 
 unlock_out:
@@ -2698,4 +2693,62 @@ unlock_out:
 out:
 	__putname(uni);
 	return err;
+}
+
+/*
+ * Check $AttrDef content and store sorted small $AttrDef entries
+ */
+int ntfs_check_attr_def(struct ntfs_sb_info *sbi,
+			const struct ATTR_DEF_ENTRY *raw, u32 bytes)
+{
+	const struct ATTR_DEF_ENTRY *de_s;
+	struct ATTR_DEF_ENTRY_SMALL *de_d;
+	u32 i, j;
+	u32 max_attr_type;
+	u32 n = (bytes / sizeof(*raw)) * sizeof(*raw);
+
+	for (i = 0, max_attr_type = 0, de_s = raw; i < n; i++, de_s++) {
+		u64 sz;
+		u32 attr_type = le32_to_cpu(de_s->type);
+
+		if (!attr_type)
+			break;
+
+		if ((attr_type & 0xf) || (!i && ATTR_STD != de_s->type) ||
+		    (i && le32_to_cpu(de_s[-1].type) >= attr_type)) {
+			return -EINVAL;
+		}
+
+		max_attr_type = attr_type;
+
+		sz = le64_to_cpu(de_s->max_sz);
+		if (de_s->type == ATTR_REPARSE)
+			sbi->attrdef.rp_max_size = sz;
+		else if (de_s->type == ATTR_EA)
+			sbi->attrdef.ea_max_size = sz;
+		else if (de_s->type == ATTR_LABEL)
+			sbi->attrdef.label_max_size = sz;
+	}
+
+	/* Last known attribute type is 0x100. */
+	if (!max_attr_type || max_attr_type > 0x200)
+		return -EINVAL;
+
+	n = max_attr_type >> 4;
+	sbi->attrdef.table = kcalloc(n, sizeof(*de_d), GFP_KERNEL);
+	if (!sbi->attrdef.table)
+		return -ENOMEM;
+
+	for (j = 0, de_s = raw; j < i; j++, de_s++) {
+		u32 idx = (le32_to_cpu(de_s->type) >> 4) - 1;
+		de_d = sbi->attrdef.table + idx;
+
+		de_d->type = de_s->type;
+		de_d->flags = de_s->flags;
+		de_d->min_sz = le64_to_cpu(de_s->min_sz);
+		de_d->max_sz = le64_to_cpu(de_s->max_sz);
+	}
+	sbi->attrdef.entries = n;
+
+	return 0;
 }

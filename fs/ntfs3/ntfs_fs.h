@@ -201,6 +201,15 @@ struct ntfs_index {
 	u8 type; // index_mutex_classed
 };
 
+/* NOT ondisk!. Just a small copy of $AttrDef file entry. */
+struct ATTR_DEF_ENTRY_SMALL {
+	enum ATTR_TYPE type;
+	__le32 flags;
+	u64 min_sz;
+	u64 max_sz;
+};
+static_assert(sizeof(struct ATTR_DEF_ENTRY_SMALL) == 0x18);
+
 /* Minimum MFT zone. */
 #define NTFS_MIN_MFT_ZONE 100
 /* Step to increase the MFT. */
@@ -242,9 +251,13 @@ struct ntfs_sb_info {
 	CLST reparse_no;
 	CLST usn_jrnl_no;
 
-	struct ATTR_DEF_ENTRY *def_table; // Attribute definition table.
-	u32 def_entries;
-	u32 ea_max_size;
+	struct {
+		u64 rp_max_size; // 16K
+		u32 entries;
+		u32 ea_max_size;
+		u32 label_max_size;
+		struct ATTR_DEF_ENTRY_SMALL *table; // 'entries'.
+	} attrdef;
 
 	struct MFT_REC *new_rec;
 
@@ -280,7 +293,6 @@ struct ntfs_sb_info {
 		__le16 flags; // Cached current VOLUME_INFO::flags, VOLUME_FLAG_DIRTY.
 		u8 major_ver;
 		u8 minor_ver;
-		char label[256];
 		bool real_dirty; // Real fs state.
 	} volume;
 
@@ -296,7 +308,6 @@ struct ntfs_sb_info {
 	struct {
 		struct ntfs_index index_r;
 		struct ntfs_inode *ni;
-		u64 max_size; // 16K
 	} reparse;
 
 	struct {
@@ -452,6 +463,9 @@ int attr_allocate_frame(struct ntfs_inode *ni, CLST frame, size_t compr_size,
 int attr_collapse_range(struct ntfs_inode *ni, u64 vbo, u64 bytes);
 int attr_insert_range(struct ntfs_inode *ni, u64 vbo, u64 bytes);
 int attr_punch_hole(struct ntfs_inode *ni, u64 vbo, u64 bytes, u32 *frame_size);
+int attr_force_nonresident(struct ntfs_inode *ni);
+bool attr_check(const struct ATTRIB *attr, struct ntfs_sb_info *sbi,
+		struct ntfs_inode *ni);
 
 /* Functions from attrlist.c */
 void al_destroy(struct ntfs_inode *ni);
@@ -657,6 +671,8 @@ int run_deallocate(struct ntfs_sb_info *sbi, const struct runs_tree *run,
 		   bool trim);
 bool valid_windows_name(struct ntfs_sb_info *sbi, const struct le_str *name);
 int ntfs_set_label(struct ntfs_sb_info *sbi, u8 *label, int len);
+int ntfs_check_attr_def(struct ntfs_sb_info *sbi,
+			const struct ATTR_DEF_ENTRY *raw, u32 bytes);
 
 /* Globals from index.c */
 int indx_used_bit(struct ntfs_index *indx, struct ntfs_inode *ni, size_t *bit);
@@ -713,12 +729,11 @@ int ntfs3_write_inode(struct inode *inode, struct writeback_control *wbc);
 int ntfs_sync_inode(struct inode *inode);
 int ntfs_flush_inodes(struct super_block *sb, struct inode *i1,
 		      struct inode *i2);
-int inode_write_data(struct inode *inode, const void *data, size_t bytes);
-struct inode *ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
-				struct dentry *dentry,
-				const struct cpu_str *uni, umode_t mode,
-				dev_t dev, const char *symname, u32 size,
-				struct ntfs_fnd *fnd);
+int inode_read_data(struct inode *inode, void *data, size_t bytes);
+int ntfs_create_inode(struct mnt_idmap *idmap, struct inode *dir,
+		      struct dentry *dentry, const struct cpu_str *uni,
+		      umode_t mode, dev_t dev, const char *symname, u32 size,
+		      struct ntfs_fnd *fnd);
 int ntfs_link_inode(struct inode *inode, struct dentry *dentry);
 int ntfs_unlink_inode(struct inode *dir, const struct dentry *dentry);
 void ntfs_evict_inode(struct inode *inode);
@@ -906,22 +921,6 @@ static inline bool ntfs_is_meta_file(struct ntfs_sb_info *sbi, CLST rno)
 	return rno < MFT_REC_FREE || rno == sbi->objid_no ||
 	       rno == sbi->quota_no || rno == sbi->reparse_no ||
 	       rno == sbi->usn_jrnl_no;
-}
-
-static inline void ntfs_unmap_page(struct page *page)
-{
-	kunmap(page);
-	put_page(page);
-}
-
-static inline struct page *ntfs_map_page(struct address_space *mapping,
-					 unsigned long index)
-{
-	struct page *page = read_mapping_page(mapping, index, NULL);
-
-	if (!IS_ERR(page))
-		kmap(page);
-	return page;
 }
 
 static inline size_t wnd_zone_bit(const struct wnd_bitmap *wnd)
@@ -1152,6 +1151,30 @@ static inline int attr_load_runs_attr(struct ntfs_inode *ni,
 static inline void le64_sub_cpu(__le64 *var, u64 val)
 {
 	*var = cpu_to_le64(le64_to_cpu(*var) - val);
+}
+
+/*
+ * Attributes types: 0x10, 0x20, 0x30....
+ * indexes in attribute table:  0, 1, 2...
+ */
+static inline const struct ATTR_DEF_ENTRY_SMALL *
+ntfs_query_def(const struct ntfs_sb_info *sbi, enum ATTR_TYPE type)
+{
+	const struct ATTR_DEF_ENTRY_SMALL *q;
+	u32 idx = (le32_to_cpu(type) >> 4) - 1;
+
+	if (idx >= sbi->attrdef.entries) {
+		/* such attribute is not allowed in this ntfs. */
+		return NULL;
+	}
+
+	q = sbi->attrdef.table + idx;
+	if (!q->type) {
+		/* such attribute is not allowed in this ntfs. */
+		return NULL;
+	}
+
+	return q;
 }
 
 #endif /* _LINUX_NTFS3_NTFS_FS_H */

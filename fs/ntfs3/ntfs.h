@@ -59,7 +59,7 @@ struct GUID {
 struct cpu_str {
 	u8 len;
 	u8 unused;
-	u16 name[10];
+	u16 name[];
 };
 
 struct le_str {
@@ -817,7 +817,6 @@ struct VOLUME_INFO {
 
 #define SIZEOF_ATTRIBUTE_VOLUME_INFO 0xc
 
-#define NTFS_LABEL_MAX_LENGTH		(0x100 / sizeof(short))
 #define NTFS_ATTR_INDEXABLE		cpu_to_le32(0x00000002)
 #define NTFS_ATTR_DUPALLOWED		cpu_to_le32(0x00000004)
 #define NTFS_ATTR_MUST_BE_INDEXED	cpu_to_le32(0x00000010)
@@ -1001,9 +1000,6 @@ struct REPARSE_POINT {
 };
 
 static_assert(sizeof(struct REPARSE_POINT) == 0x18);
-
-/* Maximum allowed size of the reparse data. */
-#define MAXIMUM_REPARSE_DATA_BUFFER_SIZE	(16 * 1024)
 
 /*
  * The value of the following constant needs to satisfy the following
