@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 /* Copyright (c) 2014-2018, The Linux Foundation. All rights reserved.
- * Copyright (C) 2018-2022 Linaro Ltd.
+ * Copyright (C) 2018-2024 Linaro Ltd.
  */
 
 /* DOC: IPA Interrupts
@@ -19,18 +19,18 @@
  * time only these three are supported.
  */
 
-#include <linux/platform_device.h>
-#include <linux/types.h>
 #include <linux/interrupt.h>
+#include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/pm_wakeirq.h>
+#include <linux/types.h>
 
 #include "ipa.h"
-#include "ipa_reg.h"
 #include "ipa_endpoint.h"
-#include "ipa_power.h"
-#include "ipa_uc.h"
 #include "ipa_interrupt.h"
+#include "ipa_power.h"
+#include "ipa_reg.h"
+#include "ipa_uc.h"
 
 /**
  * struct ipa_interrupt - IPA interrupt information
@@ -291,16 +291,12 @@ void ipa_interrupt_deconfig(struct ipa *ipa)
 /* Initialize the IPA interrupt structure */
 struct ipa_interrupt *ipa_interrupt_init(struct platform_device *pdev)
 {
-	struct device *dev = &pdev->dev;
 	struct ipa_interrupt *interrupt;
 	int irq;
 
 	irq = platform_get_irq_byname(pdev, "ipa");
-	if (irq <= 0) {
-		dev_err(dev, "DT error %d getting \"ipa\" IRQ property\n", irq);
-
+	if (irq <= 0)
 		return ERR_PTR(irq ? : -EINVAL);
-	}
 
 	interrupt = kzalloc(sizeof(*interrupt), GFP_KERNEL);
 	if (!interrupt)
