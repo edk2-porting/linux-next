@@ -51,7 +51,6 @@ struct io_worker {
 	struct io_wq *wq;
 
 	struct io_wq_work *cur_work;
-	struct io_wq_work *next_work;
 	raw_spinlock_t lock;
 
 	struct completion ref_done;
@@ -539,7 +538,6 @@ static void io_assign_current_work(struct io_worker *worker,
 
 	raw_spin_lock(&worker->lock);
 	worker->cur_work = work;
-	worker->next_work = NULL;
 	raw_spin_unlock(&worker->lock);
 }
 
@@ -564,10 +562,7 @@ static void io_worker_handle_work(struct io_wq_acct *acct,
 		 * clear the stalled flag.
 		 */
 		work = io_get_next_work(acct, worker);
-		raw_spin_unlock(&acct->lock);
 		if (work) {
-			__io_worker_busy(wq, worker);
-
 			/*
 			 * Make sure cancelation can find this, even before
 			 * it becomes the active work. That avoids a window
@@ -576,11 +571,17 @@ static void io_worker_handle_work(struct io_wq_acct *acct,
 			 * current work item for this worker.
 			 */
 			raw_spin_lock(&worker->lock);
-			worker->next_work = work;
+			worker->cur_work = work;
 			raw_spin_unlock(&worker->lock);
-		} else {
-			break;
 		}
+
+		raw_spin_unlock(&acct->lock);
+
+		if (!work)
+			break;
+
+		__io_worker_busy(wq, worker);
+
 		io_assign_current_work(worker, work);
 		__set_current_state(TASK_RUNNING);
 
@@ -1005,8 +1006,7 @@ static bool io_wq_worker_cancel(struct io_worker *worker, void *data)
 	 * may dereference the passed in work.
 	 */
 	raw_spin_lock(&worker->lock);
-	if (__io_wq_worker_cancel(worker, match, worker->cur_work) ||
-	    __io_wq_worker_cancel(worker, match, worker->next_work))
+	if (__io_wq_worker_cancel(worker, match, worker->cur_work))
 		match->nr_running++;
 	raw_spin_unlock(&worker->lock);
 
