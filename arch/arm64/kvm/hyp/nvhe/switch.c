@@ -40,7 +40,7 @@ static void __activate_traps(struct kvm_vcpu *vcpu)
 {
 	u64 val;
 
-	___activate_traps(vcpu);
+	___activate_traps(vcpu, vcpu->arch.hcr_el2);
 	__activate_traps_common(vcpu);
 
 	val = vcpu->arch.cptr_el2;
@@ -191,7 +191,6 @@ static const exit_handler_fn hyp_exit_handlers[] = {
 	[ESR_ELx_EC_IABT_LOW]		= kvm_hyp_handle_iabt_low,
 	[ESR_ELx_EC_DABT_LOW]		= kvm_hyp_handle_dabt_low,
 	[ESR_ELx_EC_WATCHPT_LOW]	= kvm_hyp_handle_watchpt_low,
-	[ESR_ELx_EC_PAC]		= kvm_hyp_handle_ptrauth,
 	[ESR_ELx_EC_MOPS]		= kvm_hyp_handle_mops,
 };
 
@@ -203,7 +202,6 @@ static const exit_handler_fn pvm_exit_handlers[] = {
 	[ESR_ELx_EC_IABT_LOW]		= kvm_hyp_handle_iabt_low,
 	[ESR_ELx_EC_DABT_LOW]		= kvm_hyp_handle_dabt_low,
 	[ESR_ELx_EC_WATCHPT_LOW]	= kvm_hyp_handle_watchpt_low,
-	[ESR_ELx_EC_PAC]		= kvm_hyp_handle_ptrauth,
 	[ESR_ELx_EC_MOPS]		= kvm_hyp_handle_mops,
 };
 
@@ -264,7 +262,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 		pmr_sync();
 	}
 
-	host_ctxt = &this_cpu_ptr(&kvm_host_data)->host_ctxt;
+	host_ctxt = host_data_ptr(host_ctxt);
 	host_ctxt->__hyp_running_vcpu = vcpu;
 	guest_ctxt = &vcpu->arch.ctxt;
 
@@ -337,7 +335,7 @@ int __kvm_vcpu_run(struct kvm_vcpu *vcpu)
 
 	__sysreg_restore_state_nvhe(host_ctxt);
 
-	if (vcpu->arch.fp_state == FP_STATE_GUEST_OWNED)
+	if (*host_data_ptr(fp_owner) == FP_STATE_GUEST_OWNED)
 		__fpsimd_save_fpexc32(vcpu);
 
 	__debug_switch_to_host(vcpu);
@@ -367,7 +365,7 @@ asmlinkage void __noreturn hyp_panic(void)
 	struct kvm_cpu_context *host_ctxt;
 	struct kvm_vcpu *vcpu;
 
-	host_ctxt = &this_cpu_ptr(&kvm_host_data)->host_ctxt;
+	host_ctxt = host_data_ptr(host_ctxt);
 	vcpu = host_ctxt->__hyp_running_vcpu;
 
 	if (vcpu) {
