@@ -16,6 +16,7 @@
 //! [`Arc`]: https://doc.rust-lang.org/std/sync/struct.Arc.html
 
 use crate::{
+    alloc::{box_ext::BoxExt, AllocError, Flags},
     bindings,
     error::{self, Error},
     init::{self, InPlaceInit, Init, PinInit},
@@ -24,7 +25,7 @@ use crate::{
 };
 use alloc::boxed::Box;
 use core::{
-    alloc::{AllocError, Layout},
+    alloc::Layout,
     fmt,
     marker::{PhantomData, Unsize},
     mem::{ManuallyDrop, MaybeUninit},
@@ -57,7 +58,7 @@ mod std_vendor;
 /// }
 ///
 /// // Create a refcounted instance of `Example`.
-/// let obj = Arc::try_new(Example { a: 10, b: 20 })?;
+/// let obj = Arc::new(Example { a: 10, b: 20 }, GFP_KERNEL)?;
 ///
 /// // Get a new pointer to `obj` and increment the refcount.
 /// let cloned = obj.clone();
@@ -96,7 +97,7 @@ mod std_vendor;
 ///     }
 /// }
 ///
-/// let obj = Arc::try_new(Example { a: 10, b: 20 })?;
+/// let obj = Arc::new(Example { a: 10, b: 20 }, GFP_KERNEL)?;
 /// obj.use_reference();
 /// obj.take_over();
 /// # Ok::<(), Error>(())
@@ -119,7 +120,7 @@ mod std_vendor;
 /// impl MyTrait for Example {}
 ///
 /// // `obj` has type `Arc<Example>`.
-/// let obj: Arc<Example> = Arc::try_new(Example)?;
+/// let obj: Arc<Example> = Arc::new(Example, GFP_KERNEL)?;
 ///
 /// // `coerced` has type `Arc<dyn MyTrait>`.
 /// let coerced: Arc<dyn MyTrait> = obj;
@@ -162,7 +163,7 @@ unsafe impl<T: ?Sized + Sync + Send> Sync for Arc<T> {}
 
 impl<T> Arc<T> {
     /// Constructs a new reference counted instance of `T`.
-    pub fn try_new(contents: T) -> Result<Self, AllocError> {
+    pub fn new(contents: T, flags: Flags) -> Result<Self, AllocError> {
         // INVARIANT: The refcount is initialised to a non-zero value.
         let value = ArcInner {
             // SAFETY: There are no safety requirements for this FFI call.
@@ -170,7 +171,7 @@ impl<T> Arc<T> {
             data: contents,
         };
 
-        let inner = Box::try_new(value)?;
+        let inner = <Box<_> as BoxExt<_>>::new(value, flags)?;
 
         // SAFETY: We just created `inner` with a reference count of 1, which is owned by the new
         // `Arc` object.
@@ -181,22 +182,22 @@ impl<T> Arc<T> {
     ///
     /// If `T: !Unpin` it will not be able to move afterwards.
     #[inline]
-    pub fn pin_init<E>(init: impl PinInit<T, E>) -> error::Result<Self>
+    pub fn pin_init<E>(init: impl PinInit<T, E>, flags: Flags) -> error::Result<Self>
     where
         Error: From<E>,
     {
-        UniqueArc::pin_init(init).map(|u| u.into())
+        UniqueArc::pin_init(init, flags).map(|u| u.into())
     }
 
     /// Use the given initializer to in-place initialize a `T`.
     ///
     /// This is equivalent to [`Arc<T>::pin_init`], since an [`Arc`] is always pinned.
     #[inline]
-    pub fn init<E>(init: impl Init<T, E>) -> error::Result<Self>
+    pub fn init<E>(init: impl Init<T, E>, flags: Flags) -> error::Result<Self>
     where
         Error: From<E>,
     {
-        UniqueArc::init(init).map(|u| u.into())
+        UniqueArc::init(init, flags).map(|u| u.into())
     }
 }
 
@@ -387,7 +388,7 @@ impl<T: ?Sized> From<Pin<UniqueArc<T>>> for Arc<T> {
 ///     e.into()
 /// }
 ///
-/// let obj = Arc::try_new(Example)?;
+/// let obj = Arc::new(Example, GFP_KERNEL)?;
 /// let cloned = do_something(obj.as_arc_borrow());
 ///
 /// // Assert that both `obj` and `cloned` point to the same underlying object.
@@ -411,7 +412,7 @@ impl<T: ?Sized> From<Pin<UniqueArc<T>>> for Arc<T> {
 ///     }
 /// }
 ///
-/// let obj = Arc::try_new(Example { a: 10, b: 20 })?;
+/// let obj = Arc::new(Example { a: 10, b: 20 }, GFP_KERNEL)?;
 /// obj.as_arc_borrow().use_reference();
 /// # Ok::<(), Error>(())
 /// ```
@@ -499,7 +500,7 @@ impl<T: ?Sized> Deref for ArcBorrow<'_, T> {
 /// }
 ///
 /// fn test() -> Result<Arc<Example>> {
-///     let mut x = UniqueArc::try_new(Example { a: 10, b: 20 })?;
+///     let mut x = UniqueArc::new(Example { a: 10, b: 20 }, GFP_KERNEL)?;
 ///     x.a += 1;
 ///     x.b += 1;
 ///     Ok(x.into())
@@ -522,7 +523,7 @@ impl<T: ?Sized> Deref for ArcBorrow<'_, T> {
 /// }
 ///
 /// fn test() -> Result<Arc<Example>> {
-///     let x = UniqueArc::try_new_uninit()?;
+///     let x = UniqueArc::new_uninit(GFP_KERNEL)?;
 ///     Ok(x.write(Example { a: 10, b: 20 }).into())
 /// }
 ///
@@ -542,7 +543,7 @@ impl<T: ?Sized> Deref for ArcBorrow<'_, T> {
 /// }
 ///
 /// fn test() -> Result<Arc<Example>> {
-///     let mut pinned = Pin::from(UniqueArc::try_new(Example { a: 10, b: 20 })?);
+///     let mut pinned = Pin::from(UniqueArc::new(Example { a: 10, b: 20 }, GFP_KERNEL)?);
 ///     // We can modify `pinned` because it is `Unpin`.
 ///     pinned.as_mut().a += 1;
 ///     Ok(pinned.into())
@@ -556,21 +557,24 @@ pub struct UniqueArc<T: ?Sized> {
 
 impl<T> UniqueArc<T> {
     /// Tries to allocate a new [`UniqueArc`] instance.
-    pub fn try_new(value: T) -> Result<Self, AllocError> {
+    pub fn new(value: T, flags: Flags) -> Result<Self, AllocError> {
         Ok(Self {
             // INVARIANT: The newly-created object has a refcount of 1.
-            inner: Arc::try_new(value)?,
+            inner: Arc::new(value, flags)?,
         })
     }
 
     /// Tries to allocate a new [`UniqueArc`] instance whose contents are not initialised yet.
-    pub fn try_new_uninit() -> Result<UniqueArc<MaybeUninit<T>>, AllocError> {
+    pub fn new_uninit(flags: Flags) -> Result<UniqueArc<MaybeUninit<T>>, AllocError> {
         // INVARIANT: The refcount is initialised to a non-zero value.
-        let inner = Box::try_init::<AllocError>(try_init!(ArcInner {
-            // SAFETY: There are no safety requirements for this FFI call.
-            refcount: Opaque::new(unsafe { bindings::REFCOUNT_INIT(1) }),
-            data <- init::uninit::<T, AllocError>(),
-        }? AllocError))?;
+        let inner = Box::try_init::<AllocError>(
+            try_init!(ArcInner {
+                // SAFETY: There are no safety requirements for this FFI call.
+                refcount: Opaque::new(unsafe { bindings::REFCOUNT_INIT(1) }),
+                data <- init::uninit::<T, AllocError>(),
+            }? AllocError),
+            flags,
+        )?;
         Ok(UniqueArc {
             // INVARIANT: The newly-created object has a refcount of 1.
             // SAFETY: The pointer from the `Box` is valid.
