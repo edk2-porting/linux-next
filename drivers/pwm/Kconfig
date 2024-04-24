@@ -577,6 +577,16 @@ config PWM_SL28CPLD
 	  To compile this driver as a module, choose M here: the module
 	  will be called pwm-sl28cpld.
 
+config PWM_SN3112
+	tristate "SI-EN SN3112 PWM driver"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Generic PWM framework driver for SI-EN SN3112 LED controller.
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-sn3112.
+
 config PWM_SPEAR
 	tristate "STMicroelectronics SPEAr PWM support"
 	depends on PLAT_SPEAR || COMPILE_TEST
