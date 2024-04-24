@@ -1026,6 +1026,7 @@ properties:
 
       - items:
           - enum:
+              - ayn,odin2
               - qcom,qcs8550-aim300-aiot
           - const: qcom,qcs8550-aim300
           - const: qcom,qcs8550
