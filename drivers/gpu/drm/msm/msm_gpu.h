@@ -553,14 +553,24 @@ struct msm_gpu_state {
 	struct msm_gpu_state_bo *bos;
 };
 
+static inline u32 gpu_read(struct msm_gpu *gpu, u32 reg)
+{
+	return readl(gpu->mmio + (reg << 2));
+}
+
 static inline void gpu_write(struct msm_gpu *gpu, u32 reg, u32 data)
 {
 	writel(data, gpu->mmio + (reg << 2));
 }
 
-static inline u32 gpu_read(struct msm_gpu *gpu, u32 reg)
+/*
+ * Use for timing-critical writes that must reach the hardware immediately
+ * (to work around write buffering), e.g. for reset registers.
+ */
+static inline void gpu_write_flush(struct msm_gpu *gpu, u32 reg, u32 data)
 {
-	return readl(gpu->mmio + (reg << 2));
+	gpu_write(gpu, reg, data);
+	gpu_read(gpu, reg);
 }
 
 static inline void gpu_rmw(struct msm_gpu *gpu, u32 reg, u32 mask, u32 or)

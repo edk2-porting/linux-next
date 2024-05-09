@@ -111,6 +111,16 @@ static inline void gmu_write(struct a6xx_gmu *gmu, u32 offset, u32 value)
 	writel(value, gmu->mmio + (offset << 2));
 }
 
+/*
+ * Use for timing-critical writes that must reach the hardware immediately
+ * (to work around write buffering), e.g. for reset registers.
+ */
+static inline void gmu_write_flush(struct a6xx_gmu *gmu, u32 offset, u32 value)
+{
+	gmu_write(gmu, offset, value);
+	gmu_read(gmu, offset);
+}
+
 static inline void
 gmu_write_bulk(struct a6xx_gmu *gmu, u32 offset, const u32 *data, u32 size)
 {
