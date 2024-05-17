@@ -2804,8 +2804,8 @@ static void amdgpu_ras_do_page_retirement(struct work_struct *work)
 	mutex_unlock(&con->umc_ecc_log.lock);
 }
 
-static int amdgpu_ras_query_ecc_status(struct amdgpu_device *adev,
-			enum amdgpu_ras_block ras_block, uint32_t timeout_ms)
+static void amdgpu_ras_poison_creation_handler(struct amdgpu_device *adev,
+				uint32_t timeout_ms)
 {
 	int ret = 0;
 	struct ras_ecc_log_info *ecc_log;
@@ -2814,7 +2814,7 @@ static int amdgpu_ras_query_ecc_status(struct amdgpu_device *adev,
 	struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
 
 	memset(&info, 0, sizeof(info));
-	info.head.block = ras_block;
+	info.head.block = AMDGPU_RAS_BLOCK__UMC;
 
 	ecc_log = &ras->umc_ecc_log;
 	ecc_log->de_updated = false;
@@ -2822,7 +2822,7 @@ static int amdgpu_ras_query_ecc_status(struct amdgpu_device *adev,
 		ret = amdgpu_ras_query_error_status(adev, &info);
 		if (ret) {
 			dev_err(adev->dev, "Failed to query ras error! ret:%d\n", ret);
-			return ret;
+			return;
 		}
 
 		if (timeout && !ecc_log->de_updated) {
@@ -2833,21 +2833,11 @@ static int amdgpu_ras_query_ecc_status(struct amdgpu_device *adev,
 
 	if (timeout_ms && !timeout) {
 		dev_warn(adev->dev, "Can't find deferred error\n");
-		return -ETIMEDOUT;
+		return;
 	}
 
-	return 0;
-}
-
-static void amdgpu_ras_poison_creation_handler(struct amdgpu_device *adev,
-					uint32_t timeout)
-{
-	struct amdgpu_ras *con = amdgpu_ras_get_context(adev);
-	int ret;
-
-	ret = amdgpu_ras_query_ecc_status(adev, AMDGPU_RAS_BLOCK__UMC, timeout);
 	if (!ret)
-		schedule_delayed_work(&con->page_retirement_dwork, 0);
+		schedule_delayed_work(&ras->page_retirement_dwork, 0);
 }
 
 static int amdgpu_ras_poison_consumption_handler(struct amdgpu_device *adev,
@@ -2896,7 +2886,7 @@ static int amdgpu_ras_page_retirement_thread(void *param)
 
 		ras_block = poison_msg.block;
 
-		dev_info(adev->dev, "Start processing ras block %s(%d)\n",
+		dev_dbg(adev->dev, "Start processing ras block %s(%d)\n",
 				ras_block_str(ras_block), ras_block);
 
 		if (ras_block == AMDGPU_RAS_BLOCK__UMC) {
@@ -3063,6 +3053,7 @@ static bool amdgpu_ras_asic_supported(struct amdgpu_device *adev)
 		switch (amdgpu_ip_version(adev, MP0_HWIP, 0)) {
 		case IP_VERSION(13, 0, 2):
 		case IP_VERSION(13, 0, 6):
+		case IP_VERSION(13, 0, 14):
 			return true;
 		default:
 			return false;
@@ -3074,6 +3065,7 @@ static bool amdgpu_ras_asic_supported(struct amdgpu_device *adev)
 		case IP_VERSION(13, 0, 0):
 		case IP_VERSION(13, 0, 6):
 		case IP_VERSION(13, 0, 10):
+		case IP_VERSION(13, 0, 14):
 			return true;
 		default:
 			return false;
@@ -3613,10 +3605,6 @@ int amdgpu_ras_late_init(struct amdgpu_device *adev)
 	struct amdgpu_ras_block_object *obj;
 	int r;
 
-	/* Guest side doesn't need init ras feature */
-	if (amdgpu_sriov_vf(adev))
-		return 0;
-
 	amdgpu_ras_event_mgr_init(adev);
 
 	if (amdgpu_aca_is_enabled(adev)) {
@@ -3627,10 +3615,23 @@ int amdgpu_ras_late_init(struct amdgpu_device *adev)
 		if (r)
 			return r;
 
-		amdgpu_ras_set_aca_debug_mode(adev, false);
+		if (!amdgpu_sriov_vf(adev))
+			amdgpu_ras_set_aca_debug_mode(adev, false);
 	} else {
-		amdgpu_ras_set_mca_debug_mode(adev, false);
+		if (amdgpu_in_reset(adev))
+			r = amdgpu_mca_reset(adev);
+		else
+			r = amdgpu_mca_init(adev);
+		if (r)
+			return r;
+
+		if (!amdgpu_sriov_vf(adev))
+			amdgpu_ras_set_mca_debug_mode(adev, false);
 	}
+
+	/* Guest side doesn't need init ras feature */
+	if (amdgpu_sriov_vf(adev))
+		return 0;
 
 	list_for_each_entry_safe(node, tmp, &adev->ras_list, node) {
 		obj = node->ras_obj;
@@ -3701,6 +3702,8 @@ int amdgpu_ras_fini(struct amdgpu_device *adev)
 
 	if (amdgpu_aca_is_enabled(adev))
 		amdgpu_aca_fini(adev);
+	else
+		amdgpu_mca_fini(adev);
 
 	WARN(AMDGPU_RAS_GET_FEATURES(con->features), "Feature mask is not cleared");
 

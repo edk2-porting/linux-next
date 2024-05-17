@@ -68,6 +68,7 @@
 #undef pr_debug
 
 MODULE_FIRMWARE("amdgpu/smu_13_0_6.bin");
+MODULE_FIRMWARE("amdgpu/smu_13_0_14.bin");
 
 #define to_amdgpu_device(x) (container_of(x, struct amdgpu_device, pm.smu_i2c))
 
@@ -462,8 +463,10 @@ static ssize_t smu_v13_0_6_get_pm_metrics(struct smu_context *smu,
 
 	memset(&pm_metrics->common_header, 0,
 	       sizeof(pm_metrics->common_header));
-	pm_metrics->common_header.mp1_ip_discovery_version =
-		IP_VERSION(13, 0, 6);
+	if (amdgpu_ip_version(smu->adev, MP1_HWIP, 0) == IP_VERSION(13, 0, 6))
+		pm_metrics->common_header.mp1_ip_discovery_version = IP_VERSION(13, 0, 6);
+	if (amdgpu_ip_version(smu->adev, MP1_HWIP, 0) == IP_VERSION(13, 0, 14))
+		pm_metrics->common_header.mp1_ip_discovery_version = IP_VERSION(13, 0, 14);
 	pm_metrics->common_header.pmfw_version = pmfw_version;
 	pm_metrics->common_header.pmmetrics_version = table_version;
 	pm_metrics->common_header.structure_size =
@@ -2333,6 +2336,8 @@ static int smu_v13_0_6_mode2_reset(struct smu_context *smu)
 
 	index = smu_cmn_to_asic_specific_index(smu, CMN2ASIC_MAPPING_MSG,
 					       SMU_MSG_GfxDeviceDriverReset);
+	if (index < 0)
+		return index;
 
 	mutex_lock(&smu->message_lock);
 
@@ -2928,55 +2933,6 @@ static bool mca_bank_is_valid(struct amdgpu_device *adev, const struct mca_ras_i
 	return true;
 }
 
-static int __mca_smu_get_ras_mca_set(struct amdgpu_device *adev, const struct mca_ras_info *mca_ras,
-				     enum amdgpu_mca_error_type type, struct mca_bank_set *mca_set)
-{
-	struct mca_bank_entry entry;
-	uint32_t mca_cnt;
-	int i, ret;
-
-	ret = mca_get_valid_mca_count(adev, type, &mca_cnt);
-	if (ret)
-		return ret;
-
-	/* if valid mca bank count is 0, the driver can return 0 directly */
-	if (!mca_cnt)
-		return 0;
-
-	for (i = 0; i < mca_cnt; i++) {
-		memset(&entry, 0, sizeof(entry));
-		ret = mca_get_mca_entry(adev, type, i, &entry);
-		if (ret)
-			return ret;
-
-		if (mca_ras && !mca_bank_is_valid(adev, mca_ras, type, &entry))
-			continue;
-
-		ret = amdgpu_mca_bank_set_add_entry(mca_set, &entry);
-		if (ret)
-			return ret;
-	}
-
-	return 0;
-}
-
-static int mca_smu_get_ras_mca_set(struct amdgpu_device *adev, enum amdgpu_ras_block blk,
-				   enum amdgpu_mca_error_type type, struct mca_bank_set *mca_set)
-{
-	const struct mca_ras_info *mca_ras = NULL;
-
-	if (!mca_set)
-		return -EINVAL;
-
-	if (blk != AMDGPU_RAS_BLOCK_COUNT) {
-		mca_ras = mca_get_mca_ras_info(adev, blk);
-		if (!mca_ras)
-			return -EOPNOTSUPP;
-	}
-
-	return __mca_smu_get_ras_mca_set(adev, mca_ras, type, mca_set);
-}
-
 static int mca_smu_parse_mca_error_count(struct amdgpu_device *adev, enum amdgpu_ras_block blk, enum amdgpu_mca_error_type type,
 					 struct mca_bank_entry *entry, uint32_t *count)
 {
@@ -3013,7 +2969,6 @@ static const struct amdgpu_mca_smu_funcs smu_v13_0_6_mca_smu_funcs = {
 	.max_ue_count = 12,
 	.max_ce_count = 12,
 	.mca_set_debug_mode = mca_smu_set_debug_mode,
-	.mca_get_ras_mca_set = mca_smu_get_ras_mca_set,
 	.mca_parse_mca_error_count = mca_smu_parse_mca_error_count,
 	.mca_get_mca_entry = mca_smu_get_mca_entry,
 	.mca_get_valid_mca_count = mca_smu_get_valid_mca_count,

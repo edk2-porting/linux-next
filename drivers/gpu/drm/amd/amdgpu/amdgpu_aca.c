@@ -534,7 +534,7 @@ int amdgpu_aca_get_error_data(struct amdgpu_device *adev, struct aca_handle *han
 	if (aca_handle_is_valid(handle))
 		return -EOPNOTSUPP;
 
-	if (!(BIT(type) & handle->mask))
+	if ((type < 0) || (!(BIT(type) & handle->mask)))
 		return  0;
 
 	return __aca_get_error_data(adev, handle, type, err_data, qctx);
@@ -892,7 +892,9 @@ DEFINE_DEBUGFS_ATTRIBUTE(aca_debug_mode_fops, NULL, amdgpu_aca_smu_debug_mode_se
 void amdgpu_aca_smu_debugfs_init(struct amdgpu_device *adev, struct dentry *root)
 {
 #if defined(CONFIG_DEBUG_FS)
-	if (!root || adev->ip_versions[MP1_HWIP][0] != IP_VERSION(13, 0, 6))
+	if (!root ||
+	    (adev->ip_versions[MP1_HWIP][0] != IP_VERSION(13, 0, 6) &&
+	     adev->ip_versions[MP1_HWIP][0] != IP_VERSION(13, 0, 14)))
 		return;
 
 	debugfs_create_file("aca_debug_mode", 0200, root, adev, &aca_debug_mode_fops);
