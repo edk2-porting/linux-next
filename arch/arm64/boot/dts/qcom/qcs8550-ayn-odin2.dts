@@ -133,17 +133,17 @@
 		};
 	};
 
-	hdmi-out {
-		compatible = "hdmi-connector";
-		type = "d";
-		hpd-gpios = <&tlmm 9 GPIO_ACTIVE_HIGH>;
+	// hdmi-out {
+	// 	compatible = "hdmi-connector";
+	// 	type = "d";
+	// 	hpd-gpios = <&tlmm 9 GPIO_ACTIVE_HIGH>;
 
-		port {
-			hdmi_con: endpoint {
-				remote-endpoint = <&lt8912_out>;
-			};
-		};
-	};
+	// 	port {
+	// 		hdmi_con: endpoint {
+	// 			remote-endpoint = <&lt8912_out>;
+	// 		};
+	// 	};
+	// };
 
 	hdmi_pwr: hdmi-pwr-regulator {
 		compatible = "regulator-fixed";
@@ -1174,46 +1174,46 @@
 	status = "okay";
 };
 
-&i2c_hub_0 {
-	clock-frequency = <100000>;
-	status = "okay";
+// &i2c_hub_0 {
+// 	clock-frequency = <100000>;
+// 	status = "okay";
 
-	hdmi-bridge@48 {
-		compatible = "lontium,lt8912b";
-		reg = <0x48> ;
-		reset-gpios = <&tlmm 7 GPIO_ACTIVE_LOW>;
+// 	hdmi-bridge@48 {
+// 		compatible = "lontium,lt8912b";
+// 		reg = <0x48> ;
+// 		reset-gpios = <&tlmm 7 GPIO_ACTIVE_LOW>;
 
-		vdd-supply = <&hdmi_pwr>;
-		vccmipirx-supply = <&hdmi_pwr>;
-		vccsysclk-supply = <&hdmi_pwr>;
-		vcclvdstx-supply = <&hdmi_pwr>;
-		vcchdmitx-supply = <&hdmi_pwr>;
-		vcclvdspll-supply = <&hdmi_pwr>;
-		vcchdmipll-supply = <&hdmi_pwr>;
+// 		vdd-supply = <&hdmi_pwr>;
+// 		vccmipirx-supply = <&hdmi_pwr>;
+// 		vccsysclk-supply = <&hdmi_pwr>;
+// 		vcclvdstx-supply = <&hdmi_pwr>;
+// 		vcchdmitx-supply = <&hdmi_pwr>;
+// 		vcclvdspll-supply = <&hdmi_pwr>;
+// 		vcchdmipll-supply = <&hdmi_pwr>;
 
-		ports {
-			#address-cells = <1>;
-			#size-cells = <0>;
+// 		ports {
+// 			#address-cells = <1>;
+// 			#size-cells = <0>;
 
-			port@0 {
-				reg = <0>;
+// 			port@0 {
+// 				reg = <0>;
 
-				hdmi_out_in: endpoint {
-					data-lanes = <1 2 3 4>;
-					remote-endpoint = <&mdss_dsi0_out>;
-				};
-			};
+// 				hdmi_out_in: endpoint {
+// 					data-lanes = <1 2 3 4>;
+// 					remote-endpoint = <&mdss_dsi0_out>;
+// 				};
+// 			};
 
-			port@1 {
-				reg = <1>;
+// 			port@1 {
+// 				reg = <1>;
 
-				lt8912_out: endpoint {
-					remote-endpoint = <&hdmi_con>;
-				};
-			};
-		};
-	};
-};
+// 				lt8912_out: endpoint {
+// 					remote-endpoint = <&hdmi_con>;
+// 				};
+// 			};
+// 		};
+// 	};
+// };
 
 &i2c_hub_2 {
 	status = "okay";
@@ -1326,20 +1326,20 @@
 	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
 };
 
-&mdss_dsi0 {
-	vdda-supply = <&vreg_l3e_1p2>;
-	status = "okay";
-};
+// &mdss_dsi0 {
+// 	vdda-supply = <&vreg_l3e_1p2>;
+// 	status = "okay";
+// };
 
-&mdss_dsi0_out {
-	remote-endpoint = <&hdmi_out_in>;
-	data-lanes = <0 1 2 3>;
-};
+// &mdss_dsi0_out {
+// 	remote-endpoint = <&hdmi_out_in>;
+// 	data-lanes = <0 1 2 3>;
+// };
 
-&mdss_dsi0_phy {
-	vdds-supply = <&vreg_l1e_0p88>;
-	status = "okay";
-};
+// &mdss_dsi0_phy {
+// 	vdds-supply = <&vreg_l1e_0p88>;
+// 	status = "okay";
+// };
 
 &mdss_dsi1 {
 	vdda-supply = <&vreg_l3e_1p2>;
