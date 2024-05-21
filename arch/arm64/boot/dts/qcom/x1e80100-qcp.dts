@@ -534,7 +534,6 @@
 
 &mdss_dp1 {
 	status = "okay";
-
 };
 
 &mdss_dp1_out {
@@ -543,7 +542,6 @@
 
 &mdss_dp2 {
 	status = "okay";
-
 };
 
 &mdss_dp2_out {
@@ -728,6 +726,10 @@
 	status = "okay";
 };
 
+&usb_1_ss0_qmpphy_dp_in {
+	remote-endpoint = <&mdss_dp0_out>;
+};
+
 &usb_1_ss0 {
 	status = "okay";
 };
@@ -758,6 +760,10 @@
 	vdda-pll-supply = <&vreg_l2d_0p9>;
 
 	status = "okay";
+};
+
+&usb_1_ss1_qmpphy_dp_in {
+	remote-endpoint = <&mdss_dp1_out>;
 };
 
 &usb_1_ss1 {
