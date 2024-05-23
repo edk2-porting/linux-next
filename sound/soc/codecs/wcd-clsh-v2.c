@@ -539,7 +539,7 @@ static void wcd_clsh_v3_state_hph_r(struct wcd_clsh_ctrl *ctrl, int req_state,
 	struct snd_soc_component *component = ctrl->comp;
 
 	if (mode == CLS_H_NORMAL) {
-		dev_dbg(component->dev, "%s: Normal mode not applicable for hph_r\n",
+		dev_warn(component->dev, "%s: Normal mode not applicable for hph_r\n",
 			__func__);
 		return;
 	}
@@ -629,7 +629,7 @@ static void wcd_clsh_v3_state_hph_l(struct wcd_clsh_ctrl *ctrl, int req_state,
 	struct snd_soc_component *component = ctrl->comp;
 
 	if (mode == CLS_H_NORMAL) {
-		dev_dbg(component->dev, "%s: Normal mode not applicable for hph_l\n",
+		dev_warn(component->dev, "%s: Normal mode not applicable for hph_l\n",
 			__func__);
 		return;
 	}
