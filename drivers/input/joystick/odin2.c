@@ -59,9 +59,10 @@ static u8 gamepad_data_checksum(const u8 *data, size_t count)
 {
 	const u8 *ptr = data;
 	u8 ret = data[4];
-	for (int i = 5; i < count - 1; i++) {
+
+	for (int i = 5; i < count - 1; i++)
 		ret ^= ptr[i];
-	}
+
 	return ret;
 }
 
@@ -127,6 +128,7 @@ static void gamepad_data_handler(struct serdev_device *serdev,
 				 struct gamepad_data *data)
 {
 	struct gamepad_device *dev = serdev_device_get_drvdata(serdev);
+
 	switch (data->command) {
 	case 0x2:
 		gamepad_input_handler(dev, data);
@@ -206,7 +208,7 @@ static int gamepad_mcu_uart_probe(struct serdev_device *serdev)
 
 	gamepad_dev->dev_input = devm_input_allocate_device(dev);
 	if (!gamepad_dev->dev_input)
-		return dev_err_probe(dev, -ENOMEM, "Not enough memory for input input device\n");
+		return dev_err_probe(dev, -ENOMEM, "Not enough memory for input device\n");
 
 	gamepad_dev->dev_input->name = "Ayn Odin2 Gamepad";
 	gamepad_dev->dev_input->phys = "odin2-gamepad/input0";
