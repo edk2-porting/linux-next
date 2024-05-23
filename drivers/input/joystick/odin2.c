@@ -181,41 +181,32 @@ static int gamepad_mcu_uart_probe(struct serdev_device *serdev)
 	int ret;
 
 	gamepad_dev = devm_kzalloc(dev, sizeof(*gamepad_dev), GFP_KERNEL);
-	if (!gamepad_dev) {
-		dev_err(dev, "could not allocate memory for device data");
-		return -ENOMEM;
-	}
+	if (!gamepad_dev)
+		return dev_err_probe(dev, -ENOMEM, "could not allocate memory for device data\n");
 
 	gamepad_dev->en_gpio =
 		devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_HIGH);
 	if (IS_ERR(gamepad_dev->en_gpio)) {
 		ret = PTR_ERR(gamepad_dev->en_gpio);
-		goto err_free_dev;
+		return dev_err_probe(dev, ret, "Unable to get enable gpio\n");
 	}
 
 	ret = devm_serdev_device_open(dev, serdev);
-	if (ret) {
-		dev_err(dev, "Unable to open UART device: %d", ret);
-		goto err_free_dev;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Unable to open UART device\n");
 	gamepad_dev->dev = dev;
 
 	serdev_device_set_drvdata(serdev, gamepad_dev);
 
 	ret = serdev_device_set_baudrate(serdev, 115200);
-	if (ret < 0) {
-		dev_err(dev, "Failed to set up host baud rate: %d", ret);
-		goto err_free_dev;
-	}
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to set up host baud rate\n");
 
 	serdev_device_set_flow_control(serdev, false);
 
 	gamepad_dev->dev_input = devm_input_allocate_device(dev);
-	if (!gamepad_dev->dev_input) {
-		dev_err(dev, "Not enough memory for input input device");
-		ret = -ENOMEM;
-		goto err_free_dev;
-	}
+	if (!gamepad_dev->dev_input)
+		return dev_err_probe(dev, -ENOMEM, "Not enough memory for input input device\n");
 
 	gamepad_dev->dev_input->name = "Ayn Odin2 Gamepad";
 	gamepad_dev->dev_input->phys = "odin2-gamepad/input0";
@@ -234,26 +225,14 @@ static int gamepad_mcu_uart_probe(struct serdev_device *serdev)
 	input_set_abs_params(gamepad_dev->dev_input, ABS_HAT2Y, 0, 1830, 0, 30);
 
 	ret = input_register_device(gamepad_dev->dev_input);
-	if (ret) {
-		dev_err(dev, "Could not register input device: %d", ret);
-		goto err_free_dev;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Could not register input device\n");
 
 	serdev_device_set_client_ops(serdev, &gamepad_mcu_uart_client_ops);
 
 	gamepad_send_init_sequence(serdev);
 
 	return 0;
-
-err_free_dev:
-	if (gamepad_dev->dev_input) {
-		input_free_device(gamepad_dev->dev_input);
-	}
-
-	if (gamepad_dev) {
-		devm_kfree(dev, gamepad_dev);
-	}
-	return ret;
 }
 
 static const struct of_device_id gamepad_mcu_uart_of_match[] = {
