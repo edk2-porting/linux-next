@@ -561,6 +561,8 @@ int audioreach_send_cmd_sync(struct device *dev, gpr_device_t *gdev,
 	result->opcode = 0;
 	result->status = 0;
 
+	// pr_err("%s: Sending [%x] opcode\n", __func__, hdr->opcode);
+
 	if (port)
 		rc = gpr_send_port_pkt(port, pkt);
 	else if (gdev)

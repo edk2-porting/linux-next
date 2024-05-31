@@ -183,9 +183,12 @@ static int q6prm_release_lpass_clock(struct device *dev, int clk_id, int clk_att
 int q6prm_set_lpass_clock(struct device *dev, int clk_id, int clk_attr, int clk_root,
 			  unsigned int freq)
 {
-	if (freq)
+	if (freq) {
+		pr_err("%s: clk_id %d freq %u\n", __func__, clk_id, freq);
 		return q6prm_request_lpass_clock(dev, clk_id, clk_attr, clk_root, freq);
+	}
 
+	pr_err("%s: release clk_id %d\n", __func__, clk_id);
 	return q6prm_release_lpass_clock(dev, clk_id, clk_attr, clk_root, freq);
 }
 EXPORT_SYMBOL_GPL(q6prm_set_lpass_clock);
