@@ -10,6 +10,8 @@
 #include <linux/media-bus-format.h>
 #include <linux/regmap.h>
 
+#include <sound/hdmi-codec.h>
+
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_edid.h>
@@ -24,7 +26,10 @@
 #define I2C_CEC_DSI 1
 #define I2C_ADDR_CEC_DSI 0x49
 
-#define I2C_MAX_IDX 2
+#define I2C_I2S 2
+#define I2C_ADDR_I2S 0x4a
+
+#define I2C_MAX_IDX 3
 
 struct lt8912 {
 	struct device *dev;
@@ -38,6 +43,7 @@ struct lt8912 {
 	struct drm_bridge *hdmi_port;
 
 	struct mipi_dsi_device *dsi;
+	struct platform_device *audio_pdev;
 
 	struct gpio_desc *gp_reset;
 
@@ -226,6 +232,7 @@ static int lt8912_init_i2c(struct lt8912 *lt, struct i2c_client *client)
 	struct i2c_board_info info[] = {
 		{ I2C_BOARD_INFO("lt8912p0", I2C_ADDR_MAIN), },
 		{ I2C_BOARD_INFO("lt8912p1", I2C_ADDR_CEC_DSI), },
+		{ I2C_BOARD_INFO("lt8912p2", I2C_ADDR_I2S), },
 	};
 
 	if (!lt)
@@ -260,6 +267,9 @@ static int lt8912_free_i2c(struct lt8912 *lt)
 static int lt8912_hard_power_on(struct lt8912 *lt)
 {
 	int ret;
+	struct device *dev = lt->dev;
+
+	dev_info(dev, "%s", __func__);
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(lt->supplies), lt->supplies);
 	if (ret)
@@ -273,6 +283,10 @@ static int lt8912_hard_power_on(struct lt8912 *lt)
 
 static void lt8912_hard_power_off(struct lt8912 *lt)
 {
+	struct device *dev = lt->dev;
+
+	dev_info(dev, "%s", __func__);
+
 	gpiod_set_value_cansleep(lt->gp_reset, 1);
 	msleep(20);
 
@@ -349,6 +363,10 @@ static int lt8912_video_setup(struct lt8912 *lt)
 
 static int lt8912_soft_power_on(struct lt8912 *lt)
 {
+	struct device *dev = lt->dev;
+
+	dev_info(dev, "%s", __func__);
+
 	if (!lt->is_power_on) {
 		u32 lanes = lt->data_lanes;
 
@@ -363,9 +381,37 @@ static int lt8912_soft_power_on(struct lt8912 *lt)
 	return 0;
 }
 
+static int lt8912_audio_config(struct lt8912 *lt)
+{
+	int ret;
+	struct device *dev = lt->dev;
+
+	dev_info(dev, "%s", __func__);
+
+	ret = regmap_write(lt->regmap[I2C_MAIN], 0xb2, 0x01);
+
+	ret |= regmap_write(lt->regmap[I2C_I2S], 0x06, 0x08);
+	ret |= regmap_write(lt->regmap[I2C_I2S], 0x07, 0xf0);
+	ret |= regmap_write(lt->regmap[I2C_I2S], 0x34, 0xe2);
+	ret |= regmap_write(lt->regmap[I2C_I2S], 0x3c, 0x41);
+
+	ret |= regmap_write(lt->regmap[I2C_MAIN], 0x03, 0x7f);
+	usleep_range(5000, 10000);
+	ret |= regmap_write(lt->regmap[I2C_MAIN], 0x03, 0xff);
+
+	ret |= regmap_write(lt->regmap[I2C_CEC_DSI], 0x51, 0x80);
+	usleep_range(5000, 10000);
+	ret |= regmap_write(lt->regmap[I2C_CEC_DSI], 0x51, 0x00);
+
+	return ret;
+}
+
 static int lt8912_video_on(struct lt8912 *lt)
 {
 	int ret;
+
+	struct device *dev = lt->dev;
+	dev_info(dev, "%s", __func__);
 
 	ret = lt8912_video_setup(lt);
 	if (ret < 0)
@@ -382,6 +428,12 @@ static int lt8912_video_on(struct lt8912 *lt)
 	ret = lt8912_write_lvds_config(lt);
 	if (ret < 0)
 		goto end;
+
+	ret = lt8912_audio_config(lt);
+	if (ret < 0)
+		goto end;
+
+	dev_info(dev, "lt8912_audio_config done\n");
 
 end:
 	return ret;
@@ -421,6 +473,68 @@ static const struct drm_connector_funcs lt8912_connector_funcs = {
 	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
+
+static int lt8912_hdmi_hw_params(struct device *dev, void *data,
+				    struct hdmi_codec_daifmt *fmt,
+				    struct hdmi_codec_params *hparms)
+{
+	return 0;
+}
+
+static void lt8912_audio_shutdown(struct device *dev, void *data)
+{
+}
+
+static int lt8912_hdmi_i2s_get_dai_id(struct snd_soc_component *component,
+					 struct device_node *endpoint)
+{
+	struct of_endpoint of_ep;
+	int ret;
+
+	ret = of_graph_parse_endpoint(endpoint, &of_ep);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * HDMI sound should be located as reg = <2>
+	 * Then, it is sound port 0
+	 */
+	if (of_ep.port == 2)
+		return 0;
+
+	return -EINVAL;
+}
+
+static const struct hdmi_codec_ops lt8912_codec_ops = {
+	.hw_params	= lt8912_hdmi_hw_params,
+	.audio_shutdown = lt8912_audio_shutdown,
+	.get_dai_id	= lt8912_hdmi_i2s_get_dai_id,
+};
+
+static int lt8912_audio_init(struct device *dev, struct lt8912 *lt8912)
+{
+	struct hdmi_codec_pdata codec_data = {
+		.ops = &lt8912_codec_ops,
+		.max_i2s_channels = 2,
+		.i2s = 1,
+		.data = lt8912,
+	};
+
+	lt8912->audio_pdev =
+		platform_device_register_data(dev, HDMI_CODEC_DRV_NAME,
+					      PLATFORM_DEVID_AUTO,
+					      &codec_data, sizeof(codec_data));
+
+	return PTR_ERR_OR_ZERO(lt8912->audio_pdev);
+}
+
+static void lt8912_audio_exit(struct lt8912 *lt8912)
+{
+	if (lt8912->audio_pdev) {
+		platform_device_unregister(lt8912->audio_pdev);
+		lt8912->audio_pdev = NULL;
+	}
+}
 
 static enum drm_mode_status
 lt8912_connector_mode_valid(struct drm_connector *connector,
@@ -467,13 +581,6 @@ static void lt8912_bridge_mode_set(struct drm_bridge *bridge,
 	struct lt8912 *lt = bridge_to_lt8912(bridge);
 
 	drm_display_mode_to_videomode(adj, &lt->mode);
-}
-
-static void lt8912_bridge_enable(struct drm_bridge *bridge)
-{
-	struct lt8912 *lt = bridge_to_lt8912(bridge);
-
-	lt8912_video_on(lt);
 }
 
 static int lt8912_attach_dsi(struct lt8912 *lt)
@@ -577,18 +684,21 @@ static int lt8912_bridge_attach(struct drm_bridge *bridge,
 		}
 	}
 
-	ret = lt8912_hard_power_on(lt);
-	if (ret)
-		return ret;
+	// ret = lt8912_hard_power_on(lt);
+	// if (ret)
+	// 	return ret;
 
-	ret = lt8912_soft_power_on(lt);
-	if (ret)
-		goto error;
+	// ret = lt8912_soft_power_on(lt);
+	// if (ret)
+	// 	goto error;
+
+	// Powersave
+	gpiod_set_value_cansleep(lt->gp_reset, 1);
 
 	return 0;
 
-error:
-	lt8912_hard_power_off(lt);
+// error:
+// 	lt8912_hard_power_off(lt);
 	return ret;
 }
 
@@ -612,14 +722,6 @@ lt8912_bridge_detect(struct drm_bridge *bridge)
 
 	return lt8912_check_cable_status(lt);
 }
-
-static const struct drm_bridge_funcs lt8912_bridge_funcs = {
-	.attach = lt8912_bridge_attach,
-	.detach = lt8912_bridge_detach,
-	.mode_set = lt8912_bridge_mode_set,
-	.enable = lt8912_bridge_enable,
-	.detect = lt8912_bridge_detect,
-};
 
 static int lt8912_bridge_resume(struct device *dev)
 {
@@ -647,6 +749,42 @@ static int lt8912_bridge_suspend(struct device *dev)
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(lt8912_bridge_pm_ops, lt8912_bridge_suspend, lt8912_bridge_resume);
+
+static void lt8912_bridge_enable(struct drm_bridge *bridge)
+{
+	struct lt8912 *lt = bridge_to_lt8912(bridge);
+
+	struct device *dev = lt->dev;
+
+	dev_info(dev, "%s", __func__);
+
+	if (!lt->is_power_on) {
+		lt8912_hard_power_on(lt);
+		lt8912_soft_power_on(lt);
+	} 
+
+	lt8912_video_on(lt);
+}
+
+static void lt8912_bridge_disable(struct drm_bridge *bridge)
+{
+	struct lt8912 *lt = bridge_to_lt8912(bridge);
+
+	struct device *dev = lt->dev;
+
+	dev_info(dev, "%s", __func__);
+
+	lt8912_bridge_suspend(dev);
+}
+
+static const struct drm_bridge_funcs lt8912_bridge_funcs = {
+	.attach = lt8912_bridge_attach,
+	.detach = lt8912_bridge_detach,
+	.mode_set = lt8912_bridge_mode_set,
+	.enable = lt8912_bridge_enable,
+	.disable = lt8912_bridge_disable,
+	.detect = lt8912_bridge_detect,
+};
 
 static int lt8912_get_regulators(struct lt8912 *lt)
 {
@@ -766,7 +904,7 @@ static int lt8912_probe(struct i2c_client *client)
 	if (ret)
 		goto err_attach;
 
-	return 0;
+	return lt8912_audio_init(dev, lt);
 
 err_attach:
 	drm_bridge_remove(&lt->bridge);
@@ -780,6 +918,8 @@ err_dt_parse:
 static void lt8912_remove(struct i2c_client *client)
 {
 	struct lt8912 *lt = i2c_get_clientdata(client);
+
+	lt8912_audio_exit(lt);
 
 	drm_bridge_remove(&lt->bridge);
 	lt8912_free_i2c(lt);
