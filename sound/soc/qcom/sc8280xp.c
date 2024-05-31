@@ -4,6 +4,8 @@
 #include <dt-bindings/sound/qcom,q6afe.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/clk.h>
+#include <linux/of_clk.h>
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/pcm.h>
@@ -14,11 +16,14 @@
 #include "common.h"
 #include "sdw.h"
 
+#define MI2S_BCLK_RATE		1536000
+
 struct sc8280xp_snd_data {
 	bool stream_prepared[AFE_PORT_MAX];
 	struct snd_soc_card *card;
 	struct sdw_stream_runtime *sruntime[AFE_PORT_MAX];
 	struct snd_soc_jack jack;
+	struct clk *i2s_clk;
 	struct snd_soc_jack dp_jack[8];
 	bool jack_setup;
 };
@@ -69,6 +74,15 @@ static void sc8280xp_snd_shutdown(struct snd_pcm_substream *substream)
 	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
 	struct sc8280xp_snd_data *pdata = snd_soc_card_get_drvdata(rtd->card);
 	struct sdw_stream_runtime *sruntime = pdata->sruntime[cpu_dai->id];
+
+
+	switch (cpu_dai->id) {
+	case SECONDARY_MI2S_RX:
+		clk_disable_unprepare(pdata->i2s_clk);
+		break;
+	default:
+		break;
+	}
 
 	pdata->sruntime[cpu_dai->id] = NULL;
 	sdw_release_stream(sruntime);
@@ -133,8 +147,59 @@ static int sc8280xp_snd_hw_free(struct snd_pcm_substream *substream)
 				    &data->stream_prepared[cpu_dai->id]);
 }
 
+static int sc8280xp_snd_startup(struct snd_pcm_substream *substream)
+{
+	unsigned int fmt = SND_SOC_DAIFMT_BP_FP;
+	unsigned int codec_dai_fmt = SND_SOC_DAIFMT_BC_FC;
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct sc8280xp_snd_data *pdata = snd_soc_card_get_drvdata(rtd->card);
+	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
+
+	switch (cpu_dai->id) {
+	case SECONDARY_MI2S_RX:
+		pr_info("%s:%d\n", __func__, __LINE__);
+		codec_dai_fmt |= SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_I2S;
+		clk_prepare_enable(pdata->i2s_clk);
+		snd_soc_dai_set_fmt(cpu_dai, fmt);
+		snd_soc_dai_set_fmt(codec_dai, codec_dai_fmt);
+		break;
+	default:
+		break;
+	}
+
+	return qcom_snd_sdw_startup(substream);
+}
+
+// static int sc8280xp_snd_startup(struct snd_pcm_substream *substream)
+// {
+// 	unsigned int fmt = SND_SOC_DAIFMT_BP_FP;
+// 	unsigned int codec_dai_fmt = SND_SOC_DAIFMT_BC_FC;
+// 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+// 	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+// 	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(rtd, 0);
+
+// 	int ret;
+
+// 	switch (cpu_dai->id) {
+// 	case SECONDARY_MI2S_RX:
+// 		codec_dai_fmt |= SND_SOC_DAIFMT_NB_NF | SND_SOC_DAIFMT_I2S;
+// 		ret = snd_soc_dai_set_sysclk(cpu_dai,
+// 			Q6AFE_LPASS_CLK_ID_SEC_MI2S_IBIT,
+// 			MI2S_BCLK_RATE, SNDRV_PCM_STREAM_PLAYBACK);
+// 		pr_err("snd_soc_dai_set_sysclk: %d\n", ret);
+// 		snd_soc_dai_set_fmt(cpu_dai, fmt);
+// 		snd_soc_dai_set_fmt(codec_dai, codec_dai_fmt);
+// 		break;
+// 	default:
+// 		break;
+// 	}
+
+// 	return qcom_snd_sdw_startup(substream);
+// }
+
 static const struct snd_soc_ops sc8280xp_be_ops = {
-	.startup = qcom_snd_sdw_startup,
+	.startup = sc8280xp_snd_startup,
 	.shutdown = sc8280xp_snd_shutdown,
 	.hw_params = sc8280xp_snd_hw_params,
 	.hw_free = sc8280xp_snd_hw_free,
@@ -177,6 +242,10 @@ static int sc8280xp_platform_probe(struct platform_device *pdev)
 	ret = qcom_snd_parse_of(card);
 	if (ret)
 		return ret;
+
+	data->i2s_clk = devm_clk_get_optional(dev, NULL);
+	if (IS_ERR(data->i2s_clk))
+		return dev_err_probe(dev, PTR_ERR(data->i2s_clk), "unable to get i2s clock\n");
 
 	card->driver_name = of_device_get_match_data(dev);
 	sc8280xp_add_be_ops(card);
