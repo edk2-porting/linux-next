@@ -782,6 +782,11 @@ static void cqhci_finish_mrq(struct mmc_host *mmc, unsigned int tag)
 	struct mmc_request *mrq = slot->mrq;
 	struct mmc_data *data;
 
+	int offset = 0;
+
+	if (cq_host->offset_changed)
+		offset = CQE_V5_VENDOR_CFG;
+
 	if (!mrq) {
 		WARN_ONCE(1, "%s: cqhci: spurious TCN for tag %d\n",
 			  mmc_hostname(mmc), tag);
@@ -804,7 +809,13 @@ static void cqhci_finish_mrq(struct mmc_host *mmc, unsigned int tag)
 			data->bytes_xfered = 0;
 		else
 			data->bytes_xfered = data->blksz * data->blocks;
+	} else {
+		cqhci_writel(cq_host, cqhci_readl(cq_host,
+			CQHCI_VENDOR_CFG + offset) |
+			CMDQ_SEND_STATUS_TRIGGER,
+			CQHCI_VENDOR_CFG + offset);
 	}
+
 
 	mmc_cqe_request_done(mmc, mrq);
 }
