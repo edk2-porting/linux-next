@@ -533,13 +533,13 @@ static int qcom_battmgr_bat_get_property(struct power_supply *psy,
 		val->intval = battmgr->status.power_now;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		if (unit != QCOM_BATTMGR_UNIT_mAh)
-			return -ENODATA;
+		// if (unit != QCOM_BATTMGR_UNIT_mAh)
+		// 	return -ENODATA;
 		val->intval = battmgr->info.design_capacity;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		if (unit != QCOM_BATTMGR_UNIT_mAh)
-			return -ENODATA;
+		// if (unit != QCOM_BATTMGR_UNIT_mAh)
+		// 	return -ENODATA;
 		val->intval = battmgr->info.last_full_capacity;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_EMPTY:
