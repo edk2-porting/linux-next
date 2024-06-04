@@ -2840,6 +2840,8 @@
 
 			dma-coherent;
 
+			max-link-speed = <4>;
+
 			linux,pci-domain = <7>;
 			num-lanes = <2>;
 
@@ -2913,12 +2915,18 @@
 				 <&gcc GCC_PCIE_6A_CFG_AHB_CLK>,
 				 <&rpmhcc RPMH_CXO_CLK>,
 				 <&gcc GCC_PCIE_6A_PHY_RCHNG_CLK>,
-				 <&gcc GCC_PCIE_6A_PIPE_CLK>;
+				 <&gcc GCC_PCIE_6A_PIPE_CLK>,
+				 <&gcc GCC_PCIE_6A_PIPEDIV2_CLK>,
+				 <&gcc GCC_PCIE_6A_PHY_AUX_CLK>,
+				 <&tcsr TCSR_PCIE_4L_CLKREF_EN>;
 			clock-names = "aux",
 				      "cfg_ahb",
 				      "ref",
 				      "rchng",
-				      "pipe";
+				      "pipe",
+				      "pipediv2",
+				      "phy_aux",
+				      "4lane_clkref";
 
 			resets = <&gcc GCC_PCIE_6A_PHY_BCR>,
 				 <&gcc GCC_PCIE_6A_NOCSR_COM_PHY_BCR>;
