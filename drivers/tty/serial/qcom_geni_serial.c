@@ -78,7 +78,7 @@
 #define GENI_UART_CONS_PORTS		1
 #define GENI_UART_PORTS			3
 #define DEF_FIFO_DEPTH_WORDS		16
-#define DEF_TX_WM			2
+#define DEF_TX_WM			1
 #define DEF_FIFO_WIDTH_BITS		32
 #define UART_RX_WM			2
 
@@ -128,8 +128,8 @@ struct qcom_geni_serial_port {
 	void *rx_buf;
 	u32 loopback;
 	bool brk;
+	bool tx_fifo_stopped;
 
-	unsigned int tx_remaining;
 	unsigned int tx_total;
 	int wakeup_irq;
 	bool rx_tx_swap;
@@ -337,6 +337,14 @@ static void qcom_geni_serial_poll_tx_done(struct uart_port *uport)
 							M_CMD_ABORT_EN, true);
 	}
 	writel(irq_clear, uport->membase + SE_GENI_M_IRQ_CLEAR);
+
+	/*
+	 * Re-enable the TX watermark interrupt when we clear the "done"
+	 * in case we were waiting on the "done" bit before starting a new
+	 * command. The interrupt routine will re-disable this if it's not
+	 * appropriate.
+	 */
+	writel(M_TX_FIFO_WATERMARK_EN, uport->membase +	SE_GENI_M_IRQ_EN_SET);
 }
 
 static void qcom_geni_serial_drain_tx_fifo(struct uart_port *uport)
@@ -358,7 +366,7 @@ static void qcom_geni_serial_drain_tx_fifo(struct uart_port *uport)
 	 * get lost.
 	 */
 	qcom_geni_serial_poll_bitfield(uport, SE_GENI_M_GP_LENGTH, GENMASK(31, 0),
-				       port->tx_total - port->tx_remaining);
+				       port->tx_total);
 
 	/*
 	 * If clearing the FIFO made us inactive then we're done--no need for
@@ -387,14 +395,6 @@ static void qcom_geni_serial_drain_tx_fifo(struct uart_port *uport)
 		writel(M_CMD_ABORT_EN, uport->membase + SE_GENI_M_IRQ_CLEAR);
 	}
 	writel(M_CMD_CANCEL_EN, uport->membase + SE_GENI_M_IRQ_CLEAR);
-
-	/*
-	 * We've cancelled the current command. "tx_remaining" stores how
-	 * many bytes are left to finish in the current command so we know
-	 * when to start a new command. Since the command was cancelled we
-	 * need to zero "tx_remaining".
-	 */
-	port->tx_remaining = 0;
 }
 
 static void qcom_geni_serial_abort_rx(struct uart_port *uport)
@@ -454,11 +454,12 @@ static int qcom_geni_serial_get_char(struct uart_port *uport)
 static void qcom_geni_serial_poll_put_char(struct uart_port *uport,
 							unsigned char c)
 {
+	qcom_geni_serial_drain_tx_fifo(uport);
+
 	qcom_geni_serial_setup_tx(uport, 1);
 	WARN_ON(!qcom_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
 						M_TX_FIFO_WATERMARK_EN, true));
 	writel(c, uport->membase + SE_GENI_TX_FIFOn);
-	writel(M_TX_FIFO_WATERMARK_EN, uport->membase + SE_GENI_M_IRQ_CLEAR);
 	qcom_geni_serial_poll_tx_done(uport);
 }
 #endif
@@ -487,6 +488,8 @@ __qcom_geni_serial_console_write(struct uart_port *uport, const char *s,
 
 	int i;
 	u32 bytes_to_send = count;
+
+	qcom_geni_serial_drain_tx_fifo(uport);
 
 	for (i = 0; i < count; i++) {
 		/*
@@ -538,7 +541,6 @@ static void qcom_geni_serial_console_write(struct console *co, const char *s,
 	bool locked = true;
 	unsigned long flags;
 	u32 geni_status;
-	u32 irq_en;
 
 	WARN_ON(co->index < 0 || co->index >= GENI_UART_CONS_PORTS);
 
@@ -554,38 +556,10 @@ static void qcom_geni_serial_console_write(struct console *co, const char *s,
 
 	geni_status = readl(uport->membase + SE_GENI_STATUS);
 
-	if (!locked) {
-		/*
-		 * We can only get here if an oops is in progress then we were
-		 * unable to get the lock. This means we can't safely access
-		 * our state variables like tx_remaining. About the best we
-		 * can do is wait for the FIFO to be empty before we start our
-		 * transfer, so we'll do that.
-		 */
-		qcom_geni_serial_poll_bit(uport, SE_GENI_M_IRQ_STATUS,
-					  M_TX_FIFO_NOT_EMPTY_EN, false);
-	} else if ((geni_status & M_GENI_CMD_ACTIVE) && !port->tx_remaining) {
-		/*
-		 * It seems we can't interrupt existing transfers if all data
-		 * has been sent, in which case we need to look for done first.
-		 */
-		qcom_geni_serial_poll_tx_done(uport);
-
-		if (!kfifo_is_empty(&uport->state->port.xmit_fifo)) {
-			irq_en = readl(uport->membase + SE_GENI_M_IRQ_EN);
-			writel(irq_en | M_TX_FIFO_WATERMARK_EN,
-					uport->membase + SE_GENI_M_IRQ_EN);
-		}
-	}
-
 	__qcom_geni_serial_console_write(uport, s, count);
 
-
-	if (locked) {
-		if (port->tx_remaining)
-			qcom_geni_serial_setup_tx(uport, port->tx_remaining);
+	if (locked)
 		uart_port_unlock_irqrestore(uport, flags);
-	}
 }
 
 static void handle_rx_console(struct uart_port *uport, u32 bytes, bool drop)
@@ -662,9 +636,9 @@ static void qcom_geni_serial_stop_tx_dma(struct uart_port *uport)
 
 	if (port->tx_dma_addr) {
 		geni_se_tx_dma_unprep(&port->se, port->tx_dma_addr,
-				      port->tx_remaining);
+				      port->tx_total);
 		port->tx_dma_addr = 0;
-		port->tx_remaining = 0;
+		port->tx_total = 0;
 	}
 
 	geni_se_cancel_m_cmd(&port->se);
@@ -709,26 +683,27 @@ static void qcom_geni_serial_start_tx_dma(struct uart_port *uport)
 		qcom_geni_serial_stop_tx_dma(uport);
 		return;
 	}
-
-	port->tx_remaining = xmit_size;
 }
 
 static void qcom_geni_serial_start_tx_fifo(struct uart_port *uport)
 {
-	u32 irq_en;
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
 
-	irq_en = readl(uport->membase +	SE_GENI_M_IRQ_EN);
-	irq_en |= M_TX_FIFO_WATERMARK_EN | M_CMD_DONE_EN;
-	writel(irq_en, uport->membase +	SE_GENI_M_IRQ_EN);
+	port->tx_fifo_stopped = false;
+
+	/* Prime the pump to get data flowing. */
+	writel(M_TX_FIFO_WATERMARK_EN, uport->membase +	SE_GENI_M_IRQ_EN_SET);
 }
 
 static void qcom_geni_serial_stop_tx_fifo(struct uart_port *uport)
 {
-	u32 irq_en;
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
 
-	irq_en = readl(uport->membase + SE_GENI_M_IRQ_EN);
-	irq_en &= ~(M_CMD_DONE_EN | M_TX_FIFO_WATERMARK_EN);
-	writel(irq_en, uport->membase + SE_GENI_M_IRQ_EN);
+	/*
+	 * We can't do anything to safely pause the bytes that have already
+	 * been queued up so just set a flag saying we shouldn't queue any more.
+	 */
+	port->tx_fifo_stopped = true;
 }
 
 static void qcom_geni_serial_handle_rx_fifo(struct uart_port *uport, bool drop)
@@ -896,10 +871,20 @@ static void qcom_geni_serial_stop_tx(struct uart_port *uport)
 	uport->ops->stop_tx(uport);
 }
 
+static void qcom_geni_serial_enable_cmd_done(struct uart_port *uport)
+{
+	struct qcom_geni_serial_port *port = to_dev_port(uport);
+
+	/* If we're not in FIFO mode we don't use CMD_DONE. */
+	if (port->dev_data->mode != GENI_SE_FIFO)
+		return;
+
+	writel(M_CMD_DONE_EN, uport->membase + SE_GENI_M_IRQ_EN_SET);
+}
+
 static void qcom_geni_serial_send_chunk_fifo(struct uart_port *uport,
 					     unsigned int chunk)
 {
-	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	unsigned int tx_bytes, remaining = chunk;
 	u8 buf[BYTES_PER_FIFO_WORD];
 
@@ -912,52 +897,74 @@ static void qcom_geni_serial_send_chunk_fifo(struct uart_port *uport,
 		iowrite32_rep(uport->membase + SE_GENI_TX_FIFOn, buf, 1);
 
 		remaining -= tx_bytes;
-		port->tx_remaining -= tx_bytes;
 	}
 }
 
-static void qcom_geni_serial_handle_tx_fifo(struct uart_port *uport,
-					    bool done, bool active)
+static void qcom_geni_serial_handle_tx_fifo(struct uart_port *uport)
 {
 	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	struct tty_port *tport = &uport->state->port;
 	size_t avail;
 	size_t pending;
 	u32 status;
-	u32 irq_en;
 	unsigned int chunk;
+	bool active;
 
-	status = readl(uport->membase + SE_GENI_TX_FIFO_STATUS);
+	/*
+	 * The TX watermark interrupt is only used to "prime the pump" for
+	 * transfers. Once transfers have been kicked off we always use the
+	 * "done" interrupt to queue the next batch. Once were here we can
+	 * always disable the TX watermark interrupt.
+	 *
+	 * NOTE: we use the TX watermark in this way because we don't ever
+	 * kick off TX transfers larger than we can stuff into the FIFO. This
+	 * is because bytes from the OS's circular queue can disappear and
+	 * there's no known safe/non-blocking way to cancel the larger
+	 * transfer when bytes disappear. See qcom_geni_serial_drain_tx_fifo()
+	 * for an example of a safe (but blocking) way to drain, but that's
+	 * not appropriate in an IRQ handler. We also can't just kick off one
+	 * large transfer and queue bytes whenever because we're using 4 bytes
+	 * per FIFO word and thus we can only queue non-multiple-of-4 bytes as
+	 * in the last word of a transfer.
+	 */
+	writel(M_TX_FIFO_WATERMARK_EN, uport->membase +	SE_GENI_M_IRQ_EN_CLEAR);
 
-	/* Complete the current tx command before taking newly added data */
-	if (active)
-		pending = port->tx_remaining;
-	else
-		pending = kfifo_len(&tport->xmit_fifo);
-
-	/* All data has been transmitted and acknowledged as received */
-	if (!pending && !status && done) {
-		qcom_geni_serial_stop_tx_fifo(uport);
+	/*
+	 * If we've got an active TX command running then we expect to still
+	 * see the "done" bit in the future and we can't kick off another
+	 * transfer till then. Bail. NOTE: it's important that we read "active"
+	 * after we've cleared the "done" interrupt (which the caller already
+	 * did for us) so that we know that if we show as non-active we're
+	 * guaranteed to later get "done".
+	 *
+	 * If nothing is pending we _also_ want to bail. Later start_tx()
+	 * will start transfers again by temporarily turning on the TX
+	 * watermark.
+	 */
+	active = readl(uport->membase + SE_GENI_STATUS) & M_GENI_CMD_ACTIVE;
+	pending = port->tx_fifo_stopped ? 0 : kfifo_len(&tport->xmit_fifo);
+	if (active || !pending)
 		goto out_write_wakeup;
-	}
 
+	/* Calculate how much space is available in the FIFO right now. */
+	status = readl(uport->membase + SE_GENI_TX_FIFO_STATUS);
 	avail = port->tx_fifo_depth - (status & TX_FIFO_WC);
 	avail *= BYTES_PER_FIFO_WORD;
 
-	chunk = min(avail, pending);
-	if (!chunk)
+	/*
+	 * It's a bit odd if we get here and have bytes pending and we're
+	 * handling a "done" or "TX watermark" interrupt but we don't
+	 * have space in the FIFO. Stick in a warning and bail.
+	 */
+	if (!avail) {
+		dev_warn(uport->dev, "FIFO unexpectedly out of space\n");
 		goto out_write_wakeup;
-
-	if (!port->tx_remaining) {
-		qcom_geni_serial_setup_tx(uport, pending);
-		port->tx_remaining = pending;
-
-		irq_en = readl(uport->membase + SE_GENI_M_IRQ_EN);
-		if (!(irq_en & M_TX_FIFO_WATERMARK_EN))
-			writel(irq_en | M_TX_FIFO_WATERMARK_EN,
-					uport->membase + SE_GENI_M_IRQ_EN);
 	}
 
+
+	/* We're ready to throw some bytes into the FIFO. */
+	chunk = min(avail, pending);
+	qcom_geni_serial_setup_tx(uport, chunk);
 	qcom_geni_serial_send_chunk_fifo(uport, chunk);
 
 	/*
@@ -965,17 +972,9 @@ static void qcom_geni_serial_handle_tx_fifo(struct uart_port *uport,
 	 * cleared it in qcom_geni_serial_isr it will have already reasserted
 	 * so we must clear it again here after our writes.
 	 */
-	writel(M_TX_FIFO_WATERMARK_EN,
-			uport->membase + SE_GENI_M_IRQ_CLEAR);
+	writel(M_TX_FIFO_WATERMARK_EN, uport->membase + SE_GENI_M_IRQ_CLEAR);
 
 out_write_wakeup:
-	if (!port->tx_remaining) {
-		irq_en = readl(uport->membase + SE_GENI_M_IRQ_EN);
-		if (irq_en & M_TX_FIFO_WATERMARK_EN)
-			writel(irq_en & ~M_TX_FIFO_WATERMARK_EN,
-					uport->membase + SE_GENI_M_IRQ_EN);
-	}
-
 	if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS)
 		uart_write_wakeup(uport);
 }
@@ -985,10 +984,10 @@ static void qcom_geni_serial_handle_tx_dma(struct uart_port *uport)
 	struct qcom_geni_serial_port *port = to_dev_port(uport);
 	struct tty_port *tport = &uport->state->port;
 
-	uart_xmit_advance(uport, port->tx_remaining);
-	geni_se_tx_dma_unprep(&port->se, port->tx_dma_addr, port->tx_remaining);
+	uart_xmit_advance(uport, port->tx_total);
+	geni_se_tx_dma_unprep(&port->se, port->tx_dma_addr, port->tx_total);
 	port->tx_dma_addr = 0;
-	port->tx_remaining = 0;
+	port->tx_total = 0;
 
 	if (!kfifo_is_empty(&tport->xmit_fifo))
 		qcom_geni_serial_start_tx_dma(uport);
@@ -1002,7 +1001,6 @@ static irqreturn_t qcom_geni_serial_isr(int isr, void *dev)
 	u32 m_irq_en;
 	u32 m_irq_status;
 	u32 s_irq_status;
-	u32 geni_status;
 	u32 dma;
 	u32 dma_tx_status;
 	u32 dma_rx_status;
@@ -1020,7 +1018,6 @@ static irqreturn_t qcom_geni_serial_isr(int isr, void *dev)
 	s_irq_status = readl(uport->membase + SE_GENI_S_IRQ_STATUS);
 	dma_tx_status = readl(uport->membase + SE_DMA_TX_IRQ_STAT);
 	dma_rx_status = readl(uport->membase + SE_DMA_RX_IRQ_STAT);
-	geni_status = readl(uport->membase + SE_GENI_STATUS);
 	dma = readl(uport->membase + SE_GENI_DMA_MODE_EN);
 	m_irq_en = readl(uport->membase + SE_GENI_M_IRQ_EN);
 	writel(m_irq_status, uport->membase + SE_GENI_M_IRQ_CLEAR);
@@ -1067,9 +1064,7 @@ static irqreturn_t qcom_geni_serial_isr(int isr, void *dev)
 	} else {
 		if (m_irq_status & m_irq_en &
 		    (M_TX_FIFO_WATERMARK_EN | M_CMD_DONE_EN))
-			qcom_geni_serial_handle_tx_fifo(uport,
-					m_irq_status & M_CMD_DONE_EN,
-					geni_status & M_GENI_CMD_ACTIVE);
+			qcom_geni_serial_handle_tx_fifo(uport);
 
 		if (s_irq_status & (S_RX_FIFO_WATERMARK_EN | S_RX_FIFO_LAST_EN))
 			qcom_geni_serial_handle_rx_fifo(uport, drop_rx);
@@ -1177,6 +1172,7 @@ static int qcom_geni_serial_port_setup(struct uart_port *uport)
 	geni_se_init(&port->se, UART_RX_WM, port->rx_fifo_depth - 2);
 	geni_se_select_mode(&port->se, port->dev_data->mode);
 	writel(DEF_TX_WM, uport->membase + SE_GENI_TX_WATERMARK_REG);
+	qcom_geni_serial_enable_cmd_done(uport);
 	qcom_geni_serial_start_rx(uport);
 	port->setup = true;
 
