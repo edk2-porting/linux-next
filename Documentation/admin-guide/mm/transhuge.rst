@@ -338,6 +338,7 @@ and its value for each mTHP is essentially consistent with the global setting.
 An 'inherit' option is added to ensure compatibility with these global settings.
 Conversely, the options 'force' and 'deny' are dropped, which are rather testing
 artifacts from the old ages.
+
 always
     Attempt to allocate <size> huge pages every time we need a new page;
 
