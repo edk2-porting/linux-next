@@ -1783,6 +1783,10 @@ static inline void wb_dirty_exceeded(struct dirty_throttle_control *dtc,
 		((dtc->dirty > dtc->thresh) || strictlimit);
 }
 
+/*
+ * The limits fileds dirty_exceeded and pos_ratio won't be updated if wb is
+ * in freerun state. Please don't use these invalid fileds in freerun case.
+ */
 static void balance_wb_limits(struct dirty_throttle_control *dtc,
 			      bool strictlimit)
 {
