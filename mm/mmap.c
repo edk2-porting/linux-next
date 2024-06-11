@@ -405,23 +405,6 @@ anon_vma_interval_tree_post_update_vma(struct vm_area_struct *vma)
 		anon_vma_interval_tree_insert(avc, &avc->anon_vma->rb_root);
 }
 
-static unsigned long count_vma_pages_range(struct mm_struct *mm,
-		unsigned long addr, unsigned long end)
-{
-	VMA_ITERATOR(vmi, mm, addr);
-	struct vm_area_struct *vma;
-	unsigned long nr_pages = 0;
-
-	for_each_vma_range(vmi, vma, end) {
-		unsigned long vm_start = max(addr, vma->vm_start);
-		unsigned long vm_end = min(end, vma->vm_end);
-
-		nr_pages += PHYS_PFN(vm_end - vm_start);
-	}
-
-	return nr_pages;
-}
-
 static void __vma_link_file(struct vm_area_struct *vma,
 			    struct address_space *mapping)
 {
@@ -733,7 +716,6 @@ int vma_expand(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	vma_iter_store(vmi, vma);
 
 	vma_complete(&vp, vmi, vma->vm_mm);
-	validate_mm(vma->vm_mm);
 	return 0;
 
 nomem:
@@ -2911,47 +2893,61 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	struct vm_area_struct *next, *prev, *merge;
 	pgoff_t pglen = len >> PAGE_SHIFT;
 	unsigned long charged = 0;
+	struct vma_munmap_struct vms;
+	struct ma_state mas_detach;
 	unsigned long end = addr + len;
 	unsigned long merge_start = addr, merge_end = end;
 	bool writable_file_mapping = false;
 	pgoff_t vm_pgoff;
-	int error;
+	int error = -ENOMEM;
 	VMA_ITERATOR(vmi, mm, addr);
 
-	/* Check against address space limit. */
-	if (!may_expand_vm(mm, vm_flags, len >> PAGE_SHIFT)) {
-		unsigned long nr_pages;
+	vma = vma_find(&vmi, end);
+	if (vma) {
+		struct maple_tree mt_detach;
 
-		/*
-		 * MAP_FIXED may remove pages of mappings that intersects with
-		 * requested mapping. Account for the pages it would unmap.
-		 */
-		nr_pages = count_vma_pages_range(mm, addr, end);
+		/* Prevent unmapping a sealed VMA.  */
+		if (unlikely(!can_modify_mm(mm, addr, end)))
+			return -EPERM;
 
-		if (!may_expand_vm(mm, vm_flags,
-					(len >> PAGE_SHIFT) - nr_pages))
+		mt_init_flags(&mt_detach, vmi.mas.tree->ma_flags & MT_FLAGS_LOCK_MASK);
+		mt_on_stack(mt_detach);
+		mas_init(&mas_detach, &mt_detach, 0);
+		/* arch_unmap() might do unmaps itself.  */
+		arch_unmap(mm, addr, end);
+		init_vma_munmap(&vms, &vmi, vma, addr, end, uf,
+				/* unlock = */ false);
+		/* Prepare to unmap any existing mapping in the area */
+		if (vms_gather_munmap_vmas(&vms, &mas_detach))
 			return -ENOMEM;
+		next = vms.next;
+		prev = vms.prev;
+		vma = NULL;
+		vma_iter_prev_range(&vmi);
+	} else {
+		vms.end = 0; /* vms.end == 0 indicates there is no MAP_FIXED */
+		vms.nr_pages = 0;
+		next = vma_next(&vmi);
+		prev = vma_prev(&vmi);
 	}
 
-	/* Unmap any existing mapping in the area */
-	error = do_vmi_munmap(&vmi, mm, addr, len, uf, false);
-	if (error == -EPERM)
-		return error;
-	else if (error)
-		return -ENOMEM;
-
 	/*
-	 * Private writable mapping: check memory availability
+	 * Check against address space limit.
+	 * MAP_FIXED may remove pages of mappings that intersects with
+	 * requested mapping. Account for the pages it would unmap.
 	 */
+	if (!may_expand_vm(mm, vm_flags, (len >> PAGE_SHIFT) - vms.nr_pages))
+		goto no_mem;
+
+	/* Private writable mapping: check memory availability */
 	if (accountable_mapping(file, vm_flags)) {
 		charged = len >> PAGE_SHIFT;
+		charged -= vms.nr_pages; /* MAP_FIXED removed memory */
 		if (security_vm_enough_memory_mm(mm, charged))
-			return -ENOMEM;
+			goto no_mem;
 		vm_flags |= VM_ACCOUNT;
 	}
 
-	next = vma_next(&vmi);
-	prev = vma_prev(&vmi);
 	if (vm_flags & VM_SPECIAL) {
 		if (prev)
 			vma_iter_next_range(&vmi);
@@ -2998,10 +2994,8 @@ cannot_expand:
 	 * not unmapped, but the maps are removed from the list.
 	 */
 	vma = vm_area_alloc(mm);
-	if (!vma) {
-		error = -ENOMEM;
+	if (!vma)
 		goto unacct_error;
-	}
 
 	vma_iter_config(&vmi, addr, end);
 	vma_set_range(vma, addr, end, pgoff);
@@ -3123,6 +3117,8 @@ expanded:
 	vm_flags_set(vma, VM_SOFTDIRTY);
 
 	vma_set_page_prot(vma);
+	if (vms.end)
+		vms_complete_munmap_vmas(&vms, &mas_detach);
 
 	validate_mm(mm);
 	return addr;
@@ -3148,6 +3144,9 @@ free_vma:
 unacct_error:
 	if (charged)
 		vm_unacct_memory(charged);
+no_mem:
+	if (vms.end)
+		abort_munmap_vmas(&mas_detach);
 	validate_mm(mm);
 	return error;
 }
