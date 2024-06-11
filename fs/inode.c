@@ -231,6 +231,8 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 
 	if (unlikely(security_inode_alloc(inode)))
 		return -ENOMEM;
+
+	inode->i_state = 0;
 	this_cpu_inc(nr_inodes);
 
 	return 0;
@@ -1023,14 +1025,7 @@ EXPORT_SYMBOL(get_next_ino);
  */
 struct inode *new_inode_pseudo(struct super_block *sb)
 {
-	struct inode *inode = alloc_inode(sb);
-
-	if (inode) {
-		spin_lock(&inode->i_lock);
-		inode->i_state = 0;
-		spin_unlock(&inode->i_lock);
-	}
-	return inode;
+	return alloc_inode(sb);
 }
 
 /**
@@ -1254,7 +1249,6 @@ struct inode *iget5_locked(struct super_block *sb, unsigned long hashval,
 		struct inode *new = alloc_inode(sb);
 
 		if (new) {
-			new->i_state = 0;
 			inode = inode_insert5(new, hashval, test, set, data);
 			if (unlikely(inode != new))
 				destroy_inode(new);
@@ -1297,7 +1291,6 @@ again:
 
 	new = alloc_inode(sb);
 	if (new) {
-		new->i_state = 0;
 		inode = inode_insert5(new, hashval, test, set, data);
 		if (unlikely(inode != new))
 			destroy_inode(new);
