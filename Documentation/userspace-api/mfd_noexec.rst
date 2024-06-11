@@ -10,27 +10,27 @@ Introduction of non executable mfd
 :Contributor:
 	Aleksa Sarai <cyphar@cyphar.com>
 
-Since Linux introduced the memfd feature, memfd have always had their
+Since Linux introduced the memfd feature, memfds have always had their
 execute bit set, and the memfd_create() syscall doesn't allow setting
 it differently.
 
-However, in a secure by default system, such as ChromeOS, (where all
-executables should come from the rootfs, which is protected by Verified
+However, in a secure-by-default system, such as ChromeOS, (where all
+executables should come from the rootfs, which is protected by verified
 boot), this executable nature of memfd opens a door for NoExec bypass
 and enables “confused deputy attack”.  E.g, in VRP bug [1]: cros_vm
 process created a memfd to share the content with an external process,
 however the memfd is overwritten and used for executing arbitrary code
-and root escalation. [2] lists more VRP in this kind.
+and root escalation. [2] lists more VRP of this kind.
 
-On the other hand, executable memfd has its legit use, runc uses memfd’s
+On the other hand, executable memfd has its legit use: runc uses memfd’s
 seal and executable feature to copy the contents of the binary then
-execute them, for such system, we need a solution to differentiate runc's
-use of  executable memfds and an attacker's [3].
+execute them. For such a system, we need a solution to differentiate runc's
+use of executable memfds and an attacker's [3].
 
-To address those above.
+To address those above:
  - Let memfd_create() set X bit at creation time.
  - Let memfd be sealed for modifying X bit when NX is set.
- - A new pid namespace sysctl: vm.memfd_noexec to help applications to
+ - Add a new pid namespace sysctl: vm.memfd_noexec to help applications to
    migrating and enforcing non-executable MFD.
 
 User API
@@ -48,7 +48,7 @@ User API
 
 Note:
 	``MFD_NOEXEC_SEAL`` implies ``MFD_ALLOW_SEALING``. In case that
-	app doesn't want sealing, it can add F_SEAL_SEAL after creation.
+	an app doesn't want sealing, it can add F_SEAL_SEAL after creation.
 
 
 Sysctl:
@@ -68,14 +68,14 @@ The new pid namespaced sysctl vm.memfd_noexec has 3 values:
  - 2: MEMFD_NOEXEC_SCOPE_NOEXEC_ENFORCED
 	memfd_create() without MFD_NOEXEC_SEAL will be rejected.
 
-The sysctl allows finer control of memfd_create for old-software that
-doesn't set the executable bit, for example, a container with
-vm.memfd_noexec=1 means the old-software will create non-executable memfd
-by default while new-software can create executable memfd by setting
+The sysctl allows finer control of memfd_create for old software that
+doesn't set the executable bit; for example, a container with
+vm.memfd_noexec=1 means the old software will create non-executable memfd
+by default while new software can create executable memfd by setting
 MFD_EXEC.
 
 The value of vm.memfd_noexec is passed to child namespace at creation
-time, in addition, the setting is hierarchical, i.e. during memfd_create,
+time. In addition, the setting is hierarchical, i.e. during memfd_create,
 we will search from current ns to root ns and use the most restrictive
 setting.
 
