@@ -3483,7 +3483,8 @@ static int __get_segment_type_6(struct f2fs_io_info *fio)
 		if (page_private_gcing(fio->page)) {
 			if (fio->sbi->am.atgc_enabled &&
 				(fio->io_type == FS_DATA_IO) &&
-				(fio->sbi->gc_mode != GC_URGENT_HIGH))
+				(fio->sbi->gc_mode != GC_URGENT_HIGH) &&
+				!is_inode_flag_set(inode, FI_OPU_WRITE))
 				return CURSEG_ALL_DATA_ATGC;
 			else
 				return CURSEG_COLD_DATA;
@@ -5187,7 +5188,8 @@ static int fix_curseg_write_pointer(struct f2fs_sb_info *sbi, int type)
 	}
 
 	/* Allocate a new section if it's not new. */
-	if (cs->next_blkoff) {
+	if (cs->next_blkoff ||
+	    cs->segno != GET_SEG_FROM_SEC(sbi, GET_ZONE_FROM_SEC(sbi, cs_section))) {
 		unsigned int old_segno = cs->segno, old_blkoff = cs->next_blkoff;
 
 		f2fs_allocate_new_section(sbi, type, true);
