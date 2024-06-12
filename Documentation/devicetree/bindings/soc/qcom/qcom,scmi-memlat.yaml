@@ -1,0 +1,243 @@
+# SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/qcom/qcom,scmi-memlat.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm SCMI Memory Bus nodes
+
+maintainers:
+  - Sibi Sankar <quic_sibis@quicinc.com>
+
+description: |
+  This binding describes the various memory buses that can be monitored and scaled
+  by memory latency governor running on the CPU Control Processor (SCMI controller).
+
+properties:
+  qcom,memory-type:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    enum: [0, 1, 2]
+    description:
+      Memory Bus Identifier
+        0 = QCOM_MEM_TYPE_DDR
+        1 = QCOM_MEM_TYPE_LLCC
+        2 = QCOM_MEM_TYPE_DDR_QOS
+
+  freq-table-hz:
+    items:
+      items:
+        - description: Minimum frequency of the memory bus in Hz
+        - description: Maximum frequency of the memory bus in Hz
+
+patternProperties:
+  '^monitor-[0-9]$':
+    type: object
+    unevaluatedProperties: false
+    description:
+      The list of all monitors detecting the memory latency bound workloads using
+      various counters.
+
+    properties:
+      qcom,compute-type:
+        description:
+          Monitors of type compute perform bus dvfs based on a rudimentary CPU
+          frequency to memory frequency map.
+        type: boolean
+
+      qcom,ipm-ceil:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          Monitors having this property perform bus dvfs based on the same
+          rudimentary table but the scaling is performed only if the calculated
+          IPM (Instruction Per Misses) exceeds the given ceiling.
+
+      qcom,cpulist:
+        $ref: /schemas/types.yaml#/definitions/phandle-array
+        description:
+          List of phandles to the CPUs nodes whose frequency and IPM are to be
+          monitored.
+
+      operating-points-v2: true
+      opp-table:
+        type: object
+
+    required:
+      - qcom,cpulist
+      - operating-points-v2
+      - opp-table
+
+    allOf:
+      - if:
+          properties:
+            qcom,compute-type: false
+        then:
+          required:
+            - qcom,ipm-ceil
+
+      - if:
+          properties:
+            qcom,ipm-ceil: false
+        then:
+          required:
+            - qcom,compute-type
+
+required:
+  - qcom,memory-type
+  - freq-table-hz
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/soc/qcom,scmi-vendor.h>
+
+    firmware {
+        scmi {
+            compatible = "arm,scmi";
+            mboxes = <&cpucp_mbox 0>, <&cpucp_mbox 2>;
+            mbox-names = "tx", "rx";
+            shmem = <&cpu_scp_lpri0>, <&cpu_scp_lpri1>;
+
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            protocol@80 {
+                reg = <0x80>;
+
+                memlat-dvfs {
+                    memory-0 {
+                        qcom,memory-type = <QCOM_MEM_TYPE_DDR>;
+                        freq-table-hz = /bits/ 64 <200000000 4224000000>;
+
+                        monitor-0 {
+                            qcom,ipm-ceil = <20000000>;
+                            qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7
+                                            &CPU8 &CPU9 &CPU10 &CPU11>;
+                            operating-points-v2 = <&memory0_monitor0_opp_table>;
+
+                            memory0_monitor0_opp_table: opp-table {
+                                compatible = "operating-points-v2";
+
+                                opp-999000000 {
+                                    opp-hz = /bits/ 64 <999000000 547000000>;
+                                };
+
+                                opp-1440000000 {
+                                    opp-hz = /bits/ 64 <1440000000 768000000>;
+                                };
+
+                                opp-1671000000 {
+                                    opp-hz = /bits/ 64 <1671000000 1555000000>;
+                                };
+
+                                opp-2189000000 {
+                                    opp-hz = /bits/ 64 <2189000000 2092000000>;
+                                };
+
+                                opp-2516000000 {
+                                    opp-hz = /bits/ 64 <2516000000 3187000000>;
+                                };
+
+                                opp-3860000000 {
+                                    opp-hz = /bits/ 64 <3860000000 4224000000>;
+                                };
+                            };
+                        };
+
+                        monitor-1 {
+                            qcom,compute-type;
+                            qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7
+                                            &CPU8 &CPU9 &CPU10 &CPU11>;
+                            operating-points-v2 = <&memory0_monitor1_opp_table>;
+
+                            memory0_monitor1_opp_table: opp-table {
+                                compatible = "operating-points-v2";
+
+                                opp-1440000000 {
+                                        opp-hz = /bits/ 64 <1440000000 200000000>;
+                                };
+
+                                opp-2189000000 {
+                                        opp-hz = /bits/ 64 <2189000000 768000000>;
+                                };
+
+                                opp-2516000000 {
+                                        opp-hz = /bits/ 64 <2516000000 1555000000>;
+                                };
+
+                                opp-3860000000 {
+                                        opp-hz = /bits/ 64 <3860000000 4224000000>;
+                                };
+                            };
+                        };
+                    };
+
+                    memory-1 {
+                        qcom,memory-type = <QCOM_MEM_TYPE_LLCC>;
+                        freq-table-hz = /bits/ 64 <300000000 1067000000>;
+
+                        monitor-0 {
+                            qcom,ipm-ceil = <20000000>;
+                            qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7
+                                            &CPU8 &CPU9 &CPU10 &CPU11>;
+                            operating-points-v2 = <&memory1_monitor0_opp_table>;
+
+                            memory1_monitor0_opp_table: opp-table {
+                                compatible = "operating-points-v2";
+
+                                opp-999000000 {
+                                    opp-hz = /bits/ 64 <999000000 300000000>;
+                                };
+
+                                opp-1440000000 {
+                                    opp-hz = /bits/ 64 <1440000000 466000000>;
+                                };
+
+                                opp-1671000000 {
+                                    opp-hz = /bits/ 64 <1671000000 600000000>;
+                                };
+
+                                opp-2189000000 {
+                                    opp-hz = /bits/ 64 <2189000000 806000000>;
+                                };
+
+                                opp-2516000000 {
+                                    opp-hz = /bits/ 64 <2516000000 933000000>;
+                                };
+
+                                opp-3860000000 {
+                                    opp-hz = /bits/ 64 <3860000000 1066000000>;
+                                };
+                            };
+                        };
+                    };
+
+                    memory-2 {
+                        qcom,memory-type = <QCOM_MEM_TYPE_DDR_QOS>;
+                        freq-table-hz = /bits/ 64 <QCOM_DDR_LEVEL_AUTO QCOM_DDR_LEVEL_PERF>;
+
+                        monitor-0 {
+                            qcom,ipm-ceil = <20000000>;
+                            qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7
+                                            &CPU8 &CPU9 &CPU10 &CPU11>;
+                            operating-points-v2 = <&memory2_monitor0_opp_table>;
+
+                            memory2_monitor0_opp_table: opp-table {
+                                compatible = "operating-points-v2";
+
+                                opp-2189000000 {
+                                    opp-hz = /bits/ 64 <2189000000>;
+                                    opp-level = <QCOM_DDR_LEVEL_AUTO>;
+                                };
+
+                                opp-3860000000 {
+                                    opp-hz = /bits/ 64 <3860000000>;
+                                    opp-level = <QCOM_DDR_LEVEL_PERF>;
+                                };
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };

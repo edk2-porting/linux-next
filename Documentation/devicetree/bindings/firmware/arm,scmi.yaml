@@ -278,6 +278,27 @@ properties:
     required:
       - reg
 
+  protocol@80:
+    $ref: '#/$defs/protocol-node'
+    unevaluatedProperties: false
+
+    properties:
+      reg:
+        const: 0x80
+
+      memlat-dvfs:
+        type: object
+        additionalProperties: false
+        description:
+          The list of all memory buses that can be monitored and scaled by the
+          memory latency governor running on the SCMI controller.
+
+        patternProperties:
+          '^memory-[0-9]$':
+            type: object
+            $ref: /schemas/soc/qcom/qcom,scmi-memlat.yaml#
+            unevaluatedProperties: false
+
 additionalProperties: false
 
 $defs:
