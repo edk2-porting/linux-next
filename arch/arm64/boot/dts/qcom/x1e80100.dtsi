@@ -18,6 +18,7 @@
 #include <dt-bindings/power/qcom-rpmpd.h>
 #include <dt-bindings/soc/qcom,gpr.h>
 #include <dt-bindings/soc/qcom,rpmh-rsc.h>
+#include <dt-bindings/soc/qcom,scmi-vendor.h>
 #include <dt-bindings/sound/qcom,q6dsp-lpass-ports.h>
 
 / {
@@ -323,6 +324,141 @@
 			scmi_dvfs: protocol@13 {
 				reg = <0x13>;
 				#power-domain-cells = <1>;
+			};
+
+			scmi_vendor: protocol@80 {
+				reg = <0x80>;
+
+				memlat-dvfs {
+					memory-0 {
+						qcom,memory-type = <QCOM_MEM_TYPE_DDR>;
+						freq-table-hz = /bits/ 64 <200000000 4224000000>;
+
+						monitor-0 {
+							qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7 &CPU8 &CPU9 &CPU10 &CPU11>;
+							qcom,ipm-ceil = <20000000>;
+							operating-points-v2 = <&memory0_monitor0_opp_table>;
+
+							memory0_monitor0_opp_table: opp-table {
+								compatible = "operating-points-v2";
+
+								opp-999000000 {
+									opp-hz = /bits/ 64 <999000000 547000000>;
+								};
+
+								opp-1440000000 {
+									opp-hz = /bits/ 64 <1440000000 768000000>;
+								};
+
+								opp-1671000000 {
+									opp-hz = /bits/ 64 <1671000000 1555000000>;
+								};
+
+								opp-2189000000 {
+									opp-hz = /bits/ 64 <2189000000 2092000000>;
+								};
+
+								opp-2516000000 {
+									opp-hz = /bits/ 64 <2516000000 3187000000>;
+								};
+
+								opp-3860000000 {
+									opp-hz = /bits/ 64 <3860000000 4224000000>;
+								};
+							};
+						};
+
+						monitor-1 {
+							qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7 &CPU8 &CPU9 &CPU10 &CPU11>;
+							operating-points-v2 = <&memory0_monitor1_opp_table>;
+							qcom,compute-type;
+
+							memory0_monitor1_opp_table: opp-table {
+								compatible = "operating-points-v2";
+
+								opp-1440000000 {
+									opp-hz = /bits/ 64 <1440000000 200000000>;
+								};
+
+								opp-2189000000 {
+									opp-hz = /bits/ 64 <2189000000 768000000>;
+								};
+
+								opp-2516000000 {
+									opp-hz = /bits/ 64 <2516000000 1555000000>;
+								};
+
+								opp-3860000000 {
+									opp-hz = /bits/ 64 <3860000000 4224000000>;
+								};
+							};
+						};
+					};
+
+					memory-1 {
+						qcom,memory-type = <QCOM_MEM_TYPE_LLCC>;
+						freq-table-hz = /bits/ 64 <300000000 1067000000>;
+
+						monitor-0 {
+							qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7 &CPU8 &CPU9 &CPU10 &CPU11>;
+							qcom,ipm-ceil = <20000000>;
+							operating-points-v2 = <&memory1_monitor0_opp_table>;
+
+							memory1_monitor0_opp_table: opp-table {
+								compatible = "operating-points-v2";
+
+								opp-999000000 {
+									opp-hz = /bits/ 64 <999000000 300000000>;
+								};
+
+								opp-1440000000 {
+									opp-hz = /bits/ 64 <1440000000 466000000>;
+								};
+
+								opp-1671000000 {
+									opp-hz = /bits/ 64 <1671000000 600000000>;
+								};
+
+								opp-2189000000 {
+									opp-hz = /bits/ 64 <2189000000 806000000>;
+								};
+
+								opp-2516000000 {
+									opp-hz = /bits/ 64 <2516000000 933000000>;
+								};
+
+								opp-3860000000 {
+									opp-hz = /bits/ 64 <3860000000 1066000000>;
+								};
+							};
+						};
+					};
+
+					memory-2 {
+						qcom,memory-type = <QCOM_MEM_TYPE_DDR_QOS>;
+						freq-table-hz = /bits/ 64 <QCOM_DDR_LEVEL_AUTO QCOM_DDR_LEVEL_PERF>;
+
+						monitor-0 {
+							qcom,ipm-ceil = <20000000>;
+							qcom,cpulist = <&CPU0 &CPU1 &CPU2 &CPU3 &CPU4 &CPU5 &CPU6 &CPU7 &CPU8 &CPU9 &CPU10 &CPU11>;
+							operating-points-v2 = <&memory2_monitor0_opp_table>;
+
+							memory2_monitor0_opp_table: opp-table {
+								compatible = "operating-points-v2";
+
+								opp-2189000000 {
+									opp-hz = /bits/ 64 <2189000000>;
+									opp-level = <QCOM_DDR_LEVEL_AUTO>;
+								};
+
+								opp-3860000000 {
+									opp-hz = /bits/ 64 <3860000000>;
+									opp-level = <QCOM_DDR_LEVEL_PERF>;
+								};
+							};
+						};
+					};
+				};
 			};
 		};
 	};
