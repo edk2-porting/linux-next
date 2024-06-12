@@ -292,4 +292,16 @@ config QCOM_PBS
 	  This module provides the APIs to the client drivers that wants to send the
 	  PBS trigger event to the PBS RAM.
 
+config QCOM_SCMI_CLIENT
+	tristate "Qualcomm Technologies Inc. SCMI client driver"
+	depends on ARM_SCMI_PROTOCOL_VENDOR_QCOM || COMPILE_TEST
+	default n
+	help
+	  This driver uses the memlat algorithm string hosted on QCOM SCMI
+	  Vendor Protocol to detect memory latency workloads and control
+	  frequency/level of the various memory buses (DDR/LLCC/DDR_QOS).
+
+	  This driver defines/documents the parameter IDs used while configuring
+	  the memory buses.
+
 endmenu
