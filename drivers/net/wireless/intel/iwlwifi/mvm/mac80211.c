@@ -727,8 +727,6 @@ int iwl_mvm_mac_setup_register(struct iwl_mvm *mvm)
 
 #ifdef CONFIG_PM_SLEEP
 	if ((unified || mvm->fw->img[IWL_UCODE_WOWLAN].num_sec) &&
-	    mvm->trans->ops->d3_suspend &&
-	    mvm->trans->ops->d3_resume &&
 	    device_can_wakeup(mvm->trans->dev)) {
 		mvm->wowlan.flags |= WIPHY_WOWLAN_MAGIC_PKT |
 				     WIPHY_WOWLAN_DISCONNECT |
@@ -823,7 +821,7 @@ void iwl_mvm_mac_tx(struct ieee80211_hw *hw,
 	}
 
 	if (offchannel &&
-	    !test_bit(IWL_MVM_STATUS_ROC_RUNNING, &mvm->status) &&
+	    !test_bit(IWL_MVM_STATUS_ROC_P2P_RUNNING, &mvm->status) &&
 	    !test_bit(IWL_MVM_STATUS_ROC_AUX_RUNNING, &mvm->status))
 		goto drop;
 
@@ -1103,6 +1101,8 @@ static void iwl_mvm_cleanup_iterator(void *data, u8 *mac,
 	spin_lock_bh(&mvm->time_event_lock);
 	iwl_mvm_te_clear_data(mvm, &mvmvif->time_event_data);
 	spin_unlock_bh(&mvm->time_event_lock);
+
+	mvmvif->roc_activity = ROC_NUM_ACTIVITIES;
 
 	mvmvif->bf_enabled = false;
 	mvmvif->ba_enabled = false;
@@ -4773,6 +4773,37 @@ static int iwl_mvm_roc_station(struct iwl_mvm *mvm,
 	return ret;
 }
 
+static int iwl_mvm_roc_p2p(struct iwl_mvm *mvm,
+			   struct ieee80211_channel *channel,
+			   struct ieee80211_vif *vif,
+			   int duration,
+			   enum ieee80211_roc_type type)
+{
+	enum iwl_roc_activity activity;
+	int ret;
+
+	lockdep_assert_held(&mvm->mutex);
+
+	switch (type) {
+	case IEEE80211_ROC_TYPE_NORMAL:
+		activity = ROC_ACTIVITY_P2P_DISC;
+		break;
+	case IEEE80211_ROC_TYPE_MGMT_TX:
+		activity = ROC_ACTIVITY_P2P_NEG;
+		break;
+	default:
+		WARN_ONCE(1, "Got an invalid P2P ROC type\n");
+		return -EINVAL;
+	}
+
+	ret = iwl_mvm_mld_add_aux_sta(mvm,
+				      iwl_mvm_get_lmac_id(mvm, channel->band));
+	if (ret)
+		return ret;
+
+	return iwl_mvm_roc_add_cmd(mvm, channel, vif, duration, activity);
+}
+
 static int iwl_mvm_p2p_find_phy_ctxt(struct iwl_mvm *mvm,
 				     struct ieee80211_vif *vif,
 				     struct ieee80211_channel *channel)
@@ -4826,6 +4857,7 @@ int iwl_mvm_roc_common(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		       const struct iwl_mvm_roc_ops *ops)
 {
 	struct iwl_mvm *mvm = IWL_MAC80211_GET_MVM(hw);
+	struct ieee80211_vif *bss_vif = iwl_mvm_get_bss_vif(mvm);
 	u32 lmac_id;
 	int ret;
 
@@ -4838,9 +4870,12 @@ int iwl_mvm_roc_common(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	 */
 	flush_work(&mvm->roc_done_wk);
 
-	ret = iwl_mvm_esr_non_bss_link(mvm, vif, 0, true);
-	if (ret)
-		return ret;
+	if (!IS_ERR_OR_NULL(bss_vif)) {
+		ret = iwl_mvm_block_esr_sync(mvm, bss_vif,
+					     IWL_MVM_ESR_BLOCKED_ROC);
+		if (ret)
+			return ret;
+	}
 
 	guard(mvm)(mvm);
 
@@ -4861,6 +4896,10 @@ int iwl_mvm_roc_common(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		return -EINVAL;
 	}
 
+	if (iwl_mvm_has_p2p_over_aux(mvm)) {
+		ret = iwl_mvm_roc_p2p(mvm, channel, vif, duration, type);
+		return ret;
+	}
 
 	ret = iwl_mvm_p2p_find_phy_ctxt(mvm, vif, channel);
 	if (ret)

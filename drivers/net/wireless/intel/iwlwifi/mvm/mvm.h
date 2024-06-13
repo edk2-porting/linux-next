@@ -361,7 +361,9 @@ struct iwl_mvm_vif_link_info {
  * @IWL_MVM_ESR_BLOCKED_WOWLAN: WOWLAN is preventing the enablement of EMLSR
  * @IWL_MVM_ESR_BLOCKED_TPT: block EMLSR when there is not enough traffic
  * @IWL_MVM_ESR_BLOCKED_FW: FW didn't recommended/forced exit from EMLSR
- * @IWL_MVM_ESR_BLOCKED_NON_BSS: An active non-bssid link's preventing EMLSR
+ * @IWL_MVM_ESR_BLOCKED_NON_BSS: An active non-BSS interface's link is
+ *	preventing EMLSR
+ * @IWL_MVM_ESR_BLOCKED_ROC: remain-on-channel is preventing EMLSR
  * @IWL_MVM_ESR_EXIT_MISSED_BEACON: exited EMLSR due to missed beacons
  * @IWL_MVM_ESR_EXIT_LOW_RSSI: link is deactivated/not allowed for EMLSR
  *	due to low RSSI.
@@ -378,6 +380,7 @@ enum iwl_mvm_esr_state {
 	IWL_MVM_ESR_BLOCKED_TPT		= 0x4,
 	IWL_MVM_ESR_BLOCKED_FW		= 0x8,
 	IWL_MVM_ESR_BLOCKED_NON_BSS	= 0x10,
+	IWL_MVM_ESR_BLOCKED_ROC		= 0x20,
 	IWL_MVM_ESR_EXIT_MISSED_BEACON	= 0x10000,
 	IWL_MVM_ESR_EXIT_LOW_RSSI	= 0x20000,
 	IWL_MVM_ESR_EXIT_COEX		= 0x40000,
@@ -450,6 +453,8 @@ struct iwl_mvm_esr_exit {
  * @prevent_esr_done_wk: work that should be done when esr prevention ends.
  * @mlo_int_scan_wk: work for the internal MLO scan.
  * @unblock_esr_tpt_wk: work for unblocking EMLSR when tpt is high enough.
+ * @roc_activity: currently running ROC activity for this vif (or
+ *	ROC_NUM_ACTIVITIES if no activity is running).
  */
 struct iwl_mvm_vif {
 	struct iwl_mvm *mvm;
@@ -527,6 +532,7 @@ struct iwl_mvm_vif {
 
 	struct iwl_mvm_time_event_data time_event_data;
 	struct iwl_mvm_time_event_data hs_time_event_data;
+	enum iwl_roc_activity roc_activity;
 
 	/* TCP Checksum Offload */
 	netdev_features_t features;
@@ -1342,7 +1348,8 @@ DEFINE_GUARD(mvm, struct iwl_mvm *, mutex_lock(&_T->mutex), mutex_unlock(&_T->mu
  * enum iwl_mvm_status - MVM status bits
  * @IWL_MVM_STATUS_HW_RFKILL: HW RF-kill is asserted
  * @IWL_MVM_STATUS_HW_CTKILL: CT-kill is active
- * @IWL_MVM_STATUS_ROC_RUNNING: remain-on-channel is running
+ * @IWL_MVM_STATUS_ROC_P2P_RUNNING: remain-on-channel on P2P is running (when
+ *	P2P is not over AUX)
  * @IWL_MVM_STATUS_HW_RESTART_REQUESTED: HW restart was requested
  * @IWL_MVM_STATUS_IN_HW_RESTART: HW restart is active
  * @IWL_MVM_STATUS_ROC_AUX_RUNNING: AUX remain-on-channel is running
@@ -1356,7 +1363,7 @@ DEFINE_GUARD(mvm, struct iwl_mvm *, mutex_lock(&_T->mutex), mutex_unlock(&_T->mu
 enum iwl_mvm_status {
 	IWL_MVM_STATUS_HW_RFKILL,
 	IWL_MVM_STATUS_HW_CTKILL,
-	IWL_MVM_STATUS_ROC_RUNNING,
+	IWL_MVM_STATUS_ROC_P2P_RUNNING,
 	IWL_MVM_STATUS_HW_RESTART_REQUESTED,
 	IWL_MVM_STATUS_IN_HW_RESTART,
 	IWL_MVM_STATUS_ROC_AUX_RUNNING,
@@ -2770,6 +2777,13 @@ static inline void iwl_mvm_mei_set_sw_rfkill_state(struct iwl_mvm *mvm)
 					 sw_rfkill);
 }
 
+static inline bool iwl_mvm_has_p2p_over_aux(struct iwl_mvm *mvm)
+{
+	u32 cmd_id = WIDE_ID(MAC_CONF_GROUP, ROC_CMD);
+
+	return iwl_fw_lookup_cmd_ver(mvm->fw, cmd_id, 0) >= 4;
+}
+
 static inline bool iwl_mvm_mei_filter_scan(struct iwl_mvm *mvm,
 					   struct sk_buff *skb)
 {
@@ -2935,7 +2949,7 @@ void iwl_mvm_roc_duration_and_delay(struct ieee80211_vif *vif,
 int iwl_mvm_roc_add_cmd(struct iwl_mvm *mvm,
 			struct ieee80211_channel *channel,
 			struct ieee80211_vif *vif,
-			int duration, u32 activity);
+			int duration, enum iwl_roc_activity activity);
 
 /* EMLSR */
 bool iwl_mvm_vif_has_esr_cap(struct iwl_mvm *mvm, struct ieee80211_vif *vif);
