@@ -58,6 +58,14 @@
 						remote-endpoint = <&usb_1_ss0_qmpphy_out>;
 					};
 				};
+
+				port@2 {
+					reg = <2>;
+
+					pmic_glink_ss0_sbu: endpoint {
+						remote-endpoint = <&usb_1_ss0_sbu_mux>;
+					};
+				};
 			};
 		};
 
@@ -86,6 +94,14 @@
 						remote-endpoint = <&usb_1_ss1_qmpphy_out>;
 					};
 				};
+
+				port@2 {
+					reg = <2>;
+
+					pmic_glink_ss1_sbu: endpoint {
+						remote-endpoint = <&usb_1_ss1_sbu_mux>;
+					};
+				};
 			};
 		};
 
@@ -112,6 +128,14 @@
 
 					pmic_glink_ss2_ss_in: endpoint {
 						remote-endpoint = <&usb_1_ss2_qmpphy_out>;
+					};
+				};
+
+				port@2 {
+					reg = <2>;
+
+					pmic_glink_ss2_sbu: endpoint {
+						remote-endpoint = <&usb_1_ss2_sbu_mux>;
 					};
 				};
 			};
@@ -167,6 +191,63 @@
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&nvme_reg_en>;
+	};
+
+	usb-1-ss0-sbu-mux {
+		compatible = "on,fsusb42", "gpio-sbu-mux";
+
+		enable-gpios = <&tlmm 168 GPIO_ACTIVE_LOW>;
+		select-gpios = <&tlmm 167 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb_1_ss0_sbu_default>;
+
+		mode-switch;
+		orientation-switch;
+
+		port {
+			usb_1_ss0_sbu_mux: endpoint {
+				remote-endpoint = <&pmic_glink_ss0_sbu>;
+			};
+		};
+	};
+
+	usb-1-ss1-sbu-mux {
+		compatible = "on,fsusb42", "gpio-sbu-mux";
+
+		enable-gpios = <&tlmm 179 GPIO_ACTIVE_LOW>;
+		select-gpios = <&tlmm 178 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb_1_ss1_sbu_default>;
+
+		mode-switch;
+		orientation-switch;
+
+		port {
+			usb_1_ss1_sbu_mux: endpoint {
+				remote-endpoint = <&pmic_glink_ss1_sbu>;
+			};
+		};
+	};
+
+	usb-1-ss2-sbu-mux {
+		compatible = "on,fsusb42", "gpio-sbu-mux";
+
+		enable-gpios = <&tlmm 171 GPIO_ACTIVE_LOW>;
+		select-gpios = <&tlmm 170 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&usb_1_ss2_sbu_default>;
+
+		mode-switch;
+		orientation-switch;
+
+		port {
+			usb_1_ss2_sbu_mux: endpoint {
+				remote-endpoint = <&pmic_glink_ss2_sbu>;
+			};
+		};
 	};
 };
 
@@ -542,7 +623,6 @@
 
 &mdss_dp1 {
 	status = "okay";
-
 };
 
 &mdss_dp1_out {
@@ -551,7 +631,6 @@
 
 &mdss_dp2 {
 	status = "okay";
-
 };
 
 &mdss_dp2_out {
@@ -711,7 +790,76 @@
 		       function = "gpio";
 		       drive-strength = <2>;
 		       bias-pull-up;
-	       };
+		};
+	};
+
+	usb_1_ss0_sbu_default: usb-1-ss0-sbu-state {
+		oe-n-pins {
+			pins = "gpio168";
+			function = "gpio";
+			bias-disable;
+			drive-strength = <16>;
+			output-high;
+		};
+
+		sel-pins {
+			pins = "gpio167";
+			function = "gpio";
+			bias-disable;
+			drive-strength = <16>;
+		};
+
+		mode-hog {
+			gpio-hog;
+			pins = "gpio166";
+			output-high;
+		};
+	};
+
+	usb_1_ss1_sbu_default: usb-1-ss1-sbu-state {
+		oe-n-pins {
+			pins = "gpio179";
+			function = "gpio";
+			bias-disable;
+			drive-strength = <16>;
+			output-high;
+		};
+
+		sel-pins {
+			pins = "gpio178";
+			function = "gpio";
+			bias-disable;
+			drive-strength = <16>;
+		};
+
+		mode-hog {
+			gpio-hog;
+			pins = "gpio177";
+			output-high;
+		};
+	};
+
+	usb_1_ss2_sbu_default: usb-1-ss2-sbu-state {
+		oe-n-pins {
+			pins = "gpio171";
+			function = "gpio";
+			bias-disable;
+			drive-strength = <16>;
+			output-high;
+		};
+
+		sel-pins {
+			pins = "gpio170";
+			function = "gpio";
+			bias-disable;
+			drive-strength = <16>;
+		};
+
+		mode-hog {
+			gpio-hog;
+			pins = "gpio169";
+			output-high;
+		};
 	};
 };
 
@@ -734,6 +882,10 @@
 	vdda-pll-supply = <&vreg_l1j_0p8>;
 
 	status = "okay";
+};
+
+&usb_1_ss0_qmpphy_dp_in {
+	remote-endpoint = <&mdss_dp0_out>;
 };
 
 &usb_1_ss0 {
@@ -766,6 +918,10 @@
 	vdda-pll-supply = <&vreg_l2d_0p9>;
 
 	status = "okay";
+};
+
+&usb_1_ss1_qmpphy_dp_in {
+	remote-endpoint = <&mdss_dp1_out>;
 };
 
 &usb_1_ss1 {
