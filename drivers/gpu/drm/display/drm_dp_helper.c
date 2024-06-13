@@ -3997,6 +3997,10 @@ static int dp_aux_backlight_update_status(struct backlight_device *bd)
 	u16 brightness = backlight_get_brightness(bd);
 	int ret = 0;
 
+	/* HACK: don't disable brightness */
+	if (!brightness)
+		return 0;
+
 	if (!backlight_is_blank(bd)) {
 		if (!bl->enabled) {
 			drm_edp_backlight_enable(bl->aux, &bl->info, brightness);
