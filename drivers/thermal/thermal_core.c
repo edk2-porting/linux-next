@@ -513,12 +513,12 @@ void __thermal_zone_device_update(struct thermal_zone_device *tz,
 	if (tz->temperature == THERMAL_TEMP_INVALID)
 		return;
 
-	__thermal_zone_set_trips(tz);
-
 	tz->notify_event = event;
 
 	for_each_trip_desc(tz, td)
 		handle_thermal_trip(tz, td, &way_up_list, &way_down_list);
+
+	thermal_zone_set_trips(tz);
 
 	list_sort(&way_up_list, &way_up_list, thermal_trip_notify_cmp);
 	list_for_each_entry(td, &way_up_list, notify_list_node)
@@ -999,9 +999,17 @@ __thermal_cooling_device_register(struct device_node *np,
 	if (ret)
 		goto out_cdev_type;
 
+	/*
+	 * The cooling device's current state is only needed for debug
+	 * initialization below, so a failure to get it does not cause
+	 * the entire cooling device initialization to fail.  However,
+	 * the debug will not work for the device if its initial state
+	 * cannot be determined and drivers are responsible for ensuring
+	 * that this will not happen.
+	 */
 	ret = cdev->ops->get_cur_state(cdev, &current_state);
 	if (ret)
-		goto out_cdev_type;
+		current_state = ULONG_MAX;
 
 	thermal_cooling_device_setup_sysfs(cdev);
 
@@ -1016,7 +1024,8 @@ __thermal_cooling_device_register(struct device_node *np,
 		return ERR_PTR(ret);
 	}
 
-	thermal_debug_cdev_add(cdev, current_state);
+	if (current_state <= cdev->max_state)
+		thermal_debug_cdev_add(cdev, current_state);
 
 	/* Add 'this' new cdev to the global cdev list */
 	mutex_lock(&thermal_list_lock);
@@ -1639,6 +1648,7 @@ static void thermal_zone_device_resume(struct work_struct *work)
 
 	tz->suspended = false;
 
+	thermal_debug_tz_resume(tz);
 	thermal_zone_device_init(tz);
 	__thermal_zone_device_update(tz, THERMAL_EVENT_UNSPECIFIED);
 
