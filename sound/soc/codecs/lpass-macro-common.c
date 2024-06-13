@@ -11,6 +11,8 @@
 
 #include "lpass-macro-common.h"
 
+static int lpass_codec_version;
+
 struct lpass_macro *lpass_macro_pds_init(struct device *dev)
 {
 	struct lpass_macro *l_pds;
@@ -65,6 +67,18 @@ void lpass_macro_pds_exit(struct lpass_macro *pds)
 	}
 }
 EXPORT_SYMBOL_GPL(lpass_macro_pds_exit);
+
+void lpass_macro_set_codec_version(int version)
+{
+	lpass_codec_version = version;
+}
+EXPORT_SYMBOL_GPL(lpass_macro_set_codec_version);
+
+int lpass_macro_get_codec_version(void)
+{
+	return lpass_codec_version;
+}
+EXPORT_SYMBOL_GPL(lpass_macro_get_codec_version);
 
 MODULE_DESCRIPTION("Common macro driver");
 MODULE_LICENSE("GPL");

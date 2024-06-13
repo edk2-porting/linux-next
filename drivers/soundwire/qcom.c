@@ -951,6 +951,13 @@ static enum sdw_command_response qcom_swrm_xfer_msg(struct sdw_bus *bus,
 	return SDW_CMD_OK;
 }
 
+static int qcom_swrm_post_bank_switch(struct sdw_bus *bus)
+{
+	usleep_range(500, 510);
+
+	return 0;
+}
+
 static int qcom_swrm_pre_bank_switch(struct sdw_bus *bus)
 {
 	u32 reg = SWRM_MCP_FRAME_CTRL_BANK_ADDR(bus->params.next_bank);
@@ -1071,6 +1078,7 @@ static const struct sdw_master_ops qcom_swrm_ops = {
 	.read_prop = qcom_swrm_read_prop,
 	.xfer_msg = qcom_swrm_xfer_msg,
 	.pre_bank_switch = qcom_swrm_pre_bank_switch,
+	.post_bank_switch = qcom_swrm_post_bank_switch,
 };
 
 static int qcom_swrm_compute_params(struct sdw_bus *bus)
@@ -1618,6 +1626,12 @@ static int qcom_swrm_probe(struct platform_device *pdev)
 		ctrl->bus.controller_id = val;
 	}
 
+	pm_runtime_set_autosuspend_delay(dev, 3000);
+	pm_runtime_use_autosuspend(dev);
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_set_active(dev);
+	pm_runtime_enable(dev);
+
 	ret = sdw_bus_master_add(&ctrl->bus, dev, dev->fwnode);
 	if (ret) {
 		dev_err(dev, "Failed to register Soundwire controller (%d)\n",
@@ -1635,12 +1649,6 @@ static int qcom_swrm_probe(struct platform_device *pdev)
 	dev_info(dev, "Qualcomm Soundwire controller v%x.%x.%x Registered\n",
 		 (ctrl->version >> 24) & 0xff, (ctrl->version >> 16) & 0xff,
 		 ctrl->version & 0xffff);
-
-	pm_runtime_set_autosuspend_delay(dev, 3000);
-	pm_runtime_use_autosuspend(dev);
-	pm_runtime_mark_last_busy(dev);
-	pm_runtime_set_active(dev);
-	pm_runtime_enable(dev);
 
 #ifdef CONFIG_DEBUG_FS
 	ctrl->debugfs = debugfs_create_dir("qualcomm-sdw", ctrl->bus.debugfs);
