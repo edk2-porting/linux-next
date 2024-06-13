@@ -99,7 +99,7 @@ static struct clk_alpha_pll disp_cc_pll0 = {
 				.index = DT_BI_TCXO,
 			},
 			.num_parents = 1,
-			.ops = &clk_alpha_pll_reset_lucid_ole_ops,
+			.ops = &clk_alpha_pll_lucid_ole_ops,
 		},
 	},
 };
@@ -130,7 +130,7 @@ static struct clk_alpha_pll disp_cc_pll1 = {
 				.index = DT_BI_TCXO,
 			},
 			.num_parents = 1,
-			.ops = &clk_alpha_pll_reset_lucid_ole_ops,
+			.ops = &clk_alpha_pll_lucid_ole_ops,
 		},
 	},
 };
