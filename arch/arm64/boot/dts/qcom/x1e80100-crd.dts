@@ -637,6 +637,14 @@
 	};
 };
 
+&gpu {
+	status = "okay";
+
+	zap-shader {
+		firmware-name = "qcom/a740_zap.mbn";
+	};
+};
+
 &i2c0 {
 	clock-frequency = <400000>;
 

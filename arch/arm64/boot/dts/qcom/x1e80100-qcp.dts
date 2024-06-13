@@ -520,6 +520,14 @@
 	};
 };
 
+&gpu {
+	status = "okay";
+
+	zap-shader {
+		firmware-name = "qcom/a740_zap.mbn";
+	};
+};
+
 &mdss {
 	status = "okay";
 };
