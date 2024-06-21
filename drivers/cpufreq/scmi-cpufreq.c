@@ -16,7 +16,6 @@
 #include <linux/export.h>
 #include <linux/module.h>
 #include <linux/pm_opp.h>
-#include <linux/pm_qos.h>
 #include <linux/slab.h>
 #include <linux/scmi_protocol.h>
 #include <linux/types.h>
@@ -26,9 +25,7 @@ struct scmi_data {
 	int domain_id;
 	int nr_opp;
 	struct device *cpu_dev;
-	struct cpufreq_policy *policy;
 	cpumask_var_t opp_shared_cpus;
-	struct notifier_block limit_notify_nb;
 };
 
 static struct scmi_protocol_handle *ph;
@@ -177,25 +174,6 @@ static struct freq_attr *scmi_cpufreq_hw_attr[] = {
 	NULL,
 };
 
-static int scmi_limit_notify_cb(struct notifier_block *nb, unsigned long event, void *data)
-{
-	struct scmi_data *priv = container_of(nb, struct scmi_data, limit_notify_nb);
-	struct scmi_perf_limits_report *limit_notify = data;
-	struct cpufreq_policy *policy = priv->policy;
-	unsigned int limit_freq_khz;
-	int ret;
-
-	limit_freq_khz = limit_notify->range_max_freq / HZ_PER_KHZ;
-
-	policy->max = clamp(limit_freq_khz, policy->cpuinfo.min_freq, policy->cpuinfo.max_freq);
-
-	ret = freq_qos_update_request(policy->max_freq_req, policy->max);
-	if (ret < 0)
-		pr_warn("failed to update freq constraint: %d\n", ret);
-
-	return NOTIFY_OK;
-}
-
 static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 {
 	int ret, nr_opp, domain;
@@ -203,7 +181,6 @@ static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 	struct device *cpu_dev;
 	struct scmi_data *priv;
 	struct cpufreq_frequency_table *freq_table;
-	struct scmi_device *sdev = cpufreq_get_driver_data();
 
 	cpu_dev = get_cpu_device(policy->cpu);
 	if (!cpu_dev) {
@@ -317,17 +294,6 @@ static int scmi_cpufreq_init(struct cpufreq_policy *policy)
 		}
 	}
 
-	priv->limit_notify_nb.notifier_call = scmi_limit_notify_cb;
-	ret = sdev->handle->notify_ops->devm_event_notifier_register(sdev, SCMI_PROTOCOL_PERF,
-							SCMI_EVENT_PERFORMANCE_LIMITS_CHANGED,
-							&domain,
-							&priv->limit_notify_nb);
-	if (ret)
-		dev_warn(&sdev->dev,
-			 "failed to register for limits change notifier for domain %d\n", domain);
-
-	priv->policy = policy;
-
 	return 0;
 
 out_free_opp:
@@ -405,8 +371,6 @@ static int scmi_cpufreq_probe(struct scmi_device *sdev)
 
 	if (!handle)
 		return -ENODEV;
-
-	scmi_cpufreq_driver.driver_data = sdev;
 
 	perf_ops = handle->devm_protocol_get(sdev, SCMI_PROTOCOL_PERF, &ph);
 	if (IS_ERR(perf_ops))
