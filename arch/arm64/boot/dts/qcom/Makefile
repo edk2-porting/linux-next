@@ -259,3 +259,6 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8650-mtp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= sm8650-qrd.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= x1e80100-crd.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= x1e80100-qcp.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= x1e80100-yoga.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= x1e80100-surface.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= x1e80100-vivobook.dtb
