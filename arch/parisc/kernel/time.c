@@ -44,6 +44,10 @@ int time_keeper_id __read_mostly;	/* CPU used for timekeeping. */
 
 static unsigned long clocktick __ro_after_init;	/* timer cycles per tick */
 
+#define MONARCH_CLOCKTICK_FACTOR	10
+static bool clock_use_monarch_cr16;
+static unsigned long monarch_cr16_ticks;
+
 /*
  * We keep time on PA-RISC Linux by using the Interval Timer which is
  * a pair of registers; one is read-only and one is write-only; both
@@ -53,13 +57,23 @@ static unsigned long clocktick __ro_after_init;	/* timer cycles per tick */
  * rate of 1.  The write-only register is 32-bits wide.  When the lowest
  * 32 bits of the read-only register compare equal to the write-only
  * register, it raises a maskable external interrupt.  Each processor has
- * an Interval Timer of its own and they are not synchronised.  
+ * an Interval Timer of its own and they are not synchronized.
  *
  * We want to generate an interrupt every 1/HZ seconds.  So we program
  * CR16 to interrupt every @clocktick cycles.  The it_value in cpu_data
  * is programmed with the intended time of the next tick.  We can be
  * held off for an arbitrarily long period of time by interrupts being
  * disabled, so we may miss one or more ticks.
+ *
+ * Note that on SMP machines the CR16 clocks are not synchronized between
+ * the CPUs. So, on such machines CR16 can not be used as high-res clock
+ * input for the monotonic clock_gettime64() syscall, which is why
+ * clock_gettime64() delivers poor resolution on SMP when configured with
+ * HZ=100 or HZ=250.  To work around this issue, let the CR16 timer
+ * interrupt trigger MONARCH_CLOCKTICK_FACTOR times more often, and
+ * increase the a cr16 counter everytime when interrupted. This counter is
+ * then used instead of the local CPU cr16 counter to get higher resolution
+ * than just using the jiffie-based timer.
  */
 irqreturn_t __irq_entry timer_interrupt(int irq, void *dev_id)
 {
@@ -68,9 +82,20 @@ irqreturn_t __irq_entry timer_interrupt(int irq, void *dev_id)
 	unsigned long ticks_elapsed = 0;
 	unsigned int cpu = smp_processor_id();
 	struct cpuinfo_parisc *cpuinfo = &per_cpu(cpu_data, cpu);
+	bool increase_monarch_tickrate = false;
+	static int monarch_tickrate_counter;
 
 	/* gcc can optimize for "read-only" case with a local clocktick */
 	unsigned long cpt = clocktick;
+
+	/* let main clock tick faster if necessary */
+	if (IS_ENABLED(CONFIG_SMP) &&
+	    (IS_ENABLED(CONFIG_HZ_100) || IS_ENABLED(CONFIG_HZ_250)) &&
+	    clock_use_monarch_cr16 && (cpu == time_keeper_id)) {
+		increase_monarch_tickrate = true;
+		cpt /= MONARCH_CLOCKTICK_FACTOR;
+		monarch_tickrate_counter++;
+	}
 
 	/* Initialize next_tick to the old expected tick time. */
 	next_tick = cpuinfo->it_value;
@@ -88,7 +113,14 @@ irqreturn_t __irq_entry timer_interrupt(int irq, void *dev_id)
 	/* Go do system house keeping. */
 	if (IS_ENABLED(CONFIG_SMP) && (cpu != time_keeper_id))
 		ticks_elapsed = 0;
-	legacy_timer_tick(ticks_elapsed);
+	else
+		monarch_cr16_ticks++;
+	if (!increase_monarch_tickrate ||
+		monarch_tickrate_counter == MONARCH_CLOCKTICK_FACTOR) {
+		legacy_timer_tick(ticks_elapsed);
+		if (increase_monarch_tickrate)
+			monarch_tickrate_counter = 0;
+	}
 
 	/* Skip clockticks on purpose if we know we would miss those.
 	 * The new CR16 must be "later" than current CR16 otherwise
@@ -141,7 +173,10 @@ EXPORT_SYMBOL(profile_pc);
 
 static u64 notrace read_cr16(struct clocksource *cs)
 {
-	return get_cycles();
+	if (clock_use_monarch_cr16)
+		return monarch_cr16_ticks;
+	else
+		return get_cycles();
 }
 
 static struct clocksource clocksource_cr16 = {
@@ -250,18 +285,22 @@ void __init time_init(void)
 
 static int __init init_cr16_clocksource(void)
 {
+	unsigned int cr16_hz = 100 * PAGE0->mem_10msec;
+
 	/*
 	 * The cr16 interval timers are not synchronized across CPUs.
 	 */
 	if (num_online_cpus() > 1 && !running_on_qemu) {
-		clocksource_cr16.name = "cr16_unstable";
-		clocksource_cr16.flags = CLOCK_SOURCE_UNSTABLE;
-		clocksource_cr16.rating = 0;
+		clock_use_monarch_cr16 = true;
+		clocksource_cr16.name = "cr16_monarch";
+		cr16_hz = HZ;
+		/* keep CONFIG_HZ, but let timer fire more often */
+		if (IS_ENABLED(CONFIG_HZ_100) || IS_ENABLED(CONFIG_HZ_250))
+			cr16_hz *= MONARCH_CLOCKTICK_FACTOR;
 	}
 
 	/* register at clocksource framework */
-	clocksource_register_hz(&clocksource_cr16,
-		100 * PAGE0->mem_10msec);
+	clocksource_register_hz(&clocksource_cr16, cr16_hz);
 
 	return 0;
 }
