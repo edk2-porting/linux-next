@@ -3386,6 +3386,7 @@ static int __swap_duplicate(swp_entry_t entry, unsigned char usage, int nr)
 
 	offset = swp_offset(entry);
 	VM_WARN_ON(nr > SWAPFILE_CLUSTER - offset % SWAPFILE_CLUSTER);
+	VM_WARN_ON(usage == 1 && nr > 1);
 	ci = lock_cluster_or_swap_info(p, offset);
 
 	err = 0;
@@ -3404,27 +3405,14 @@ static int __swap_duplicate(swp_entry_t entry, unsigned char usage, int nr)
 		has_cache = count & SWAP_HAS_CACHE;
 		count &= ~SWAP_HAS_CACHE;
 
-		if (usage == SWAP_HAS_CACHE) {
-			/* set SWAP_HAS_CACHE if there is no cache and entry is used */
-			if (!has_cache && count)
-				continue;
-			else if (has_cache)		/* someone else added cache */
+		if (!count && !has_cache) {
+			err = -ENOENT;
+		} else if (usage == SWAP_HAS_CACHE) {
+			if (has_cache)
 				err = -EEXIST;
-			else				/* no users remaining */
-				err = -ENOENT;
-
-		} else if (count || has_cache) {
-
-			if ((count & ~COUNT_CONTINUED) < SWAP_MAP_MAX)
-				continue;
-			else if ((count & ~COUNT_CONTINUED) > SWAP_MAP_MAX)
-				err = -EINVAL;
-			else if (swap_count_continued(p, offset + i, count))
-				continue;
-			else
-				err = -ENOMEM;
-		} else
-			err = -ENOENT;			/* unused swap entry */
+		} else if ((count & ~COUNT_CONTINUED) > SWAP_MAP_MAX) {
+			err = -EINVAL;
+		}
 
 		if (err)
 			goto unlock_out;
@@ -3439,8 +3427,16 @@ static int __swap_duplicate(swp_entry_t entry, unsigned char usage, int nr)
 			has_cache = SWAP_HAS_CACHE;
 		else if ((count & ~COUNT_CONTINUED) < SWAP_MAP_MAX)
 			count += usage;
-		else
+		else if (swap_count_continued(p, offset + i, count))
 			count = COUNT_CONTINUED;
+		else {
+			/*
+			 * Don't need to rollback changes, because if
+			 * usage == 1, there must be nr == 1.
+			 */
+			err = -ENOMEM;
+			goto unlock_out;
+		}
 
 		WRITE_ONCE(p->swap_map[offset + i], count | has_cache);
 	}
