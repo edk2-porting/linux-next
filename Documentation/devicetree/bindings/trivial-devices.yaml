@@ -328,7 +328,9 @@ properties:
           - renesas,hs3001
             # Renesas ISL29501 time-of-flight sensor
           - renesas,isl29501
-            # Rohm DH2228FV
+            # Rohm BH2228FV 8 channel DAC
+          - rohm,bh2228fv
+            # Rohm DH2228FV - This device does not exist, use rohm,bh2228fv instead.
           - rohm,dh2228fv
             # S524AD0XF1 (128K/256K-bit Serial EEPROM for Low Power)
           - samsung,24ad0xd1
@@ -364,6 +366,8 @@ properties:
           - sparkfun,qwiic-joystick
             # i2c serial eeprom (24cxx)
           - st,24c256
+            # Sierra Wireless mangOH Green SPI IoT interface
+          - swir,mangoh-iotport-spi
             # Ambient Light Sensor with SMBUS/Two Wire Serial Interface
           - taos,tsl2550
             # Temperature Monitoring and Fan Control

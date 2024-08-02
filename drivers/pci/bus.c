@@ -177,10 +177,7 @@ static void pci_clip_resource_to_region(struct pci_bus *bus,
 static int pci_bus_alloc_from_region(struct pci_bus *bus, struct resource *res,
 		resource_size_t size, resource_size_t align,
 		resource_size_t min, unsigned long type_mask,
-		resource_size_t (*alignf)(void *,
-					  const struct resource *,
-					  resource_size_t,
-					  resource_size_t),
+		resource_alignf alignf,
 		void *alignf_data,
 		struct pci_bus_region *region)
 {
@@ -251,10 +248,7 @@ static int pci_bus_alloc_from_region(struct pci_bus *bus, struct resource *res,
 int pci_bus_alloc_resource(struct pci_bus *bus, struct resource *res,
 		resource_size_t size, resource_size_t align,
 		resource_size_t min, unsigned long type_mask,
-		resource_size_t (*alignf)(void *,
-					  const struct resource *,
-					  resource_size_t,
-					  resource_size_t),
+		resource_alignf alignf,
 		void *alignf_data)
 {
 #ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
@@ -356,8 +350,8 @@ void pci_bus_add_device(struct pci_dev *dev)
 
 	pci_dev_assign_added(dev, true);
 
-	if (IS_ENABLED(CONFIG_OF) && pci_is_bridge(dev)) {
-		retval = of_platform_populate(dev->dev.of_node, NULL, NULL,
+	if (dev_of_node(&dev->dev) && pci_is_bridge(dev)) {
+		retval = of_platform_populate(dev_of_node(&dev->dev), NULL, NULL,
 					      &dev->dev);
 		if (retval)
 			pci_err(dev, "failed to populate child OF nodes (%d)\n",
