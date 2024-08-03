@@ -1348,24 +1348,22 @@ static void shrink_worker(struct work_struct *w)
 	 * until the next run of shrink_worker().
 	 */
 	do {
-		spin_lock(&zswap_shrink_lock);
-
 		/*
 		 * Start shrinking from the next memcg after zswap_next_shrink.
 		 * When the offline cleaner has already advanced the cursor,
 		 * advancing the cursor here overlooks one memcg, but this
 		 * should be negligibly rare.
+		 *
+		 * If we get an online memcg, keep the extra reference in case
+		 * the original one obtained by mem_cgroup_iter() is dropped by
+		 * zswap_memcg_offline_cleanup() while we are shrinking the
+		 * memcg.
 		 */
+		spin_lock(&zswap_shrink_lock);
 		do {
 			memcg = mem_cgroup_iter(NULL, zswap_next_shrink, NULL);
 			zswap_next_shrink = memcg;
 		} while (memcg && !mem_cgroup_tryget_online(memcg));
-		/*
-		 * Note that if we got an online memcg, we will keep the extra
-		 * reference in case the original reference obtained by mem_cgroup_iter
-		 * is dropped by the zswap memcg offlining callback, ensuring that the
-		 * memcg is not killed when we are reclaiming.
-		 */
 		spin_unlock(&zswap_shrink_lock);
 
 		if (!memcg) {
