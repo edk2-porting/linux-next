@@ -254,7 +254,7 @@ static void __folio_batch_add_and_move(struct folio_batch __percpu *fbatch,
 		folio,										\
 		op,										\
 		on_lru,										\
-		offsetof(struct cpu_fbatches, op) > offsetof(struct cpu_fbatches, lock_irq)	\
+		offsetof(struct cpu_fbatches, op) >= offsetof(struct cpu_fbatches, lock_irq)	\
 	)
 
 static void lru_move_tail(struct lruvec *lruvec, struct folio *folio)
