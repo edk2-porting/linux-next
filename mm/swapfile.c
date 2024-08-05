@@ -224,7 +224,7 @@ static int __try_to_reclaim_swap(struct swap_info_struct *si,
 
 	spin_lock(&si->lock);
 	/* Only sinple page folio can be backed by zswap */
-	if (!nr_pages)
+	if (nr_pages == 1)
 		zswap_invalidate(entry);
 	swap_entry_range_free(si, entry, nr_pages);
 	spin_unlock(&si->lock);
