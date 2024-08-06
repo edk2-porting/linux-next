@@ -188,8 +188,8 @@ static struct shrinker *zswap_shrinker;
  *          decompression. For a same value filled page length is 0, and both
  *          pool and lru are invalid and must be ignored.
  * referenced - true if the entry recently entered the zswap pool. Unset by the
- *              dynamic shrinker. The entry is only reclaimed by the dynamic
- *              shrinker if referenced is unset. See comments in the shrinker
+ *              writeback logic. The entry is only reclaimed by the writeback
+ *              logic if referenced is unset. See comments in the shrinker
  *              section for context.
  * pool - the zswap_pool the entry's data is in
  * handle - zpool allocation handle that stores the compressed page data
