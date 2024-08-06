@@ -524,9 +524,7 @@ void swap_read_folio(struct folio *folio, struct swap_iocb **plug)
 		goto finish;
 	}
 
-	/*
-	 * We have to read the page from slower devices. Increase zswap protection.
-	 */
+	/* We have to read from slower devices. Increase zswap protection. */
 	zswap_folio_swapin(folio);
 
 	if (data_race(sis->flags & SWP_FS_OPS)) {
