@@ -22,6 +22,7 @@
 #include <linux/audit.h>
 #include <linux/vmalloc.h>
 #include <linux/posix_acl_xattr.h>
+#include <linux/cleanup.h>
 
 #include <linux/uaccess.h>
 
@@ -828,9 +829,19 @@ static ssize_t path_getxattrat(int dfd, const char __user *pathname,
 	if ((at_flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
 		return -EINVAL;
 
+	if (at_flags & AT_EMPTY_PATH && vfs_empty_path(dfd, pathname)) {
+		CLASS(fd, f)(dfd);
+		if (!f.file)
+			return -EBADF;
+		audit_file(f.file);
+		return getxattr(file_mnt_idmap(f.file), file_dentry(f.file),
+				name, value, size);
+	}
+
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
 	if (at_flags & AT_EMPTY_PATH)
 		lookup_flags |= LOOKUP_EMPTY;
+
 retry:
 	error = user_path_at(dfd, pathname, lookup_flags, &path);
 	if (error)
