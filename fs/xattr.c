@@ -630,6 +630,38 @@ int do_setxattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			ctx->kvalue, ctx->size, ctx->flags);
 }
 
+static int do_fsetxattr(int fd, const char __user *name,
+			const void __user *value, size_t size, int flags)
+{
+	struct xattr_name kname;
+	struct kernel_xattr_ctx ctx = {
+		.cvalue   = value,
+		.kvalue   = NULL,
+		.size     = size,
+		.kname    = &kname,
+		.flags    = flags,
+	};
+	int error;
+
+	CLASS(fd, f)(fd);
+	if (!f.file)
+		return -EBADF;
+
+	audit_file(f.file);
+	error = setxattr_copy(name, &ctx);
+	if (error)
+		return error;
+
+	error = mnt_want_write_file(f.file);
+	if (!error) {
+		error = do_setxattr(file_mnt_idmap(f.file),
+				    f.file->f_path.dentry, &ctx);
+		mnt_drop_write_file(f.file);
+	}
+	kvfree(ctx.kvalue);
+	return error;
+}
+
 static int path_setxattrat(int dfd, const char __user *pathname,
 			   unsigned int at_flags, const char __user *name,
 			   const void __user *value, size_t size, int flags)
@@ -648,6 +680,9 @@ static int path_setxattrat(int dfd, const char __user *pathname,
 
 	if ((at_flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
 		return -EINVAL;
+
+	if (at_flags & AT_EMPTY_PATH && vfs_empty_path(dfd, pathname))
+		return do_fsetxattr(dfd, name, value, size, flags);
 
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
 	if (at_flags & AT_EMPTY_PATH)
@@ -719,33 +754,7 @@ SYSCALL_DEFINE5(lsetxattr, const char __user *, pathname,
 SYSCALL_DEFINE5(fsetxattr, int, fd, const char __user *, name,
 		const void __user *,value, size_t, size, int, flags)
 {
-	struct xattr_name kname;
-	struct kernel_xattr_ctx ctx = {
-		.cvalue   = value,
-		.kvalue   = NULL,
-		.size     = size,
-		.kname    = &kname,
-		.flags    = flags,
-	};
-	int error;
-
-	CLASS(fd, f)(fd);
-	if (!f.file)
-		return -EBADF;
-
-	audit_file(f.file);
-	error = setxattr_copy(name, &ctx);
-	if (error)
-		return error;
-
-	error = mnt_want_write_file(f.file);
-	if (!error) {
-		error = do_setxattr(file_mnt_idmap(f.file),
-				    f.file->f_path.dentry, &ctx);
-		mnt_drop_write_file(f.file);
-	}
-	kvfree(ctx.kvalue);
-	return error;
+	return do_fsetxattr(fd, name, value, size, flags);
 }
 
 /*
