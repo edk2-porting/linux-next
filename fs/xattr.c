@@ -1018,6 +1018,31 @@ removexattr(struct mnt_idmap *idmap, struct dentry *d, const char *name)
 	return vfs_removexattr(idmap, d, name);
 }
 
+static int do_fremovexattr(int fd, const char __user *name)
+{
+	char kname[XATTR_NAME_MAX + 1];
+	int error = -EBADF;
+
+	CLASS(fd, f)(fd);
+	if (!f.file)
+		return error;
+	audit_file(f.file);
+
+	error = strncpy_from_user(kname, name, sizeof(kname));
+	if (error == 0 || error == sizeof(kname))
+		error = -ERANGE;
+	if (error < 0)
+		return error;
+
+	error = mnt_want_write_file(f.file);
+	if (!error) {
+		error = removexattr(file_mnt_idmap(f.file),
+				    f.file->f_path.dentry, kname);
+		mnt_drop_write_file(f.file);
+	}
+	return error;
+}
+
 static int path_removexattrat(int dfd, const char __user *pathname,
 			      unsigned int at_flags, const char __user *name)
 {
@@ -1028,6 +1053,9 @@ static int path_removexattrat(int dfd, const char __user *pathname,
 
 	if ((at_flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
 		return -EINVAL;
+
+	if (at_flags & AT_EMPTY_PATH && vfs_empty_path(dfd, pathname))
+		return do_fremovexattr(dfd, name);
 
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
 	if (at_flags & AT_EMPTY_PATH)
