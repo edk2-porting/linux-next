@@ -951,6 +951,14 @@ static ssize_t path_listxattrat(int dfd, const char __user *pathname,
 	if ((at_flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH)) != 0)
 		return -EINVAL;
 
+	if (at_flags & AT_EMPTY_PATH && vfs_empty_path(dfd, pathname)) {
+		CLASS(fd, f)(dfd);
+		if (!f.file)
+			return -EBADF;
+		audit_file(f.file);
+		return listxattr(file_dentry(f.file), list, size);
+	}
+
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
 	if (at_flags & AT_EMPTY_PATH)
 		lookup_flags |= LOOKUP_EMPTY;
