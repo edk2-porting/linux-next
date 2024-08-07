@@ -1816,7 +1816,7 @@ struct vm_area_struct *userfaultfd_clear_vma(struct vma_iterator *vmi,
 	 * the current one has not been updated yet.
 	 */
 	if (!IS_ERR(ret))
-		userfaultfd_reset_ctx(vma);
+		userfaultfd_reset_ctx(ret);
 
 	return ret;
 }
