@@ -189,7 +189,7 @@ void __user *io_buffer_select(struct io_kiocb *req, size_t *len,
 
 	bl = io_buffer_get_list(ctx, req->buf_index);
 	if (likely(bl)) {
-		if (bl->is_buf_ring)
+		if (bl->flags & IOBL_BUF_RING)
 			ret = io_ring_buffer_select(req, len, bl, issue_flags);
 		else
 			ret = io_provided_buffer_select(req, len, bl);
@@ -284,7 +284,7 @@ int io_buffers_select(struct io_kiocb *req, struct buf_sel_arg *arg,
 	if (unlikely(!bl))
 		goto out_unlock;
 
-	if (bl->is_buf_ring) {
+	if (bl->flags & IOBL_BUF_RING) {
 		ret = io_ring_buffers_peek(req, arg, bl);
 		/*
 		 * Don't recycle these buffers if we need to go through poll.
@@ -317,7 +317,7 @@ int io_buffers_peek(struct io_kiocb *req, struct buf_sel_arg *arg)
 	if (unlikely(!bl))
 		return -ENOENT;
 
-	if (bl->is_buf_ring) {
+	if (bl->flags & IOBL_BUF_RING) {
 		ret = io_ring_buffers_peek(req, arg, bl);
 		if (ret > 0)
 			req->flags |= REQ_F_BUFFERS_COMMIT;
@@ -337,22 +337,22 @@ static int __io_remove_buffers(struct io_ring_ctx *ctx,
 	if (!nbufs)
 		return 0;
 
-	if (bl->is_buf_ring) {
+	if (bl->flags & IOBL_BUF_RING) {
 		i = bl->buf_ring->tail - bl->head;
 		if (bl->buf_nr_pages) {
 			int j;
 
-			if (!bl->is_mmap) {
+			if (!(bl->flags & IOBL_MMAP)) {
 				for (j = 0; j < bl->buf_nr_pages; j++)
 					unpin_user_page(bl->buf_pages[j]);
 			}
 			io_pages_unmap(bl->buf_ring, &bl->buf_pages,
-					&bl->buf_nr_pages, bl->is_mmap);
-			bl->is_mmap = 0;
+					&bl->buf_nr_pages, bl->flags & IOBL_MMAP);
+			bl->flags &= ~IOBL_MMAP;
 		}
 		/* make sure it's seen as empty */
 		INIT_LIST_HEAD(&bl->buf_list);
-		bl->is_buf_ring = 0;
+		bl->flags &= ~IOBL_BUF_RING;
 		return i;
 	}
 
@@ -439,7 +439,7 @@ int io_remove_buffers(struct io_kiocb *req, unsigned int issue_flags)
 	if (bl) {
 		ret = -EINVAL;
 		/* can't use provide/remove buffers command on mapped buffers */
-		if (!bl->is_buf_ring)
+		if (!(bl->flags & IOBL_BUF_RING))
 			ret = __io_remove_buffers(ctx, bl, p->nbufs);
 	}
 	io_ring_submit_unlock(ctx, issue_flags);
@@ -586,7 +586,7 @@ int io_provide_buffers(struct io_kiocb *req, unsigned int issue_flags)
 		}
 	}
 	/* can't add buffers via this command for a mapped buffer ring */
-	if (bl->is_buf_ring) {
+	if (bl->flags & IOBL_BUF_RING) {
 		ret = -EINVAL;
 		goto err;
 	}
@@ -638,8 +638,8 @@ static int io_pin_pbuf_ring(struct io_uring_buf_reg *reg,
 	bl->buf_pages = pages;
 	bl->buf_nr_pages = nr_pages;
 	bl->buf_ring = br;
-	bl->is_buf_ring = 1;
-	bl->is_mmap = 0;
+	bl->flags |= IOBL_BUF_RING;
+	bl->flags &= ~IOBL_MMAP;
 	return 0;
 error_unpin:
 	unpin_user_pages(pages, nr_pages);
@@ -662,8 +662,7 @@ static int io_alloc_pbuf_ring(struct io_ring_ctx *ctx,
 		return -ENOMEM;
 	}
 
-	bl->is_buf_ring = 1;
-	bl->is_mmap = 1;
+	bl->flags |= (IOBL_BUF_RING | IOBL_MMAP);
 	return 0;
 }
 
@@ -702,7 +701,7 @@ int io_register_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
 	bl = io_buffer_get_list(ctx, reg.bgid);
 	if (bl) {
 		/* if mapped buffer ring OR classic exists, don't allow */
-		if (bl->is_buf_ring || !list_empty(&bl->buf_list))
+		if (bl->flags & IOBL_BUF_RING || !list_empty(&bl->buf_list))
 			return -EEXIST;
 	} else {
 		free_bl = bl = kzalloc(sizeof(*bl), GFP_KERNEL);
@@ -744,7 +743,7 @@ int io_unregister_pbuf_ring(struct io_ring_ctx *ctx, void __user *arg)
 	bl = io_buffer_get_list(ctx, reg.bgid);
 	if (!bl)
 		return -ENOENT;
-	if (!bl->is_buf_ring)
+	if (!(bl->flags & IOBL_BUF_RING))
 		return -EINVAL;
 
 	xa_erase(&ctx->io_bl_xa, bl->bgid);
@@ -768,7 +767,7 @@ int io_register_pbuf_status(struct io_ring_ctx *ctx, void __user *arg)
 	bl = io_buffer_get_list(ctx, buf_status.buf_group);
 	if (!bl)
 		return -ENOENT;
-	if (!bl->is_buf_ring)
+	if (!(bl->flags & IOBL_BUF_RING))
 		return -EINVAL;
 
 	buf_status.head = bl->head;
@@ -799,7 +798,7 @@ struct io_buffer_list *io_pbuf_get_bl(struct io_ring_ctx *ctx,
 	bl = xa_load(&ctx->io_bl_xa, bgid);
 	/* must be a mmap'able buffer ring and have pages */
 	ret = false;
-	if (bl && bl->is_mmap)
+	if (bl && bl->flags & IOBL_MMAP)
 		ret = atomic_inc_not_zero(&bl->refs);
 	rcu_read_unlock();
 
