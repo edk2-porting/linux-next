@@ -686,8 +686,6 @@ static int path_setxattrat(int dfd, const char __user *pathname,
 		return do_fsetxattr(dfd, name, value, size, flags);
 
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
-	if (at_flags & AT_EMPTY_PATH)
-		lookup_flags |= LOOKUP_EMPTY;
 
 	error = setxattr_copy(name, &ctx);
 	if (error)
@@ -839,8 +837,6 @@ static ssize_t path_getxattrat(int dfd, const char __user *pathname,
 	}
 
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
-	if (at_flags & AT_EMPTY_PATH)
-		lookup_flags |= LOOKUP_EMPTY;
 
 retry:
 	error = user_path_at(dfd, pathname, lookup_flags, &path);
@@ -960,8 +956,6 @@ static ssize_t path_listxattrat(int dfd, const char __user *pathname,
 	}
 
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
-	if (at_flags & AT_EMPTY_PATH)
-		lookup_flags |= LOOKUP_EMPTY;
 retry:
 	error = user_path_at(dfd, pathname, lookup_flags, &path);
 	if (error)
@@ -1058,8 +1052,6 @@ static int path_removexattrat(int dfd, const char __user *pathname,
 		return do_fremovexattr(dfd, name);
 
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
-	if (at_flags & AT_EMPTY_PATH)
-		lookup_flags |= LOOKUP_EMPTY;
 
 	error = strncpy_from_user(kname, name, sizeof(kname));
 	if (error == 0 || error == sizeof(kname))
