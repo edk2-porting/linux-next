@@ -63,6 +63,7 @@ struct writeback_control {
 	unsigned range_cyclic:1;	/* range_start is cyclic */
 	unsigned for_sync:1;		/* sync(2) WB_SYNC_ALL writeback */
 	unsigned unpinned_netfs_wb:1;	/* Cleared I_PINNING_NETFS_WB */
+	unsigned split_large_folio:1;	/* Split large folio for shmem writeback */
 
 	/*
 	 * When writeback IOs are bounced through async layers, only the
@@ -78,6 +79,9 @@ struct writeback_control {
 	 * swap_write_unplug() should be called.
 	 */
 	struct swap_iocb **swap_plug;
+
+	/* Target list for splitting a large folio */
+	struct list_head *list;
 
 	/* internal fields used by the ->writepages implementation: */
 	struct folio_batch fbatch;

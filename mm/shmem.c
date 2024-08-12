@@ -795,7 +795,6 @@ static int shmem_add_to_page_cache(struct folio *folio,
 	VM_BUG_ON_FOLIO(index != round_down(index, nr), folio);
 	VM_BUG_ON_FOLIO(!folio_test_locked(folio), folio);
 	VM_BUG_ON_FOLIO(!folio_test_swapbacked(folio), folio);
-	VM_BUG_ON(expected && folio_test_large(folio));
 
 	folio_ref_add(folio, nr);
 	folio->mapping = mapping;
@@ -1482,10 +1481,11 @@ static int shmem_writepage(struct page *page, struct writeback_control *wbc)
 	 * "force", drivers/gpu/drm/i915/gem/i915_gem_shmem.c gets huge pages,
 	 * and its shmem_writeback() needs them to be split when swapping.
 	 */
-	if (folio_test_large(folio)) {
+	if (wbc->split_large_folio && folio_test_large(folio)) {
+try_split:
 		/* Ensure the subpages are still dirty */
 		folio_test_set_dirty(folio);
-		if (split_huge_page(page) < 0)
+		if (split_huge_page_to_list_to_order(page, wbc->list, 0))
 			goto redirty;
 		folio = page_folio(page);
 		folio_clear_dirty(folio);
@@ -1527,8 +1527,12 @@ static int shmem_writepage(struct page *page, struct writeback_control *wbc)
 	}
 
 	swap = folio_alloc_swap(folio);
-	if (!swap.val)
+	if (!swap.val) {
+		if (nr_pages > 1)
+			goto try_split;
+
 		goto redirty;
+	}
 
 	/*
 	 * Add inode to shmem_unuse()'s list of swapped-out inodes,
