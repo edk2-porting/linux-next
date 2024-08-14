@@ -81,6 +81,7 @@ unsigned long huge_zero_pfn __read_mostly = ~0UL;
 unsigned long huge_anon_orders_always __read_mostly;
 unsigned long huge_anon_orders_madvise __read_mostly;
 unsigned long huge_anon_orders_inherit __read_mostly;
+static bool anon_orders_configured;
 
 unsigned long __thp_vma_allowable_orders(struct vm_area_struct *vma,
 					 unsigned long vm_flags,
@@ -733,7 +734,10 @@ static int __init hugepage_init_sysfs(struct kobject **hugepage_kobj)
 	 * disable all other sizes. powerpc's PMD_ORDER isn't a compile-time
 	 * constant so we have to do this here.
 	 */
-	huge_anon_orders_inherit = BIT(PMD_ORDER);
+	if (!anon_orders_configured) {
+		huge_anon_orders_inherit = BIT(PMD_ORDER);
+		anon_orders_configured = true;
+	}
 
 	*hugepage_kobj = kobject_create_and_add("transparent_hugepage", mm_kobj);
 	if (unlikely(!*hugepage_kobj)) {
@@ -917,6 +921,96 @@ out:
 	return ret;
 }
 __setup("transparent_hugepage=", setup_transparent_hugepage);
+
+static inline int get_order_from_str(const char *size_str)
+{
+	unsigned long size;
+	char *endptr;
+	int order;
+
+	size = memparse(size_str, &endptr);
+	order = fls(size >> PAGE_SHIFT) - 1;
+	if ((1 << order) & ~THP_ORDERS_ALL_ANON) {
+		pr_err("invalid size %s(order %d) in thp_anon boot parameter\n",
+			size_str, order);
+		return -EINVAL;
+	}
+
+	return order;
+}
+
+static char str_dup[PAGE_SIZE] __meminitdata;
+static int __init setup_thp_anon(char *str)
+{
+	char *token, *range, *policy, *subtoken;
+	unsigned long always, inherit, madvise;
+	char *start_size, *end_size;
+	int start, end;
+	char *p;
+
+	if (!str || strlen(str) + 1 > PAGE_SIZE)
+		goto err;
+	strcpy(str_dup, str);
+
+	always = huge_anon_orders_always;
+	madvise = huge_anon_orders_madvise;
+	inherit = huge_anon_orders_inherit;
+	p = str_dup;
+	while ((token = strsep(&p, ";")) != NULL) {
+		range = strsep(&token, ":");
+		policy = token;
+
+		if (!policy)
+			goto err;
+
+		while ((subtoken = strsep(&range, ",")) != NULL) {
+			if (strchr(subtoken, '-')) {
+				start_size = strsep(&subtoken, "-");
+				end_size = subtoken;
+
+				start = get_order_from_str(start_size);
+				end = get_order_from_str(end_size);
+			} else {
+				start = end = get_order_from_str(subtoken);
+			}
+
+			if (start < 0 || end < 0 || start > end)
+				goto err;
+
+			if (!strcmp(policy, "always")) {
+				bitmap_set(&always, start, end - start + 1);
+				bitmap_clear(&inherit, start, end - start + 1);
+				bitmap_clear(&madvise, start, end - start + 1);
+			} else if (!strcmp(policy, "madvise")) {
+				bitmap_set(&madvise, start, end - start + 1);
+				bitmap_clear(&inherit, start, end - start + 1);
+				bitmap_clear(&always, start, end - start + 1);
+			} else if (!strcmp(policy, "inherit")) {
+				bitmap_set(&inherit, start, end - start + 1);
+				bitmap_clear(&madvise, start, end - start + 1);
+				bitmap_clear(&always, start, end - start + 1);
+			} else if (!strcmp(policy, "never")) {
+				bitmap_clear(&inherit, start, end - start + 1);
+				bitmap_clear(&madvise, start, end - start + 1);
+				bitmap_clear(&always, start, end - start + 1);
+			} else {
+				pr_err("invalid policy %s in thp_anon boot parameter\n", policy);
+				goto err;
+			}
+		}
+	}
+
+	huge_anon_orders_always = always;
+	huge_anon_orders_madvise = madvise;
+	huge_anon_orders_inherit = inherit;
+	anon_orders_configured = true;
+	return 1;
+
+err:
+	pr_warn("thp_anon=%s: cannot parse, ignored\n", str);
+	return 0;
+}
+__setup("thp_anon=", setup_thp_anon);
 
 pmd_t maybe_pmd_mkwrite(pmd_t pmd, struct vm_area_struct *vma)
 {
