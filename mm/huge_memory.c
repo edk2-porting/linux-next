@@ -929,14 +929,17 @@ static inline int get_order_from_str(const char *size_str)
 	int order;
 
 	size = memparse(size_str, &endptr);
-	order = fls(size >> PAGE_SHIFT) - 1;
-	if ((1 << order) & ~THP_ORDERS_ALL_ANON) {
-		pr_err("invalid size %s(order %d) in thp_anon boot parameter\n",
-			size_str, order);
-		return -EINVAL;
-	}
+
+	if (!is_power_of_2(size >> PAGE_SHIFT))
+		goto err;
+	order = get_order(size);
+	if ((1 << order) & ~THP_ORDERS_ALL_ANON)
+		goto err;
 
 	return order;
+err:
+	pr_err("invalid size %s in thp_anon boot parameter\n", size_str);
+	return -EINVAL;
 }
 
 static char str_dup[PAGE_SIZE] __meminitdata;
