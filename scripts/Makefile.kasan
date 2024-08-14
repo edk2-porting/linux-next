@@ -34,13 +34,15 @@ endif
 # First, enable -fsanitize=kernel-address together with providing the shadow
 # mapping offset, as for GCC, -fasan-shadow-offset fails without -fsanitize
 # (GCC accepts the shadow mapping offset via -fasan-shadow-offset instead of
-# a normal --param). Instead of ifdef-checking the compiler, rely on cc-option.
+# a --param like the other KASAN parameters).
+# Instead of ifdef-checking the compiler, rely on cc-option.
 CFLAGS_KASAN := $(call cc-option, -fsanitize=kernel-address \
 		-fasan-shadow-offset=$(KASAN_SHADOW_OFFSET), \
 		$(call cc-option, -fsanitize=kernel-address \
 		-mllvm -asan-mapping-offset=$(KASAN_SHADOW_OFFSET)))
 
-# Now, add other parameters enabled in a similar way with GCC and Clang.
+# Now, add other parameters enabled similarly in both GCC and Clang.
+# As some of them are not supported by older compilers, use cc-param.
 CFLAGS_KASAN += $(call cc-param,asan-instrumentation-with-call-threshold=$(call_threshold)) \
 		$(call cc-param,asan-stack=$(stack_enable)) \
 		$(call cc-param,asan-instrument-allocas=1) \
