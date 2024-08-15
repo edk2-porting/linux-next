@@ -845,6 +845,9 @@ struct fuse_conn {
 	/* Add supplementary group info when creating a new inode */
 	unsigned int create_supp_group:1;
 
+	/* Add owner_{u,g}id info when creating a new inode */
+	unsigned int owner_uid_gid_ext:1;
+
 	/* Does the filesystem support per inode DAX? */
 	unsigned int inode_dax:1;
 

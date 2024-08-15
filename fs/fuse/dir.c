@@ -572,7 +572,33 @@ static int get_create_supp_group(struct inode *dir, struct fuse_in_arg *ext)
 	return 0;
 }
 
-static int get_create_ext(struct fuse_args *args,
+static int get_owner_uid_gid(struct mnt_idmap *idmap, struct fuse_conn *fc, struct fuse_in_arg *ext)
+{
+	struct fuse_ext_header *xh;
+	struct fuse_owner_uid_gid *owner_creds;
+	u32 owner_creds_len = fuse_ext_size(sizeof(*owner_creds));
+	kuid_t owner_fsuid;
+	kgid_t owner_fsgid;
+
+	xh = extend_arg(ext, owner_creds_len);
+	if (!xh)
+		return -ENOMEM;
+
+	xh->size = owner_creds_len;
+	xh->type = FUSE_EXT_OWNER_UID_GID;
+
+	owner_creds = (struct fuse_owner_uid_gid *) &xh[1];
+
+	owner_fsuid = mapped_fsuid(idmap, fc->user_ns);
+	owner_fsgid = mapped_fsgid(idmap, fc->user_ns);
+	owner_creds->uid = from_kuid(fc->user_ns, owner_fsuid);
+	owner_creds->gid = from_kgid(fc->user_ns, owner_fsgid);
+
+	return 0;
+}
+
+static int get_create_ext(struct mnt_idmap *idmap,
+			  struct fuse_args *args,
 			  struct inode *dir, struct dentry *dentry,
 			  umode_t mode)
 {
@@ -584,6 +610,8 @@ static int get_create_ext(struct fuse_args *args,
 		err = get_security_context(dentry, mode, &ext);
 	if (!err && fc->create_supp_group)
 		err = get_create_supp_group(dir, &ext);
+	if (!err && fc->owner_uid_gid_ext)
+		err = get_owner_uid_gid(idmap, fc, &ext);
 
 	if (!err && ext.size) {
 		WARN_ON(args->in_numargs >= ARRAY_SIZE(args->in_args));
@@ -668,7 +696,7 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 	args.out_args[1].size = sizeof(*outopenp);
 	args.out_args[1].value = outopenp;
 
-	err = get_create_ext(&args, dir, entry, mode);
+	err = get_create_ext(&nop_mnt_idmap, &args, dir, entry, mode);
 	if (err)
 		goto out_put_forget_req;
 
@@ -798,7 +826,7 @@ static int create_new_entry(struct fuse_mount *fm, struct fuse_args *args,
 	args->out_args[0].value = &outarg;
 
 	if (args->opcode != FUSE_LINK) {
-		err = get_create_ext(args, dir, entry, mode);
+		err = get_create_ext(&nop_mnt_idmap, args, dir, entry, mode);
 		if (err)
 			goto out_put_forget_req;
 	}
