@@ -1111,6 +1111,9 @@ static int fuse_rename2(struct mnt_idmap *idmap, struct inode *olddir,
 	if (flags & ~(RENAME_NOREPLACE | RENAME_EXCHANGE | RENAME_WHITEOUT))
 		return -EINVAL;
 
+	if ((flags & RENAME_WHITEOUT) && (idmap != &nop_mnt_idmap))
+		return -EINVAL;
+
 	if (flags) {
 		if (fc->no_rename2 || fc->minor < 23)
 			return -EINVAL;
