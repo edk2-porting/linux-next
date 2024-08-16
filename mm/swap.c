@@ -641,7 +641,7 @@ static void lru_lazyfree(struct lruvec *lruvec, struct folio *folio)
 	 * anonymous folios
 	 */
 	folio_clear_swapbacked(folio);
-	lruvec_add_folio(lruvec, folio);
+	lruvec_add_folio_tail(lruvec, folio);
 
 	__count_vm_events(PGLAZYFREE, nr_pages);
 	__count_memcg_events(lruvec_memcg(lruvec), PGLAZYFREE, nr_pages);
