@@ -1793,13 +1793,8 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 		 * folio_nr_pages() may read garbage.  This is fine as the outer
 		 * loop will revisit the split folio later.
 		 */
-		if (folio_test_large(folio)) {
+		if (folio_test_large(folio))
 			pfn = folio_pfn(folio) + folio_nr_pages(folio) - 1;
-			if (folio_test_hugetlb(folio)) {
-				isolate_hugetlb(folio, &source);
-				continue;
-			}
-		}
 
 		/*
 		 * HWPoison pages have elevated reference counts so the migration would
@@ -1808,11 +1803,17 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 		 * (e.g. current hwpoison implementation doesn't unmap KSM pages but keep
 		 * the unmap as the catch all safety net).
 		 */
-		if (PageHWPoison(page)) {
+		if (folio_test_hwpoison(folio) ||
+		    (folio_test_large(folio) && folio_test_has_hwpoisoned(folio))) {
 			if (WARN_ON(folio_test_lru(folio)))
 				folio_isolate_lru(folio);
 			if (folio_mapped(folio))
-				try_to_unmap(folio, TTU_IGNORE_MLOCK);
+				unmap_posioned_folio(folio, TTU_IGNORE_MLOCK);
+			continue;
+		}
+
+		if (folio_test_hugetlb(folio)) {
+			isolate_hugetlb(folio, &source);
 			continue;
 		}
 
