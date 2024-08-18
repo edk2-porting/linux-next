@@ -2377,7 +2377,8 @@ static inline int io_cqring_wait_schedule(struct io_ring_ctx *ctx,
 	ret = 0;
 	if (iowq->timeout == KTIME_MAX)
 		schedule();
-	else if (!schedule_hrtimeout(&iowq->timeout, HRTIMER_MODE_ABS))
+	else if (!schedule_hrtimeout_range_clock(&iowq->timeout, 0,
+						 HRTIMER_MODE_ABS, ctx->clockid))
 		ret = -ETIME;
 	current->in_iowait = 0;
 	return ret;
@@ -2387,7 +2388,7 @@ static inline int io_cqring_wait_schedule(struct io_ring_ctx *ctx,
  * Wait until events become available, if we don't already have some. The
  * application must reap them itself, as they reside on the shared cq ring.
  */
-static int io_cqring_wait(struct io_ring_ctx *ctx, int min_events,
+static int io_cqring_wait(struct io_ring_ctx *ctx, int min_events, u32 flags,
 			  const sigset_t __user *sig, size_t sigsz,
 			  struct __kernel_timespec __user *uts)
 {
@@ -2416,14 +2417,13 @@ static int io_cqring_wait(struct io_ring_ctx *ctx, int min_events,
 
 	if (uts) {
 		struct timespec64 ts;
-		ktime_t dt;
 
 		if (get_timespec64(&ts, uts))
 			return -EFAULT;
 
-		dt = timespec64_to_ktime(ts);
-		iowq.timeout = ktime_add(dt, ktime_get());
-		io_napi_adjust_timeout(ctx, &iowq, dt);
+		iowq.timeout = timespec64_to_ktime(ts);
+		if (!(flags & IORING_ENTER_ABS_TIMER))
+			iowq.timeout = ktime_add(iowq.timeout, io_get_time(ctx));
 	}
 
 	if (sig) {
@@ -3154,7 +3154,8 @@ SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
 
 	if (unlikely(flags & ~(IORING_ENTER_GETEVENTS | IORING_ENTER_SQ_WAKEUP |
 			       IORING_ENTER_SQ_WAIT | IORING_ENTER_EXT_ARG |
-			       IORING_ENTER_REGISTERED_RING)))
+			       IORING_ENTER_REGISTERED_RING |
+			       IORING_ENTER_ABS_TIMER)))
 		return -EINVAL;
 
 	/*
@@ -3252,8 +3253,8 @@ iopoll_locked:
 			if (likely(!ret2)) {
 				min_complete = min(min_complete,
 						   ctx->cq_entries);
-				ret2 = io_cqring_wait(ctx, min_complete, sig,
-						      argsz, ts);
+				ret2 = io_cqring_wait(ctx, min_complete, flags,
+						      sig, argsz, ts);
 			}
 		}
 
@@ -3423,6 +3424,9 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 	ctx = io_ring_ctx_alloc(p);
 	if (!ctx)
 		return -ENOMEM;
+
+	ctx->clockid = CLOCK_MONOTONIC;
+	ctx->clock_offset = 0;
 
 	if ((ctx->flags & IORING_SETUP_DEFER_TASKRUN) &&
 	    !(ctx->flags & IORING_SETUP_IOPOLL) &&

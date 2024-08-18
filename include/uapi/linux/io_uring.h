@@ -507,6 +507,7 @@ struct io_cqring_offsets {
 #define IORING_ENTER_SQ_WAIT		(1U << 2)
 #define IORING_ENTER_EXT_ARG		(1U << 3)
 #define IORING_ENTER_REGISTERED_RING	(1U << 4)
+#define IORING_ENTER_ABS_TIMER		(1U << 5)
 
 /*
  * Passed in for io_uring_setup(2). Copied back with updated info on success
@@ -595,6 +596,8 @@ enum io_uring_register_op {
 	IORING_REGISTER_NAPI			= 27,
 	IORING_UNREGISTER_NAPI			= 28,
 
+	IORING_REGISTER_CLOCK			= 29,
+
 	/* this goes last */
 	IORING_REGISTER_LAST,
 
@@ -673,6 +676,11 @@ struct io_uring_restriction {
 	};
 	__u8 resv;
 	__u32 resv2[3];
+};
+
+struct io_uring_clock_register {
+	__u32	clockid;
+	__u32	__resv[3];
 };
 
 struct io_uring_buf {
