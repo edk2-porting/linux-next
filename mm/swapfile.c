@@ -659,7 +659,7 @@ new_cluster:
 	if (order)
 		goto done;
 
-	for (int o = 1; o < PMD_ORDER; o++) {
+	for (int o = 1; o < SWAP_NR_ORDERS; o++) {
 		if (!list_empty(&si->nonfull_clusters[o])) {
 			ci = list_first_entry(&si->nonfull_clusters[o], struct swap_cluster_info,
 					      list);
