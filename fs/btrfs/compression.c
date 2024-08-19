@@ -424,11 +424,9 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 	struct extent_map *em;
 	struct address_space *mapping = inode->i_mapping;
 	struct extent_map_tree *em_tree;
-	struct extent_io_tree *tree;
 	int sectors_missed = 0;
 
 	em_tree = &BTRFS_I(inode)->extent_tree;
-	tree = &BTRFS_I(inode)->io_tree;
 
 	if (isize == 0)
 		return 0;
@@ -499,7 +497,6 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 		}
 
 		page_end = (pg_index << PAGE_SHIFT) + folio_size(folio) - 1;
-		lock_extent(tree, cur, page_end, NULL);
 		read_lock(&em_tree->lock);
 		em = lookup_extent_mapping(em_tree, cur, page_end + 1 - cur);
 		read_unlock(&em_tree->lock);
@@ -514,7 +511,6 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 		    (extent_map_block_start(em) >> SECTOR_SHIFT) !=
 		    orig_bio->bi_iter.bi_sector) {
 			free_extent_map(em);
-			unlock_extent(tree, cur, page_end, NULL);
 			folio_unlock(folio);
 			folio_put(folio);
 			break;
@@ -534,7 +530,6 @@ static noinline int add_ra_bio_pages(struct inode *inode,
 
 		if (!bio_add_folio(orig_bio, folio, add_size,
 				   offset_in_folio(folio, cur))) {
-			unlock_extent(tree, cur, page_end, NULL);
 			folio_unlock(folio);
 			folio_put(folio);
 			break;
