@@ -37,7 +37,11 @@ static inline struct page *squashfs_page_actor_free(struct squashfs_page_actor *
 
 	kfree(actor->tmp_buffer);
 	kfree(actor);
-	return last_page;
+
+	if (actor->next_page == actor->pages)
+		return last_page;
+	else
+		return ERR_PTR(-EIO);
 }
 static inline void *squashfs_first_page(struct squashfs_page_actor *actor)
 {
