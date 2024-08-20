@@ -29,6 +29,7 @@
 #include <linux/fileattr.h>
 #include <linux/fsverity.h>
 #include <linux/sched/xacct.h>
+#include <linux/io_uring/cmd.h>
 #include "ctree.h"
 #include "disk-io.h"
 #include "export.h"
@@ -4690,6 +4691,53 @@ out_acct:
 		add_wchar(current, ret);
 	inc_syscw(current);
 	return ret;
+}
+
+static void btrfs_uring_encoded_read_cb(struct io_uring_cmd *cmd,
+					unsigned int issue_flags)
+{
+	int ret;
+
+	ret = btrfs_ioctl_encoded_read(cmd->file, (void __user *)cmd->sqe->addr,
+				       false);
+
+	io_uring_cmd_done(cmd, ret, 0, issue_flags);
+}
+
+static void btrfs_uring_encoded_read_compat_cb(struct io_uring_cmd *cmd,
+					       unsigned int issue_flags)
+{
+	int ret;
+
+	ret = btrfs_ioctl_encoded_read(cmd->file, (void __user *)cmd->sqe->addr,
+				       true);
+
+	io_uring_cmd_done(cmd, ret, 0, issue_flags);
+}
+
+static int btrfs_uring_encoded_read(struct io_uring_cmd *cmd,
+				    unsigned int issue_flags)
+{
+	if (issue_flags & IO_URING_F_COMPAT)
+		io_uring_cmd_complete_in_task(cmd, btrfs_uring_encoded_read_compat_cb);
+	else
+		io_uring_cmd_complete_in_task(cmd, btrfs_uring_encoded_read_cb);
+
+	return -EIOCBQUEUED;
+}
+
+int btrfs_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	switch (cmd->cmd_op) {
+	case BTRFS_IOC_ENCODED_READ:
+#if defined(CONFIG_64BIT) && defined(CONFIG_COMPAT)
+	case BTRFS_IOC_ENCODED_READ_32:
+#endif
+		return btrfs_uring_encoded_read(cmd, issue_flags);
+	}
+
+	io_uring_cmd_done(cmd, -EINVAL, 0, issue_flags);
+	return -EIOCBQUEUED;
 }
 
 long btrfs_ioctl(struct file *file, unsigned int
