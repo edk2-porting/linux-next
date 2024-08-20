@@ -1788,10 +1788,10 @@ static void do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 		folio = page_folio(page);
 
 		/*
-		 * The folio hold no reference or lock, it might be changed
-		 * concurrently(eg, split), folio_nr_pages() may read garbage,
-		 * but out loop could handle that as it revisits the split
-		 * folio later.
+		 * No reference or lock is held on the folio, so it might
+		 * be modified concurrently (e.g. split).  As such,
+		 * folio_nr_pages() may read garbage.  This is fine as the outer
+		 * loop will revisit the split folio later.
 		 */
 		if (folio_test_large(folio)) {
 			pfn = folio_pfn(folio) + folio_nr_pages(folio) - 1;
