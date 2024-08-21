@@ -1554,7 +1554,7 @@ static int get_hwpoison_page(struct page *p, unsigned long flags)
 	return ret;
 }
 
-int unmap_posioned_folio(struct folio *folio, enum ttu_flags ttu)
+int unmap_poisoned_folio(struct folio *folio, enum ttu_flags ttu)
 {
 	if (folio_test_hugetlb(folio) && !folio_test_anon(folio)) {
 		struct address_space *mapping;
@@ -1639,7 +1639,7 @@ static bool hwpoison_user_mappings(struct folio *folio, struct page *p,
 	 */
 	collect_procs(folio, p, &tokill, flags & MF_ACTION_REQUIRED);
 
-	if (unmap_posioned_folio(folio, ttu))
+	if (unmap_poisoned_folio(folio, ttu))
 		pr_info("%#lx: could not lock mapping for mapped huge page\n", pfn);
 
 	unmap_success = !folio_mapped(folio);
