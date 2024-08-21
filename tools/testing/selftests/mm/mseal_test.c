@@ -774,11 +774,6 @@ static void test_seal_mprotect_partial_mprotect_tail(bool seal)
 	int ret;
 	int prot;
 
-	/*
-	 * Check if a partial mseal (that results in two vmas) works correctly.
-	 * It might mprotect the first, but it'll never touch the second (msealed) vma.
-	 */
-
 	setup_single_address(size, &ptr);
 	FAIL_TEST_IF_FALSE(ptr != (void *)-1);
 
