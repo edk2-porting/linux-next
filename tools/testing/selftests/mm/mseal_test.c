@@ -778,7 +778,7 @@ static void test_seal_mprotect_partial_mprotect_tail(bool seal)
 	FAIL_TEST_IF_FALSE(ptr != (void *)-1);
 
 	if (seal) {
-		ret = sys_mseal(ptr + page_size, size);
+		ret = sys_mseal(ptr + page_size, page_size);
 		FAIL_TEST_IF_FALSE(!ret);
 	}
 
@@ -1031,7 +1031,7 @@ static void test_seal_munmap_partial_across_vmas(bool seal)
 	FAIL_TEST_IF_FALSE(ptr != (void *)-1);
 
 	if (seal) {
-		ret = sys_mseal(ptr + page_size, size);
+		ret = sys_mseal(ptr + page_size, page_size);
 		FAIL_TEST_IF_FALSE(!ret);
 	}
 
