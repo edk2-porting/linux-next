@@ -78,7 +78,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm,
 		(VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC),
 		&vdso_mapping);
 
-	if (unlikely(IS_ERR(vma))) {
+	if (IS_ERR(vma)) {
 		ret = PTR_ERR(vma);
 		mm->context.vdso = NULL;
 		goto end;
@@ -89,7 +89,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm,
 	vma = _install_special_mapping(mm, vdso_base, PAGE_SIZE,
 		(VM_READ | VM_MAYREAD), &vvar_mapping);
 
-	if (unlikely(IS_ERR(vma))) {
+	if (IS_ERR(vma)) {
 		ret = PTR_ERR(vma);
 		mm->context.vdso = NULL;
 		goto end;

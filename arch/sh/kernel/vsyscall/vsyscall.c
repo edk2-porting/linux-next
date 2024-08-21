@@ -81,7 +81,7 @@ int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 				      VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC,
 				      &vdso_mapping);
 	ret = PTR_ERR(vma);
-	if (unlikely(IS_ERR(vma)))
+	if (IS_ERR(vma))
 		goto up_fail;
 
 	current->mm->context.vdso = (void *)addr;
