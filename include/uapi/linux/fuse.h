@@ -217,6 +217,11 @@
  *  - add backing_id to fuse_open_out, add FOPEN_PASSTHROUGH open flag
  *  - add FUSE_NO_EXPORT_SUPPORT init flag
  *  - add FUSE_NOTIFY_RESEND, add FUSE_HAS_RESEND init flag
+ *
+ *  7.41
+ *  - add FUSE_EXT_OWNER_UID_GID
+ *  - add FUSE_OWNER_UID_GID_EXT
+ *  - add FUSE_ALLOW_IDMAP
  */
 
 #ifndef _LINUX_FUSE_H
@@ -252,7 +257,7 @@
 #define FUSE_KERNEL_VERSION 7
 
 /** Minor version number of this interface */
-#define FUSE_KERNEL_MINOR_VERSION 40
+#define FUSE_KERNEL_MINOR_VERSION 41
 
 /** The node ID of the root inode */
 #define FUSE_ROOT_ID 1
@@ -421,6 +426,9 @@ struct fuse_file_lock {
  * FUSE_NO_EXPORT_SUPPORT: explicitly disable export support
  * FUSE_HAS_RESEND: kernel supports resending pending requests, and the high bit
  *		    of the request ID indicates resend requests
+ * FUSE_OWNER_UID_GID_EXT: add inode owner UID/GID info to create, mkdir,
+ *			   symlink and mknod
+ * FUSE_ALLOW_IDMAP: allow creation of idmapped mounts
  */
 #define FUSE_ASYNC_READ		(1 << 0)
 #define FUSE_POSIX_LOCKS	(1 << 1)
@@ -466,6 +474,8 @@ struct fuse_file_lock {
 
 /* Obsolete alias for FUSE_DIRECT_IO_ALLOW_MMAP */
 #define FUSE_DIRECT_IO_RELAX	FUSE_DIRECT_IO_ALLOW_MMAP
+#define FUSE_OWNER_UID_GID_EXT	(1ULL << 40)
+#define FUSE_ALLOW_IDMAP	(1ULL << 41)
 
 /**
  * CUSE INIT request/reply flags
@@ -575,11 +585,13 @@ struct fuse_file_lock {
  * extension type
  * FUSE_MAX_NR_SECCTX: maximum value of &fuse_secctx_header.nr_secctx
  * FUSE_EXT_GROUPS: &fuse_supp_groups extension
+ * FUSE_EXT_OWNER_UID_GID: &fuse_owner_uid_gid extension
  */
 enum fuse_ext_type {
 	/* Types 0..31 are reserved for fuse_secctx_header */
 	FUSE_MAX_NR_SECCTX	= 31,
 	FUSE_EXT_GROUPS		= 32,
+	FUSE_EXT_OWNER_UID_GID	= 33,
 };
 
 enum fuse_opcode {
@@ -1184,6 +1196,16 @@ struct fuse_ext_header {
 struct fuse_supp_groups {
 	uint32_t	nr_groups;
 	uint32_t	groups[];
+};
+
+/**
+ * struct fuse_owner_uid_gid - Inode owner UID/GID extension
+ * @uid: inode owner UID
+ * @gid: inode owner GID
+ */
+struct fuse_owner_uid_gid {
+	uint32_t	uid;
+	uint32_t	gid;
 };
 
 #endif /* _LINUX_FUSE_H */
