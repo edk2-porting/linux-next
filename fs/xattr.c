@@ -645,19 +645,19 @@ static int do_fsetxattr(int fd, const char __user *name,
 	int error;
 
 	CLASS(fd, f)(fd);
-	if (!f.file)
+	if (!fd_file(f))
 		return -EBADF;
 
-	audit_file(f.file);
+	audit_file(fd_file(f));
 	error = setxattr_copy(name, &ctx);
 	if (error)
 		return error;
 
-	error = mnt_want_write_file(f.file);
+	error = mnt_want_write_file(fd_file(f));
 	if (!error) {
-		error = do_setxattr(file_mnt_idmap(f.file),
-				    f.file->f_path.dentry, &ctx);
-		mnt_drop_write_file(f.file);
+		error = do_setxattr(file_mnt_idmap(fd_file(f)),
+				    fd_file(f)->f_path.dentry, &ctx);
+		mnt_drop_write_file(fd_file(f));
 	}
 	kvfree(ctx.kvalue);
 	return error;
@@ -829,10 +829,10 @@ static ssize_t path_getxattrat(int dfd, const char __user *pathname,
 
 	if (at_flags & AT_EMPTY_PATH && vfs_empty_path(dfd, pathname)) {
 		CLASS(fd, f)(dfd);
-		if (!f.file)
+		if (fd_empty(f))
 			return -EBADF;
-		audit_file(f.file);
-		return getxattr(file_mnt_idmap(f.file), file_dentry(f.file),
+		audit_file(fd_file(f));
+		return getxattr(file_mnt_idmap(fd_file(f)), file_dentry(fd_file(f)),
 				name, value, size);
 	}
 
@@ -895,10 +895,10 @@ SYSCALL_DEFINE4(fgetxattr, int, fd, const char __user *, name,
 	struct fd f = fdget(fd);
 	ssize_t error = -EBADF;
 
-	if (!f.file)
+	if (!fd_file(f))
 		return error;
-	audit_file(f.file);
-	error = getxattr(file_mnt_idmap(f.file), f.file->f_path.dentry,
+	audit_file(fd_file(f));
+	error = getxattr(file_mnt_idmap(fd_file(f)), fd_file(f)->f_path.dentry,
 			 name, value, size);
 	fdput(f);
 	return error;
@@ -949,10 +949,10 @@ static ssize_t path_listxattrat(int dfd, const char __user *pathname,
 
 	if (at_flags & AT_EMPTY_PATH && vfs_empty_path(dfd, pathname)) {
 		CLASS(fd, f)(dfd);
-		if (!f.file)
+		if (fd_empty(f))
 			return -EBADF;
-		audit_file(f.file);
-		return listxattr(file_dentry(f.file), list, size);
+		audit_file(fd_file(f));
+		return listxattr(file_dentry(fd_file(f)), list, size);
 	}
 
 	lookup_flags = (at_flags & AT_SYMLINK_NOFOLLOW) ? 0 : LOOKUP_FOLLOW;
@@ -993,10 +993,10 @@ SYSCALL_DEFINE3(flistxattr, int, fd, char __user *, list, size_t, size)
 	struct fd f = fdget(fd);
 	ssize_t error = -EBADF;
 
-	if (!f.file)
+	if (!fd_file(f))
 		return error;
-	audit_file(f.file);
-	error = listxattr(f.file->f_path.dentry, list, size);
+	audit_file(fd_file(f));
+	error = listxattr(fd_file(f)->f_path.dentry, list, size);
 	fdput(f);
 	return error;
 }
@@ -1018,9 +1018,9 @@ static int do_fremovexattr(int fd, const char __user *name)
 	int error = -EBADF;
 
 	CLASS(fd, f)(fd);
-	if (!f.file)
+	if (fd_empty(f))
 		return error;
-	audit_file(f.file);
+	audit_file(fd_file(f));
 
 	error = strncpy_from_user(kname, name, sizeof(kname));
 	if (error == 0 || error == sizeof(kname))
@@ -1028,11 +1028,11 @@ static int do_fremovexattr(int fd, const char __user *name)
 	if (error < 0)
 		return error;
 
-	error = mnt_want_write_file(f.file);
+	error = mnt_want_write_file(fd_file(f));
 	if (!error) {
-		error = removexattr(file_mnt_idmap(f.file),
-				    f.file->f_path.dentry, kname);
-		mnt_drop_write_file(f.file);
+		error = removexattr(file_mnt_idmap(fd_file(f)),
+				    fd_file(f)->f_path.dentry, kname);
+		mnt_drop_write_file(fd_file(f));
 	}
 	return error;
 }
@@ -1099,9 +1099,9 @@ SYSCALL_DEFINE2(fremovexattr, int, fd, const char __user *, name)
 	char kname[XATTR_NAME_MAX + 1];
 	int error = -EBADF;
 
-	if (!f.file)
+	if (!fd_file(f))
 		return error;
-	audit_file(f.file);
+	audit_file(fd_file(f));
 
 	error = strncpy_from_user(kname, name, sizeof(kname));
 	if (error == 0 || error == sizeof(kname))
@@ -1109,11 +1109,11 @@ SYSCALL_DEFINE2(fremovexattr, int, fd, const char __user *, name)
 	if (error < 0)
 		return error;
 
-	error = mnt_want_write_file(f.file);
+	error = mnt_want_write_file(fd_file(f));
 	if (!error) {
-		error = removexattr(file_mnt_idmap(f.file),
-				    f.file->f_path.dentry, kname);
-		mnt_drop_write_file(f.file);
+		error = removexattr(file_mnt_idmap(fd_file(f)),
+				    fd_file(f)->f_path.dentry, kname);
+		mnt_drop_write_file(fd_file(f));
 	}
 	fdput(f);
 	return error;
