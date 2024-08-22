@@ -452,7 +452,7 @@ static inline struct folio *folio_alloc_gigantic_noprof(int order, gfp_t gfp,
 {
 	struct page *page;
 
-	if (WARN_ON(!order || !(gfp | __GFP_COMP)))
+	if (WARN_ON(!order || !(gfp & __GFP_COMP)))
 		return NULL;
 
 	page = alloc_contig_pages_noprof(1 << order, gfp, nid, node);
