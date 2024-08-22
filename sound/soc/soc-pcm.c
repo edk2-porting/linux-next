@@ -49,24 +49,6 @@ static inline int _soc_pcm_ret(struct snd_soc_pcm_runtime *rtd,
 	return ret;
 }
 
-static inline void snd_soc_dpcm_stream_lock_irq(struct snd_soc_pcm_runtime *rtd,
-						int stream)
-{
-	snd_pcm_stream_lock_irq(snd_soc_dpcm_get_substream(rtd, stream));
-}
-
-#define snd_soc_dpcm_stream_lock_irqsave_nested(rtd, stream, flags) \
-	snd_pcm_stream_lock_irqsave_nested(snd_soc_dpcm_get_substream(rtd, stream), flags)
-
-static inline void snd_soc_dpcm_stream_unlock_irq(struct snd_soc_pcm_runtime *rtd,
-						  int stream)
-{
-	snd_pcm_stream_unlock_irq(snd_soc_dpcm_get_substream(rtd, stream));
-}
-
-#define snd_soc_dpcm_stream_unlock_irqrestore(rtd, stream, flags) \
-	snd_pcm_stream_unlock_irqrestore(snd_soc_dpcm_get_substream(rtd, stream), flags)
-
 #define DPCM_MAX_BE_USERS	8
 
 static inline const char *soc_cpu_dai_name(struct snd_soc_pcm_runtime *rtd)
@@ -222,7 +204,7 @@ static void dpcm_create_debugfs_state(struct snd_soc_dpcm *dpcm, int stream)
 	char *name;
 
 	name = kasprintf(GFP_KERNEL, "%s:%s", dpcm->be->dai_link->name,
-			 stream ? "capture" : "playback");
+			 snd_pcm_direction_name(stream));
 	if (name) {
 		dpcm->debugfs_state = debugfs_create_dir(
 			name, dpcm->fe->debugfs_dpcm_root);
@@ -260,14 +242,14 @@ static void dpcm_set_fe_update_state(struct snd_soc_pcm_runtime *fe,
 	struct snd_pcm_substream *substream =
 		snd_soc_dpcm_get_substream(fe, stream);
 
-	snd_soc_dpcm_stream_lock_irq(fe, stream);
+	snd_pcm_stream_lock_irq(substream);
 	if (state == SND_SOC_DPCM_UPDATE_NO && fe->dpcm[stream].trigger_pending) {
 		dpcm_fe_dai_do_trigger(substream,
 				       fe->dpcm[stream].trigger_pending - 1);
 		fe->dpcm[stream].trigger_pending = 0;
 	}
 	fe->dpcm[stream].runtime_update = state;
-	snd_soc_dpcm_stream_unlock_irq(fe, stream);
+	snd_pcm_stream_unlock_irq(substream);
 }
 
 static void dpcm_set_be_update_state(struct snd_soc_pcm_runtime *be,
@@ -1272,13 +1254,13 @@ static int dpcm_be_connect(struct snd_soc_pcm_runtime *fe,
 	dpcm->be = be;
 	dpcm->fe = fe;
 	dpcm->state = SND_SOC_DPCM_LINK_STATE_NEW;
-	snd_soc_dpcm_stream_lock_irq(fe, stream);
+	snd_pcm_stream_lock_irq(fe_substream);
 	list_add(&dpcm->list_be, &fe->dpcm[stream].be_clients);
 	list_add(&dpcm->list_fe, &be->dpcm[stream].fe_clients);
-	snd_soc_dpcm_stream_unlock_irq(fe, stream);
+	snd_pcm_stream_unlock_irq(fe_substream);
 
 	dev_dbg(fe->dev, "connected new DPCM %s path %s %s %s\n",
-			stream ? "capture" : "playback",  fe->dai_link->name,
+			snd_pcm_direction_name(stream),  fe->dai_link->name,
 			stream ? "<-" : "->", be->dai_link->name);
 
 	dpcm_create_debugfs_state(dpcm, stream);
@@ -1306,7 +1288,7 @@ static void dpcm_be_reparent(struct snd_soc_pcm_runtime *fe,
 			continue;
 
 		dev_dbg(fe->dev, "reparent %s path %s %s %s\n",
-			stream ? "capture" : "playback",
+			snd_pcm_direction_name(stream),
 			dpcm->fe->dai_link->name,
 			stream ? "<-" : "->", dpcm->be->dai_link->name);
 
@@ -1320,21 +1302,22 @@ static void dpcm_be_reparent(struct snd_soc_pcm_runtime *fe,
 void dpcm_be_disconnect(struct snd_soc_pcm_runtime *fe, int stream)
 {
 	struct snd_soc_dpcm *dpcm, *d;
+	struct snd_pcm_substream *substream = snd_soc_dpcm_get_substream(fe, stream);
 	LIST_HEAD(deleted_dpcms);
 
 	snd_soc_dpcm_mutex_assert_held(fe);
 
-	snd_soc_dpcm_stream_lock_irq(fe, stream);
+	snd_pcm_stream_lock_irq(substream);
 	for_each_dpcm_be_safe(fe, stream, dpcm, d) {
 		dev_dbg(fe->dev, "ASoC: BE %s disconnect check for %s\n",
-				stream ? "capture" : "playback",
+				snd_pcm_direction_name(stream),
 				dpcm->be->dai_link->name);
 
 		if (dpcm->state != SND_SOC_DPCM_LINK_STATE_FREE)
 			continue;
 
 		dev_dbg(fe->dev, "freed DSP %s path %s %s %s\n",
-			stream ? "capture" : "playback", fe->dai_link->name,
+			snd_pcm_direction_name(stream), fe->dai_link->name,
 			stream ? "<-" : "->", dpcm->be->dai_link->name);
 
 		/* BEs still alive need new FE */
@@ -1343,7 +1326,7 @@ void dpcm_be_disconnect(struct snd_soc_pcm_runtime *fe, int stream)
 		list_del(&dpcm->list_be);
 		list_move(&dpcm->list_fe, &deleted_dpcms);
 	}
-	snd_soc_dpcm_stream_unlock_irq(fe, stream);
+	snd_pcm_stream_unlock_irq(substream);
 
 	while (!list_empty(&deleted_dpcms)) {
 		dpcm = list_first_entry(&deleted_dpcms, struct snd_soc_dpcm,
@@ -1441,10 +1424,10 @@ int dpcm_path_get(struct snd_soc_pcm_runtime *fe,
 
 	if (paths > 0)
 		dev_dbg(fe->dev, "ASoC: found %d audio %s paths\n", paths,
-			stream ? "capture" : "playback");
+			snd_pcm_direction_name(stream));
 	else if (paths == 0)
 		dev_dbg(fe->dev, "ASoC: %s no valid %s path\n", fe->dai_link->name,
-			 stream ? "capture" : "playback");
+			snd_pcm_direction_name(stream));
 
 	return paths;
 }
@@ -1487,7 +1470,7 @@ static int dpcm_prune_paths(struct snd_soc_pcm_runtime *fe, int stream,
 			continue;
 
 		dev_dbg(fe->dev, "ASoC: pruning %s BE %s for %s\n",
-			stream ? "capture" : "playback",
+			snd_pcm_direction_name(stream),
 			dpcm->be->dai_link->name, fe->dai_link->name);
 		dpcm->state = SND_SOC_DPCM_LINK_STATE_FREE;
 		dpcm_set_be_update_state(dpcm->be, stream, SND_SOC_DPCM_UPDATE_BE);
@@ -1605,7 +1588,7 @@ void dpcm_be_dai_stop(struct snd_soc_pcm_runtime *fe, int stream,
 
 		if (be->dpcm[stream].users == 0) {
 			dev_err(be->dev, "ASoC: no users %s at close - state %d\n",
-				stream ? "capture" : "playback",
+				snd_pcm_direction_name(stream),
 				be->dpcm[stream].state);
 			continue;
 		}
@@ -1645,7 +1628,7 @@ int dpcm_be_dai_startup(struct snd_soc_pcm_runtime *fe, int stream)
 
 		if (!be_substream) {
 			dev_err(be->dev, "ASoC: no backend %s stream\n",
-				stream ? "capture" : "playback");
+				snd_pcm_direction_name(stream));
 			continue;
 		}
 
@@ -1656,7 +1639,7 @@ int dpcm_be_dai_startup(struct snd_soc_pcm_runtime *fe, int stream)
 		/* first time the dpcm is open ? */
 		if (be->dpcm[stream].users == DPCM_MAX_BE_USERS) {
 			dev_err(be->dev, "ASoC: too many users %s at open %d\n",
-				stream ? "capture" : "playback",
+				snd_pcm_direction_name(stream),
 				be->dpcm[stream].state);
 			continue;
 		}
@@ -1669,7 +1652,7 @@ int dpcm_be_dai_startup(struct snd_soc_pcm_runtime *fe, int stream)
 			continue;
 
 		dev_dbg(be->dev, "ASoC: open %s BE %s\n",
-			stream ? "capture" : "playback", be->dai_link->name);
+			snd_pcm_direction_name(stream), be->dai_link->name);
 
 		be_substream->runtime = fe_substream->runtime;
 		err = __soc_pcm_open(be, be_substream);
@@ -1677,7 +1660,7 @@ int dpcm_be_dai_startup(struct snd_soc_pcm_runtime *fe, int stream)
 			be->dpcm[stream].users--;
 			if (be->dpcm[stream].users < 0)
 				dev_err(be->dev, "ASoC: no users %s at unwind %d\n",
-					stream ? "capture" : "playback",
+					snd_pcm_direction_name(stream),
 					be->dpcm[stream].state);
 
 			be->dpcm[stream].state = SND_SOC_DPCM_STATE_CLOSE;
@@ -2155,7 +2138,7 @@ int dpcm_be_dai_trigger(struct snd_soc_pcm_runtime *fe, int stream,
 		be = dpcm->be;
 		be_substream = snd_soc_dpcm_get_substream(be, stream);
 
-		snd_soc_dpcm_stream_lock_irqsave_nested(be, stream, flags);
+		snd_pcm_stream_lock_irqsave_nested(be_substream, flags);
 
 		/* is this op for this BE ? */
 		if (!snd_soc_dpcm_be_can_update(fe, be, stream))
@@ -2302,7 +2285,7 @@ int dpcm_be_dai_trigger(struct snd_soc_pcm_runtime *fe, int stream,
 			break;
 		}
 next:
-		snd_soc_dpcm_stream_unlock_irqrestore(be, stream, flags);
+		snd_pcm_stream_unlock_irqrestore(be_substream, flags);
 		if (ret)
 			break;
 	}
@@ -2387,14 +2370,6 @@ static int dpcm_fe_dai_do_trigger(struct snd_pcm_substream *substream, int cmd)
 			ret = -EINVAL;
 			break;
 		}
-		break;
-	case SND_SOC_DPCM_TRIGGER_BESPOKE:
-		/* bespoke trigger() - handles both FE and BEs */
-
-		dev_dbg(fe->dev, "ASoC: bespoke trigger FE %s cmd %d\n",
-				fe->dai_link->name, cmd);
-
-		ret = snd_soc_pcm_dai_bespoke_trigger(substream, cmd);
 		break;
 	default:
 		dev_err(fe->dev, "ASoC: invalid trigger cmd %d for %s\n", cmd,
@@ -2525,26 +2500,12 @@ out:
 
 static int dpcm_run_update_shutdown(struct snd_soc_pcm_runtime *fe, int stream)
 {
-	struct snd_pcm_substream *substream =
-		snd_soc_dpcm_get_substream(fe, stream);
-	enum snd_soc_dpcm_trigger trigger = fe->dai_link->trigger[stream];
 	int err;
 
 	dev_dbg(fe->dev, "ASoC: runtime %s close on FE %s\n",
-			stream ? "capture" : "playback", fe->dai_link->name);
+		snd_pcm_direction_name(stream), fe->dai_link->name);
 
-	if (trigger == SND_SOC_DPCM_TRIGGER_BESPOKE) {
-		/* call bespoke trigger - FE takes care of all BE triggers */
-		dev_dbg(fe->dev, "ASoC: bespoke trigger FE %s cmd stop\n",
-				fe->dai_link->name);
-
-		err = snd_soc_pcm_dai_bespoke_trigger(substream, SNDRV_PCM_TRIGGER_STOP);
-	} else {
-		dev_dbg(fe->dev, "ASoC: trigger FE %s cmd stop\n",
-			fe->dai_link->name);
-
-		err = dpcm_be_dai_trigger(fe, stream, SNDRV_PCM_TRIGGER_STOP);
-	}
+	err = dpcm_be_dai_trigger(fe, stream, SNDRV_PCM_TRIGGER_STOP);
 
 	dpcm_be_dai_hw_free(fe, stream);
 
@@ -2558,14 +2519,11 @@ static int dpcm_run_update_shutdown(struct snd_soc_pcm_runtime *fe, int stream)
 
 static int dpcm_run_update_startup(struct snd_soc_pcm_runtime *fe, int stream)
 {
-	struct snd_pcm_substream *substream =
-		snd_soc_dpcm_get_substream(fe, stream);
 	struct snd_soc_dpcm *dpcm;
-	enum snd_soc_dpcm_trigger trigger = fe->dai_link->trigger[stream];
 	int ret = 0;
 
 	dev_dbg(fe->dev, "ASoC: runtime %s open on FE %s\n",
-			stream ? "capture" : "playback", fe->dai_link->name);
+		snd_pcm_direction_name(stream), fe->dai_link->name);
 
 	/* Only start the BE if the FE is ready */
 	if (fe->dpcm[stream].state == SND_SOC_DPCM_STATE_HW_FREE ||
@@ -2605,23 +2563,9 @@ static int dpcm_run_update_startup(struct snd_soc_pcm_runtime *fe, int stream)
 		fe->dpcm[stream].state == SND_SOC_DPCM_STATE_STOP)
 		return 0;
 
-	if (trigger == SND_SOC_DPCM_TRIGGER_BESPOKE) {
-		/* call trigger on the frontend - FE takes care of all BE triggers */
-		dev_dbg(fe->dev, "ASoC: bespoke trigger FE %s cmd start\n",
-				fe->dai_link->name);
-
-		ret = snd_soc_pcm_dai_bespoke_trigger(substream, SNDRV_PCM_TRIGGER_START);
-		if (ret < 0)
-			goto hw_free;
-	} else {
-		dev_dbg(fe->dev, "ASoC: trigger FE %s cmd start\n",
-			fe->dai_link->name);
-
-		ret = dpcm_be_dai_trigger(fe, stream,
-					SNDRV_PCM_TRIGGER_START);
-		if (ret < 0)
-			goto hw_free;
-	}
+	ret = dpcm_be_dai_trigger(fe, stream, SNDRV_PCM_TRIGGER_START);
+	if (ret < 0)
+		goto hw_free;
 
 	return 0;
 
@@ -2795,6 +2739,7 @@ static int soc_get_playback_capture(struct snd_soc_pcm_runtime *rtd,
 {
 	struct snd_soc_dai_link *dai_link = rtd->dai_link;
 	struct snd_soc_dai *cpu_dai;
+	struct snd_soc_dai_link_ch_map *ch_maps;
 	int has_playback = 0;
 	int has_capture  = 0;
 	int i;
@@ -2805,43 +2750,51 @@ static int soc_get_playback_capture(struct snd_soc_pcm_runtime *rtd,
 	}
 
 	if (dai_link->dynamic || dai_link->no_pcm) {
-		int stream;
 
-		if (dai_link->dpcm_playback) {
-			stream = SNDRV_PCM_STREAM_PLAYBACK;
+		for_each_rtd_ch_maps(rtd, i, ch_maps) {
+			cpu_dai	  = snd_soc_rtd_to_cpu(rtd,   ch_maps->cpu);
 
-			for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
-				if (snd_soc_dai_stream_valid(cpu_dai, stream)) {
-					has_playback = 1;
-					break;
-				}
-			}
-			if (!has_playback) {
-				dev_err(rtd->card->dev,
-					"No CPU DAIs support playback for stream %s\n",
-					dai_link->stream_name);
-				return -EINVAL;
-			}
+			if (snd_soc_dai_stream_valid(cpu_dai, SNDRV_PCM_STREAM_PLAYBACK))
+				has_playback = 1;
+
+			if (snd_soc_dai_stream_valid(cpu_dai, SNDRV_PCM_STREAM_CAPTURE))
+				has_capture = 1;
 		}
-		if (dai_link->dpcm_capture) {
-			stream = SNDRV_PCM_STREAM_CAPTURE;
 
-			for_each_rtd_cpu_dais(rtd, i, cpu_dai) {
-				if (snd_soc_dai_stream_valid(cpu_dai, stream)) {
-					has_capture = 1;
-					break;
-				}
+		/*
+		 * REMOVE ME
+		 *
+		 * dpcm_xxx flag will be removed soon, Indicates warning if dpcm_xxx flag was used
+		 * as availability limitation
+		 */
+		if (has_playback && has_capture) {
+			if ( dai_link->dpcm_playback &&
+			    !dai_link->dpcm_capture  &&
+			    !dai_link->playback_only) {
+				dev_warn(rtd->card->dev,
+					 "both playback/capture are available,"
+					 " but not using playback_only flag (%s)\n",
+					 dai_link->stream_name);
+				dev_warn(rtd->card->dev,
+					 "dpcm_playback/capture are no longer needed,"
+					 " please use playback/capture_only instead\n");
+				has_capture = 0;
 			}
 
-			if (!has_capture) {
-				dev_err(rtd->card->dev,
-					"No CPU DAIs support capture for stream %s\n",
-					dai_link->stream_name);
-				return -EINVAL;
+			if (!dai_link->dpcm_playback &&
+			     dai_link->dpcm_capture  &&
+			    !dai_link->capture_only) {
+				dev_warn(rtd->card->dev,
+					 "both playback/capture are available,"
+					 " but not using capture_only flag (%s)\n",
+					 dai_link->stream_name);
+				dev_warn(rtd->card->dev,
+					 "dpcm_playback/capture are no longer needed,"
+					 " please use playback/capture_only instead\n");
+				has_playback = 0;
 			}
 		}
 	} else {
-		struct snd_soc_dai_link_ch_map *ch_maps;
 		struct snd_soc_dai *codec_dai;
 
 		/* Adapt stream for codec2codec links */
