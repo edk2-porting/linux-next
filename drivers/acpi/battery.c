@@ -1207,7 +1207,7 @@ static int acpi_battery_update_retry(struct acpi_battery *battery)
 static int acpi_battery_add(struct acpi_device *device)
 {
 	int result = 0;
-	struct acpi_battery *battery = NULL;
+	struct acpi_battery *battery;
 
 	if (!device)
 		return -EINVAL;
@@ -1219,8 +1219,8 @@ static int acpi_battery_add(struct acpi_device *device)
 	if (!battery)
 		return -ENOMEM;
 	battery->device = device;
-	strcpy(acpi_device_name(device), ACPI_BATTERY_DEVICE_NAME);
-	strcpy(acpi_device_class(device), ACPI_BATTERY_CLASS);
+	strscpy(acpi_device_name(device), ACPI_BATTERY_DEVICE_NAME);
+	strscpy(acpi_device_class(device), ACPI_BATTERY_CLASS);
 	device->driver_data = battery;
 	mutex_init(&battery->lock);
 	mutex_init(&battery->sysfs_lock);
@@ -1260,7 +1260,7 @@ fail:
 
 static void acpi_battery_remove(struct acpi_device *device)
 {
-	struct acpi_battery *battery = NULL;
+	struct acpi_battery *battery;
 
 	if (!device || !acpi_driver_data(device))
 		return;
