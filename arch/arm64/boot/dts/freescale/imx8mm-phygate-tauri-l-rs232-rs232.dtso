@@ -14,14 +14,9 @@
 /dts-v1/;
 /plugin/;
 
-&{/} {
-	compatible = "phytec,imx8mm-phygate-tauri-l";
-
-};
-
 &gpio3 {
 	pinctrl-names = "default";
-	pinctrcl-0 = <&pinctrl_gpio3_hog>;
+	pinctrl-0 = <&pinctrl_gpio3_hog>;
 
 	uart4_rs485_en {
 		gpio-hog;
