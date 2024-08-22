@@ -3036,8 +3036,6 @@ void ext4_xattr_inode_array_free(struct ext4_xattr_inode_array *ea_inode_array)
  *
  * Create a new entry in the extended attribute block cache, and insert
  * it unless such an entry is already in the cache.
- *
- * Returns 0, or a negative error number on failure.
  */
 static void
 ext4_xattr_block_cache_insert(struct mb_cache *ea_block_cache,
@@ -3065,8 +3063,7 @@ ext4_xattr_block_cache_insert(struct mb_cache *ea_block_cache,
  *
  * Compare two extended attribute blocks for equality.
  *
- * Returns 0 if the blocks are equal, 1 if they differ, and
- * a negative error number on errors.
+ * Returns 0 if the blocks are equal, 1 if they differ.
  */
 static int
 ext4_xattr_cmp(struct ext4_xattr_header *header1,
