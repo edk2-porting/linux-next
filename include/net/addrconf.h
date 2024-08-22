@@ -37,10 +37,14 @@ struct prefix_info {
 		struct __packed {
 #if defined(__BIG_ENDIAN_BITFIELD)
 			__u8	onlink : 1,
-			 	autoconf : 1,
-				reserved : 6;
+				autoconf : 1,
+				routeraddr : 1,
+				preferpd : 1,
+				reserved : 4;
 #elif defined(__LITTLE_ENDIAN_BITFIELD)
-			__u8	reserved : 6,
+			__u8	reserved : 4,
+				preferpd : 1,
+				routeraddr : 1,
 				autoconf : 1,
 				onlink : 1;
 #else
@@ -183,10 +187,12 @@ static inline int addrconf_ifid_eui48(u8 *eui, struct net_device *dev)
 	return 0;
 }
 
+#define INFINITY_LIFE_TIME 0xFFFFFFFF
+
 static inline unsigned long addrconf_timeout_fixup(u32 timeout,
 						   unsigned int unit)
 {
-	if (timeout == 0xffffffff)
+	if (timeout == INFINITY_LIFE_TIME)
 		return ~0UL;
 
 	/*
