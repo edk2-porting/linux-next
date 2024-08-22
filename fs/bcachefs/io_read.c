@@ -286,7 +286,7 @@ static struct promote_op *promote_alloc(struct btree_trans *trans,
 	 */
 	bool promote_full = (failed ||
 			     *read_full ||
-			     READ_ONCE(c->promote_whole_extents));
+			     READ_ONCE(c->opts.promote_whole_extents));
 	/* data might have to be decompressed in the write path: */
 	unsigned sectors = promote_full
 		? max(pick->crc.compressed_size, pick->crc.live_size)
@@ -1214,10 +1214,6 @@ void __bch2_read(struct bch_fs *c, struct bch_read_bio *rbio,
 
 		swap(bvec_iter.bi_size, bytes);
 		bio_advance_iter(&rbio->bio, &bvec_iter, bytes);
-
-		ret = btree_trans_too_many_iters(trans);
-		if (ret)
-			goto err;
 err:
 		if (ret &&
 		    !bch2_err_matches(ret, BCH_ERR_transaction_restart) &&

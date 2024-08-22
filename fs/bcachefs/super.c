@@ -543,6 +543,7 @@ static void __bch2_fs_free(struct bch_fs *c)
 	bch2_fs_fs_io_direct_exit(c);
 	bch2_fs_fs_io_buffered_exit(c);
 	bch2_fs_fsio_exit(c);
+	bch2_fs_vfs_exit(c);
 	bch2_fs_ec_exit(c);
 	bch2_fs_encryption_exit(c);
 	bch2_fs_nocow_locking_exit(c);
@@ -810,7 +811,6 @@ static struct bch_fs *bch2_fs_alloc(struct bch_sb *sb, struct bch_opts opts)
 
 	c->copy_gc_enabled		= 1;
 	c->rebalance.enabled		= 1;
-	c->promote_whole_extents	= true;
 
 	c->journal.flush_write_time	= &c->times[BCH_TIME_journal_flush_write];
 	c->journal.noflush_write_time	= &c->times[BCH_TIME_journal_noflush_write];
@@ -926,6 +926,7 @@ static struct bch_fs *bch2_fs_alloc(struct bch_sb *sb, struct bch_opts opts)
 	    bch2_fs_encryption_init(c) ?:
 	    bch2_fs_compress_init(c) ?:
 	    bch2_fs_ec_init(c) ?:
+	    bch2_fs_vfs_init(c) ?:
 	    bch2_fs_fsio_init(c) ?:
 	    bch2_fs_fs_io_buffered_init(c) ?:
 	    bch2_fs_fs_io_direct_init(c);

@@ -29,7 +29,7 @@ static int exfat_cont_expand(struct inode *inode, loff_t size)
 	if (ret)
 		return ret;
 
-	num_clusters = EXFAT_B_TO_CLU_ROUND_UP(ei->i_size_ondisk, sbi);
+	num_clusters = EXFAT_B_TO_CLU(exfat_ondisk_size(inode), sbi);
 	new_num_clusters = EXFAT_B_TO_CLU_ROUND_UP(size, sbi);
 
 	if (new_num_clusters == num_clusters)
@@ -74,8 +74,6 @@ out:
 	/* Expanded range not zeroed, do not update valid_size */
 	i_size_write(inode, size);
 
-	ei->i_size_aligned = round_up(size, sb->s_blocksize);
-	ei->i_size_ondisk = ei->i_size_aligned;
 	inode->i_blocks = round_up(size, sbi->cluster_size) >> 9;
 	mark_inode_dirty(inode);
 
@@ -159,7 +157,7 @@ int __exfat_truncate(struct inode *inode)
 	exfat_set_volume_dirty(sb);
 
 	num_clusters_new = EXFAT_B_TO_CLU_ROUND_UP(i_size_read(inode), sbi);
-	num_clusters_phys = EXFAT_B_TO_CLU_ROUND_UP(ei->i_size_ondisk, sbi);
+	num_clusters_phys = EXFAT_B_TO_CLU(exfat_ondisk_size(inode), sbi);
 
 	exfat_chain_set(&clu, ei->start_clu, num_clusters_phys, ei->flags);
 
@@ -245,8 +243,6 @@ void exfat_truncate(struct inode *inode)
 	struct super_block *sb = inode->i_sb;
 	struct exfat_sb_info *sbi = EXFAT_SB(sb);
 	struct exfat_inode_info *ei = EXFAT_I(inode);
-	unsigned int blocksize = i_blocksize(inode);
-	loff_t aligned_size;
 	int err;
 
 	mutex_lock(&sbi->s_lock);
@@ -264,17 +260,6 @@ void exfat_truncate(struct inode *inode)
 
 	inode->i_blocks = round_up(i_size_read(inode), sbi->cluster_size) >> 9;
 write_size:
-	aligned_size = i_size_read(inode);
-	if (aligned_size & (blocksize - 1)) {
-		aligned_size |= (blocksize - 1);
-		aligned_size++;
-	}
-
-	if (ei->i_size_ondisk > i_size_read(inode))
-		ei->i_size_ondisk = aligned_size;
-
-	if (ei->i_size_aligned > i_size_read(inode))
-		ei->i_size_aligned = aligned_size;
 	mutex_unlock(&sbi->s_lock);
 }
 
@@ -301,6 +286,9 @@ int exfat_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 	struct inode *inode = dentry->d_inode;
 	unsigned int ia_valid;
 	int error;
+
+	if (unlikely(exfat_forced_shutdown(inode->i_sb)))
+		return -EIO;
 
 	if ((attr->ia_valid & ATTR_SIZE) &&
 	    attr->ia_size > i_size_read(inode)) {
@@ -485,6 +473,19 @@ static int exfat_ioctl_fitrim(struct inode *inode, unsigned long arg)
 	return 0;
 }
 
+static int exfat_ioctl_shutdown(struct super_block *sb, unsigned long arg)
+{
+	u32 flags;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (get_user(flags, (__u32 __user *)arg))
+		return -EFAULT;
+
+	return exfat_force_shutdown(sb, flags);
+}
+
 long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(filp);
@@ -495,6 +496,8 @@ long exfat_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		return exfat_ioctl_get_attributes(inode, user_attr);
 	case FAT_IOCTL_SET_ATTRIBUTES:
 		return exfat_ioctl_set_attributes(filp, user_attr);
+	case EXFAT_IOC_SHUTDOWN:
+		return exfat_ioctl_shutdown(inode->i_sb, arg);
 	case FITRIM:
 		return exfat_ioctl_fitrim(inode, arg);
 	default:
@@ -514,6 +517,9 @@ int exfat_file_fsync(struct file *filp, loff_t start, loff_t end, int datasync)
 {
 	struct inode *inode = filp->f_mapping->host;
 	int err;
+
+	if (unlikely(exfat_forced_shutdown(inode->i_sb)))
+		return -EIO;
 
 	err = __generic_file_fsync(filp, start, end, datasync);
 	if (err)
@@ -535,20 +541,20 @@ static int exfat_file_zeroed_range(struct file *file, loff_t start, loff_t end)
 
 	while (start < end) {
 		u32 zerofrom, len;
-		struct page *page = NULL;
+		struct folio *folio;
 
 		zerofrom = start & (PAGE_SIZE - 1);
 		len = PAGE_SIZE - zerofrom;
 		if (start + len > end)
 			len = end - start;
 
-		err = ops->write_begin(file, mapping, start, len, &page, NULL);
+		err = ops->write_begin(file, mapping, start, len, &folio, NULL);
 		if (err)
 			goto out;
 
-		zero_user_segment(page, zerofrom, zerofrom + len);
+		folio_zero_range(folio, offset_in_folio(folio, start), len);
 
-		err = ops->write_end(file, mapping, start, len, len, page, NULL);
+		err = ops->write_end(file, mapping, start, len, len, folio, NULL);
 		if (err < 0)
 			goto out;
 		start += len;

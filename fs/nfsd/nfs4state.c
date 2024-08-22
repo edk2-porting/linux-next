@@ -1663,9 +1663,7 @@ static void release_openowner(struct nfs4_openowner *oo)
 {
 	struct nfs4_ol_stateid *stp;
 	struct nfs4_client *clp = oo->oo_owner.so_client;
-	struct list_head reaplist;
-
-	INIT_LIST_HEAD(&reaplist);
+	LIST_HEAD(reaplist);
 
 	spin_lock(&clp->cl_lock);
 	unhash_openowner_locked(oo);
@@ -2369,9 +2367,8 @@ __destroy_client(struct nfs4_client *clp)
 	int i;
 	struct nfs4_openowner *oo;
 	struct nfs4_delegation *dp;
-	struct list_head reaplist;
+	LIST_HEAD(reaplist);
 
-	INIT_LIST_HEAD(&reaplist);
 	spin_lock(&state_lock);
 	while (!list_empty(&clp->cl_delegations)) {
 		dp = list_entry(clp->cl_delegations.next, struct nfs4_delegation, dl_perclnt);
@@ -2692,7 +2689,7 @@ static int client_info_show(struct seq_file *m, void *v)
 			clp->cl_nii_time.tv_sec, clp->cl_nii_time.tv_nsec);
 	}
 	seq_printf(m, "callback state: %s\n", cb_state2str(clp->cl_cb_state));
-	seq_printf(m, "callback address: %pISpc\n", &clp->cl_cb_conn.cb_addr);
+	seq_printf(m, "callback address: \"%pISpc\"\n", &clp->cl_cb_conn.cb_addr);
 	seq_printf(m, "admin-revoked states: %d\n",
 		   atomic_read(&clp->cl_admin_revoked));
 	drop_client(clp);
@@ -5274,11 +5271,8 @@ static bool nfsd_breaker_owns_lease(struct file_lease *fl)
 	struct svc_rqst *rqst;
 	struct nfs4_client *clp;
 
-	if (!i_am_nfsd())
-		return false;
-	rqst = kthread_data(current);
-	/* Note rq_prog == NFS_ACL_PROGRAM is also possible: */
-	if (rqst->rq_prog != NFS_PROGRAM || rqst->rq_vers < 4)
+	rqst = nfsd_current_rqst();
+	if (!nfsd_v4client(rqst))
 		return false;
 	clp = *(rqst->rq_lease_breaker);
 	return dl->dl_stid.sc_client == clp;
@@ -6268,7 +6262,6 @@ void nfsd4_ssc_init_umount_work(struct nfsd_net *nn)
 	INIT_LIST_HEAD(&nn->nfsd_ssc_mount_list);
 	init_waitqueue_head(&nn->nfsd_ssc_waitq);
 }
-EXPORT_SYMBOL_GPL(nfsd4_ssc_init_umount_work);
 
 /*
  * This is called when nfsd is being shutdown, after all inter_ssc
@@ -6616,9 +6609,8 @@ deleg_reaper(struct nfsd_net *nn)
 {
 	struct list_head *pos, *next;
 	struct nfs4_client *clp;
-	struct list_head cblist;
+	LIST_HEAD(cblist);
 
-	INIT_LIST_HEAD(&cblist);
 	spin_lock(&nn->client_lock);
 	list_for_each_safe(pos, next, &nn->client_lru) {
 		clp = list_entry(pos, struct nfs4_client, cl_lru);
@@ -6644,7 +6636,6 @@ deleg_reaper(struct nfsd_net *nn)
 					cl_ra_cblist);
 		list_del_init(&clp->cl_ra_cblist);
 		clp->cl_ra->ra_keep = 0;
-		clp->cl_ra->ra_bmval[0] = BIT(RCA4_TYPE_MASK_RDATA_DLG);
 		clp->cl_ra->ra_bmval[0] = BIT(RCA4_TYPE_MASK_RDATA_DLG) |
 						BIT(RCA4_TYPE_MASK_WDATA_DLG);
 		trace_nfsd_cb_recall_any(clp->cl_ra);
@@ -6889,7 +6880,8 @@ nfs4_check_file(struct svc_rqst *rqstp, struct svc_fh *fhp, struct nfs4_stid *s,
 
 	nf = nfs4_find_file(s, flags);
 	if (nf) {
-		status = nfsd_permission(rqstp, fhp->fh_export, fhp->fh_dentry,
+		status = nfsd_permission(&rqstp->rq_cred,
+					 fhp->fh_export, fhp->fh_dentry,
 				acc | NFSD_MAY_OWNER_OVERRIDE);
 		if (status) {
 			nfsd_file_put(nf);
@@ -7020,11 +7012,7 @@ nfs4_preprocess_stateid_op(struct svc_rqst *rqstp,
 		*nfp = NULL;
 
 	if (ZERO_STATEID(stateid) || ONE_STATEID(stateid)) {
-		if (cstid)
-			status = nfserr_bad_stateid;
-		else
-			status = check_special_stateids(net, fhp, stateid,
-									flags);
+		status = check_special_stateids(net, fhp, stateid, flags);
 		goto done;
 	}
 
