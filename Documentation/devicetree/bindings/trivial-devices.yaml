@@ -164,6 +164,8 @@ properties:
           - isil,isl29030
             # Intersil ISL68137 Digital Output Configurable PWM Controller
           - isil,isl68137
+            # Intersil ISL69260 PMBus Voltage Regulator
+          - isil,isl69260
             # Intersil ISL69269 PMBus Voltage Regulator
           - isil,isl69269
             # Intersil ISL76682 Ambient Light Sensor
@@ -412,6 +414,7 @@ properties:
           - ti,tps544b25
           - ti,tps544c20
           - ti,tps544c25
+          - ti,tps546d24
             # I2C Touch-Screen Controller
           - ti,tsc2003
             # Vicor Corporation Digital Supervisor
