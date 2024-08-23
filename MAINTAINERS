@@ -1014,6 +1014,13 @@ S:	Supported
 T:	git https://gitlab.freedesktop.org/agd5f/linux.git
 F:	drivers/gpu/drm/amd/display/
 
+AMD DISPLAY CORE - DML
+M:	Chaitanya Dhere <chaitanya.dhere@amd.com>
+M:	Jun Lei <jun.lei@amd.com>
+S:	Supported
+F:	drivers/gpu/drm/amd/display/dc/dml/
+F:	drivers/gpu/drm/amd/display/dc/dml2/
+
 AMD FAM15H PROCESSOR POWER MONITORING DRIVER
 M:	Huang Rui <ray.huang@amd.com>
 L:	linux-hwmon@vger.kernel.org
@@ -1762,6 +1769,7 @@ L:	dri-devel@lists.freedesktop.org
 S:	Supported
 T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	Documentation/gpu/panfrost.rst
+F:	drivers/gpu/drm/ci/xfails/panfrost*
 F:	drivers/gpu/drm/panfrost/
 F:	include/uapi/drm/panfrost_drm.h
 
@@ -6667,6 +6675,7 @@ F:	drivers/dma-buf/dma-heap.c
 F:	drivers/dma-buf/heaps/*
 F:	include/linux/dma-heap.h
 F:	include/uapi/linux/dma-heap.h
+F:	tools/testing/selftests/dmabuf-heaps/
 
 DMC FREQUENCY DRIVER FOR SAMSUNG EXYNOS5422
 M:	Lukasz Luba <lukasz.luba@arm.com>
@@ -10973,6 +10982,7 @@ T:	git https://gitlab.freedesktop.org/drm/misc/kernel.git
 F:	Documentation/devicetree/bindings/gpu/img,powervr-rogue.yaml
 F:	Documentation/devicetree/bindings/gpu/img,powervr-sgx.yaml
 F:	Documentation/gpu/imagination/
+F:	drivers/gpu/drm/ci/xfails/powervr*
 F:	drivers/gpu/drm/imagination/
 F:	include/uapi/drm/pvr_drm.h
 
