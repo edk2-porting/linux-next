@@ -96,6 +96,13 @@ properties:
           - const: coolpi,pi-cm5
           - const: rockchip,rk3588
 
+      - description: Cool Pi CM5 GenBook
+        items:
+          - enum:
+              - coolpi,pi-cm5-genbook
+          - const: coolpi,pi-cm5
+          - const: rockchip,rk3588
+
       - description: Cool Pi 4 Model B
         items:
           - const: coolpi,pi-4b
@@ -146,6 +153,12 @@ properties:
         items:
           - const: engicam,px30-core-edimm2.2
           - const: engicam,px30-core
+          - const: rockchip,px30
+
+      - description: Firefly Core-PX30-JD4 on MB-JD4-PX30 baseboard
+        items:
+          - const: firefly,px30-jd4-core-mb
+          - const: firefly,px30-jd4-core
           - const: rockchip,px30
 
       - description: Firefly Firefly-RK3288
@@ -216,6 +229,7 @@ properties:
               - friendlyarm,nanopi-r2c
               - friendlyarm,nanopi-r2c-plus
               - friendlyarm,nanopi-r2s
+              - friendlyarm,nanopi-r2s-plus
           - const: rockchip,rk3328
 
       - description: FriendlyElec NanoPi4 series boards
