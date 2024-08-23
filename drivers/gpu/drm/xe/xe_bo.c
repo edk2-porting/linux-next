@@ -396,6 +396,14 @@ static struct ttm_tt *xe_ttm_tt_create(struct ttm_buffer_object *ttm_bo,
 		caching = ttm_uncached;
 	}
 
+	/*
+	 * If the device can support gpu clear system pages then set proper ttm
+	 * flag. Zeroed pages are only required for ttm_bo_type_device so
+	 * unwanted data is not leaked to userspace.
+	 */
+	if (ttm_bo->type == ttm_bo_type_device && xe->mem.gpu_page_clear_sys)
+		page_flags |= TTM_TT_FLAG_CLEARED_ON_FREE;
+
 	err = ttm_tt_init(&tt->ttm, &bo->ttm, page_flags, caching, extra_pages);
 	if (err) {
 		kfree(tt);
@@ -416,6 +424,10 @@ static int xe_ttm_tt_populate(struct ttm_device *ttm_dev, struct ttm_tt *tt,
 	 */
 	if (tt->page_flags & TTM_TT_FLAG_EXTERNAL)
 		return 0;
+
+	/* Clear TTM_TT_FLAG_ZERO_ALLOC when GPU is set to clear system pages */
+	if (tt->page_flags & TTM_TT_FLAG_CLEARED_ON_FREE)
+		tt->page_flags &= ~TTM_TT_FLAG_ZERO_ALLOC;
 
 	err = ttm_pool_alloc(&ttm_dev->pool, tt, ctx);
 	if (err)
@@ -659,7 +671,15 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	bool needs_clear;
 	bool handle_system_ccs = (!IS_DGFX(xe) && xe_bo_needs_ccs_pages(bo) &&
 				  ttm && ttm_tt_is_populated(ttm)) ? true : false;
+	bool clear_system_pages;
 	int ret = 0;
+
+	/*
+	 * Clear TTM_TT_FLAG_CLEARED_ON_FREE on bo creation path when
+	 * moving to system as the bo doesn't have dma_mapping.
+	 */
+	if (!old_mem && ttm && !ttm_tt_is_populated(ttm))
+		ttm->page_flags &= ~TTM_TT_FLAG_CLEARED_ON_FREE;
 
 	/* Bo creation path, moving to system or TT. */
 	if ((!old_mem && ttm) && !handle_system_ccs) {
@@ -683,8 +703,10 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 	move_lacks_source = handle_system_ccs ? (!bo->ccs_cleared)  :
 						(!mem_type_is_vram(old_mem_type) && !tt_has_data);
 
+	clear_system_pages = ttm && (ttm->page_flags & TTM_TT_FLAG_CLEARED_ON_FREE);
 	needs_clear = (ttm && ttm->page_flags & TTM_TT_FLAG_ZERO_ALLOC) ||
-		(!ttm && ttm_bo->type == ttm_bo_type_device);
+		(!ttm && ttm_bo->type == ttm_bo_type_device) ||
+		clear_system_pages;
 
 	if (new_mem->mem_type == XE_PL_TT) {
 		ret = xe_tt_map_sg(ttm);
@@ -793,8 +815,16 @@ static int xe_bo_move(struct ttm_buffer_object *ttm_bo, bool evict,
 			}
 		}
 	} else {
-		if (move_lacks_source)
-			fence = xe_migrate_clear(migrate, bo, new_mem);
+		if (move_lacks_source) {
+			u32 flags = 0;
+
+			if (mem_type_is_vram(new_mem->mem_type) || clear_system_pages)
+				flags |= XE_MIGRATE_CLEAR_FLAG_FULL;
+			else if (handle_system_ccs)
+				flags |= XE_MIGRATE_CLEAR_FLAG_CCS_DATA;
+
+			fence = xe_migrate_clear(migrate, bo, new_mem, flags);
+		}
 		else
 			fence = xe_migrate_copy(migrate, bo, bo, old_mem,
 						new_mem, handle_system_ccs);
@@ -1090,7 +1120,7 @@ static void xe_ttm_bo_destroy(struct ttm_buffer_object *ttm_bo)
 
 	xe_assert(xe, list_empty(&ttm_bo->base.gpuva.list));
 
-	if (bo->ggtt_node.size)
+	if (bo->ggtt_node && bo->ggtt_node->base.size)
 		xe_ggtt_remove_bo(bo->tile->mem.ggtt, bo);
 
 #ifdef CONFIG_PROC_FS
@@ -1491,11 +1521,10 @@ struct xe_bo *xe_bo_create_locked(struct xe_device *xe, struct xe_tile *tile,
 struct xe_bo *xe_bo_create_user(struct xe_device *xe, struct xe_tile *tile,
 				struct xe_vm *vm, size_t size,
 				u16 cpu_caching,
-				enum ttm_bo_type type,
 				u32 flags)
 {
 	struct xe_bo *bo = __xe_bo_create_locked(xe, tile, vm, size, 0, ~0ULL,
-						 cpu_caching, type,
+						 cpu_caching, ttm_bo_type_device,
 						 flags | XE_BO_FLAG_USER);
 	if (!IS_ERR(bo))
 		xe_bo_unlock_vm_held(bo);
@@ -1576,7 +1605,7 @@ struct xe_bo *xe_bo_create_from_data(struct xe_device *xe, struct xe_tile *tile,
 	return bo;
 }
 
-static void __xe_bo_unpin_map_no_vm(struct drm_device *drm, void *arg)
+static void __xe_bo_unpin_map_no_vm(void *arg)
 {
 	xe_bo_unpin_map_no_vm(arg);
 }
@@ -1591,7 +1620,7 @@ struct xe_bo *xe_managed_bo_create_pin_map(struct xe_device *xe, struct xe_tile 
 	if (IS_ERR(bo))
 		return bo;
 
-	ret = drmm_add_action_or_reset(&xe->drm, __xe_bo_unpin_map_no_vm, bo);
+	ret = devm_add_action_or_reset(xe->drm.dev, __xe_bo_unpin_map_no_vm, bo);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -1639,7 +1668,7 @@ int xe_managed_bo_reinit_in_vram(struct xe_device *xe, struct xe_tile *tile, str
 	if (IS_ERR(bo))
 		return PTR_ERR(bo);
 
-	drmm_release_action(&xe->drm, __xe_bo_unpin_map_no_vm, *src);
+	devm_release_action(xe->drm.dev, __xe_bo_unpin_map_no_vm, *src);
 	*src = bo;
 
 	return 0;
@@ -2019,7 +2048,7 @@ int xe_gem_create_ioctl(struct drm_device *dev, void *data,
 	}
 
 	bo = xe_bo_create_user(xe, NULL, vm, args->size, args->cpu_caching,
-			       ttm_bo_type_device, bo_flags);
+			       bo_flags);
 
 	if (vm)
 		xe_vm_unlock(vm);
@@ -2325,7 +2354,6 @@ int xe_bo_dumb_create(struct drm_file *file_priv,
 
 	bo = xe_bo_create_user(xe, NULL, NULL, args->size,
 			       DRM_XE_GEM_CPU_CACHING_WC,
-			       ttm_bo_type_device,
 			       XE_BO_FLAG_VRAM_IF_DGFX(xe_device_get_root_tile(xe)) |
 			       XE_BO_FLAG_SCANOUT |
 			       XE_BO_FLAG_NEEDS_CPU_ACCESS);
