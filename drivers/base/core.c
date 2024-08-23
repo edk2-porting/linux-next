@@ -573,7 +573,11 @@ static int devlink_add_symlinks(struct device *dev)
 	len = max(strlen(dev_bus_name(sup)) + strlen(dev_name(sup)),
 		  strlen(dev_bus_name(con)) + strlen(dev_name(con)));
 	len += strlen(":");
-	len += strlen("supplier:") + 1;
+	/*
+	 * we kzalloc() memory for symlink name of both supplier and
+	 * consumer, so explicitly take into account both prefix.
+	 */
+	len += max(strlen("supplier:"), strlen("consumer:")) + 1;
 	buf = kzalloc(len, GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
@@ -624,7 +628,7 @@ static void devlink_remove_symlinks(struct device *dev)
 	len = max(strlen(dev_bus_name(sup)) + strlen(dev_name(sup)),
 		  strlen(dev_bus_name(con)) + strlen(dev_name(con)));
 	len += strlen(":");
-	len += strlen("supplier:") + 1;
+	len += max(strlen("supplier:"), strlen("consumer:")) + 1;
 	buf = kzalloc(len, GFP_KERNEL);
 	if (!buf) {
 		WARN(1, "Unable to properly free device link symlinks!\n");
@@ -3170,7 +3174,7 @@ void device_initialize(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(device_initialize);
 
-struct kobject *virtual_device_parent(struct device *dev)
+struct kobject *virtual_device_parent(void)
 {
 	static struct kobject *virtual_dir = NULL;
 
@@ -3248,7 +3252,7 @@ static struct kobject *get_device_parent(struct device *dev,
 		 * in a "glue" directory to prevent namespace collisions.
 		 */
 		if (parent == NULL)
-			parent_kobj = virtual_device_parent(dev);
+			parent_kobj = virtual_device_parent();
 		else if (parent->class && !dev->class->ns_type) {
 			subsys_put(sp);
 			return &parent->kobj;
@@ -4515,9 +4519,11 @@ EXPORT_SYMBOL_GPL(device_destroy);
  */
 int device_rename(struct device *dev, const char *new_name)
 {
+	struct subsys_private *sp = NULL;
 	struct kobject *kobj = &dev->kobj;
 	char *old_device_name = NULL;
 	int error;
+	bool is_link_renamed = false;
 
 	dev = get_device(dev);
 	if (!dev)
@@ -4532,7 +4538,7 @@ int device_rename(struct device *dev, const char *new_name)
 	}
 
 	if (dev->class) {
-		struct subsys_private *sp = class_to_subsys(dev->class);
+		sp = class_to_subsys(dev->class);
 
 		if (!sp) {
 			error = -EINVAL;
@@ -4541,16 +4547,19 @@ int device_rename(struct device *dev, const char *new_name)
 
 		error = sysfs_rename_link_ns(&sp->subsys.kobj, kobj, old_device_name,
 					     new_name, kobject_namespace(kobj));
-		subsys_put(sp);
 		if (error)
 			goto out;
+
+		is_link_renamed = true;
 	}
 
 	error = kobject_rename(kobj, new_name);
-	if (error)
-		goto out;
-
 out:
+	if (error && is_link_renamed)
+		sysfs_rename_link_ns(&sp->subsys.kobj, kobj, new_name,
+				     old_device_name, kobject_namespace(kobj));
+	subsys_put(sp);
+
 	put_device(dev);
 
 	kfree(old_device_name);
