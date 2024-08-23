@@ -16,7 +16,6 @@ struct intel_step_info {
 	 * the expectation breaks gmd_to_intel_step().
 	 */
 	u8 graphics_step;	/* Represents the compute tile on Xe_HPC */
-	u8 display_step;
 	u8 media_step;
 	u8 basedie_step;
 };
@@ -78,6 +77,5 @@ enum intel_step {
 
 void intel_step_init(struct drm_i915_private *i915);
 const char *intel_step_name(enum intel_step step);
-const char *intel_display_step_name(struct drm_i915_private *i915);
 
 #endif /* __INTEL_STEP_H__ */
