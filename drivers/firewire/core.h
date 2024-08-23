@@ -7,7 +7,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/fs.h>
 #include <linux/list.h>
-#include <linux/idr.h>
+#include <linux/xarray.h>
 #include <linux/mm_types.h>
 #include <linux/rwsem.h>
 #include <linux/slab.h>
@@ -133,7 +133,7 @@ void fw_cdev_handle_phy_packet(struct fw_card *card, struct fw_packet *p);
 /* -device */
 
 extern struct rw_semaphore fw_device_rwsem;
-extern struct idr fw_device_idr;
+extern struct xarray fw_device_xa;
 extern int fw_cdev_major;
 
 static inline struct fw_device *fw_device_get(struct fw_device *device)
@@ -183,7 +183,8 @@ struct fw_node {
 			 * local node to this node. */
 	u8 max_depth:4;	/* Maximum depth to any leaf node */
 	u8 max_hops:4;	/* Max hops in this sub tree */
-	refcount_t ref_count;
+
+	struct kref kref;
 
 	/* For serializing node topology into a list. */
 	struct list_head link;
@@ -196,15 +197,21 @@ struct fw_node {
 
 static inline struct fw_node *fw_node_get(struct fw_node *node)
 {
-	refcount_inc(&node->ref_count);
+	kref_get(&node->kref);
 
 	return node;
 }
 
+static void release_node(struct kref *kref)
+{
+	struct fw_node *node = container_of(kref, struct fw_node, kref);
+
+	kfree(node);
+}
+
 static inline void fw_node_put(struct fw_node *node)
 {
-	if (refcount_dec_and_test(&node->ref_count))
-		kfree(node);
+	kref_put(&node->kref, release_node);
 }
 
 void fw_core_handle_bus_reset(struct fw_card *card, int node_id,

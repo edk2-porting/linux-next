@@ -50,7 +50,6 @@ static u32 cond_le32_to_cpu(__le32 value, bool has_be_header_quirk);
 #define CREATE_TRACE_POINTS
 #include <trace/events/firewire_ohci.h>
 
-#define ohci_info(ohci, f, args...)	dev_info(ohci->card.device, f, ##args)
 #define ohci_notice(ohci, f, args...)	dev_notice(ohci->card.device, f, ##args)
 #define ohci_err(ohci, f, args...)	dev_err(ohci->card.device, f, ##args)
 
@@ -77,7 +76,7 @@ struct descriptor {
 	__le32 branch_address;
 	__le16 res_count;
 	__le16 transfer_status;
-} __attribute__((aligned(16)));
+} __aligned(16);
 
 #define CONTROL_SET(regs)	(regs)
 #define CONTROL_CLEAR(regs)	((regs) + 4)
@@ -162,13 +161,6 @@ struct context {
 	struct tasklet_struct tasklet;
 };
 
-#define IT_HEADER_SY(v)          ((v) <<  0)
-#define IT_HEADER_TCODE(v)       ((v) <<  4)
-#define IT_HEADER_CHANNEL(v)     ((v) <<  8)
-#define IT_HEADER_TAG(v)         ((v) << 14)
-#define IT_HEADER_SPEED(v)       ((v) << 16)
-#define IT_HEADER_DATA_LENGTH(v) ((v) << 16)
-
 struct iso_context {
 	struct fw_iso_context base;
 	struct context context;
@@ -182,7 +174,7 @@ struct iso_context {
 	u8 tags;
 };
 
-#define CONFIG_ROM_SIZE 1024
+#define CONFIG_ROM_SIZE		(CSR_CONFIG_ROM_END - CSR_CONFIG_ROM)
 
 struct fw_ohci {
 	struct fw_card card;
@@ -264,7 +256,6 @@ static inline struct fw_ohci *fw_ohci(struct fw_card *card)
 #define OHCI1394_REGISTER_SIZE		0x800
 #define OHCI1394_PCI_HCI_Control	0x40
 #define SELF_ID_BUF_SIZE		0x800
-#define OHCI_TCODE_PHY_PACKET		0x0e
 #define OHCI_VERSION_1_1		0x010010
 
 static char ohci_driver_name[] = KBUILD_MODNAME;
@@ -532,20 +523,28 @@ static const char *evts[] = {
 	[0x1e] = "ack_type_error",	[0x1f] = "-reserved-",
 	[0x20] = "pending/cancelled",
 };
-static const char *tcodes[] = {
-	[0x0] = "QW req",		[0x1] = "BW req",
-	[0x2] = "W resp",		[0x3] = "-reserved-",
-	[0x4] = "QR req",		[0x5] = "BR req",
-	[0x6] = "QR resp",		[0x7] = "BR resp",
-	[0x8] = "cycle start",		[0x9] = "Lk req",
-	[0xa] = "async stream packet",	[0xb] = "Lk resp",
-	[0xc] = "-reserved-",		[0xd] = "-reserved-",
-	[0xe] = "link internal",	[0xf] = "-reserved-",
-};
 
 static void log_ar_at_event(struct fw_ohci *ohci,
 			    char dir, int speed, u32 *header, int evt)
 {
+	static const char *const tcodes[] = {
+		[TCODE_WRITE_QUADLET_REQUEST]	= "QW req",
+		[TCODE_WRITE_BLOCK_REQUEST]	= "BW req",
+		[TCODE_WRITE_RESPONSE]		= "W resp",
+		[0x3]				= "-reserved-",
+		[TCODE_READ_QUADLET_REQUEST]	= "QR req",
+		[TCODE_READ_BLOCK_REQUEST]	= "BR req",
+		[TCODE_READ_QUADLET_RESPONSE]	= "QR resp",
+		[TCODE_READ_BLOCK_RESPONSE]	= "BR resp",
+		[TCODE_CYCLE_START]		= "cycle start",
+		[TCODE_LOCK_REQUEST]		= "Lk req",
+		[TCODE_STREAM_DATA]		= "async stream packet",
+		[TCODE_LOCK_RESPONSE]		= "Lk resp",
+		[0xc]				= "-reserved-",
+		[0xd]				= "-reserved-",
+		[TCODE_LINK_INTERNAL]		= "link internal",
+		[0xf]				= "-reserved-",
+	};
 	int tcode = async_header_get_tcode(header);
 	char specific[12];
 
@@ -586,7 +585,7 @@ static void log_ar_at_event(struct fw_ohci *ohci,
 		ohci_notice(ohci, "A%c %s, %s\n",
 			    dir, evts[evt], tcodes[tcode]);
 		break;
-	case 0xe:
+	case TCODE_LINK_INTERNAL:
 		ohci_notice(ohci, "A%c %s, PHY %08x %08x\n",
 			    dir, evts[evt], header[1], header[2]);
 		break;
@@ -713,26 +712,20 @@ static int read_paged_phy_reg(struct fw_ohci *ohci, int page, int addr)
 static int ohci_read_phy_reg(struct fw_card *card, int addr)
 {
 	struct fw_ohci *ohci = fw_ohci(card);
-	int ret;
 
-	mutex_lock(&ohci->phy_reg_mutex);
-	ret = read_phy_reg(ohci, addr);
-	mutex_unlock(&ohci->phy_reg_mutex);
+	guard(mutex)(&ohci->phy_reg_mutex);
 
-	return ret;
+	return read_phy_reg(ohci, addr);
 }
 
 static int ohci_update_phy_reg(struct fw_card *card, int addr,
 			       int clear_bits, int set_bits)
 {
 	struct fw_ohci *ohci = fw_ohci(card);
-	int ret;
 
-	mutex_lock(&ohci->phy_reg_mutex);
-	ret = update_phy_reg(ohci, addr, clear_bits, set_bits);
-	mutex_unlock(&ohci->phy_reg_mutex);
+	guard(mutex)(&ohci->phy_reg_mutex);
 
-	return ret;
+	return update_phy_reg(ohci, addr, clear_bits, set_bits);
 }
 
 static inline dma_addr_t ar_buffer_bus(struct ar_context *ctx, unsigned int i)
@@ -939,7 +932,7 @@ static __le32 *handle_ar_packet(struct ar_context *ctx, __le32 *buffer)
 
 	case TCODE_WRITE_RESPONSE:
 	case TCODE_READ_QUADLET_REQUEST:
-	case OHCI_TCODE_PHY_PACKET:
+	case TCODE_LINK_INTERNAL:
 		p.header_length = 12;
 		p.payload_length = 0;
 		break;
@@ -967,7 +960,7 @@ static __le32 *handle_ar_packet(struct ar_context *ctx, __le32 *buffer)
 	 * Several controllers, notably from NEC and VIA, forget to
 	 * write ack_complete status at PHY packet reception.
 	 */
-	if (evt == OHCI1394_evt_no_status && tcode == OHCI1394_phy_tcode)
+	if (evt == OHCI1394_evt_no_status && tcode == TCODE_LINK_INTERNAL)
 		p.ack = ACK_COMPLETE;
 
 	/*
@@ -1179,13 +1172,11 @@ static void context_tasklet(unsigned long data)
 			break;
 
 		if (old_desc != desc) {
-			/* If we've advanced to the next buffer, move the
-			 * previous buffer to the free list. */
-			unsigned long flags;
+			// If we've advanced to the next buffer, move the previous buffer to the
+			// free list.
 			old_desc->used = 0;
-			spin_lock_irqsave(&ctx->ohci->lock, flags);
+			guard(spinlock_irqsave)(&ctx->ohci->lock);
 			list_move_tail(&old_desc->list, &ctx->buffer_list);
-			spin_unlock_irqrestore(&ctx->ohci->lock, flags);
 		}
 		ctx->last = last;
 	}
@@ -1402,12 +1393,6 @@ static int at_context_queue_packet(struct context *ctx,
 	d[0].control   = cpu_to_le16(DESCRIPTOR_KEY_IMMEDIATE);
 	d[0].res_count = cpu_to_le16(packet->timestamp);
 
-	/*
-	 * The DMA format for asynchronous link packets is different
-	 * from the IEEE1394 layout, so shift the fields around
-	 * accordingly.
-	 */
-
 	tcode = async_header_get_tcode(packet->header);
 	header = (__le32 *) &d[1];
 	switch (tcode) {
@@ -1420,11 +1405,21 @@ static int at_context_queue_packet(struct context *ctx,
 	case TCODE_READ_BLOCK_RESPONSE:
 	case TCODE_LOCK_REQUEST:
 	case TCODE_LOCK_RESPONSE:
-		header[0] = cpu_to_le32((packet->header[0] & 0xffff) |
-					(packet->speed << 16));
-		header[1] = cpu_to_le32((packet->header[1] & 0xffff) |
-					(packet->header[0] & 0xffff0000));
-		header[2] = cpu_to_le32(packet->header[2]);
+		ohci1394_at_data_set_src_bus_id(header, false);
+		ohci1394_at_data_set_speed(header, packet->speed);
+		ohci1394_at_data_set_tlabel(header, async_header_get_tlabel(packet->header));
+		ohci1394_at_data_set_retry(header, async_header_get_retry(packet->header));
+		ohci1394_at_data_set_tcode(header, tcode);
+
+		ohci1394_at_data_set_destination_id(header,
+						    async_header_get_destination(packet->header));
+
+		if (ctx == &ctx->ohci->at_response_ctx) {
+			ohci1394_at_data_set_rcode(header, async_header_get_rcode(packet->header));
+		} else {
+			ohci1394_at_data_set_destination_offset(header,
+							async_header_get_offset(packet->header));
+		}
 
 		if (tcode_is_block_packet(tcode))
 			header[3] = cpu_to_le32(packet->header[3]);
@@ -1433,10 +1428,10 @@ static int at_context_queue_packet(struct context *ctx,
 
 		d[0].req_count = cpu_to_le16(packet->header_length);
 		break;
-
 	case TCODE_LINK_INTERNAL:
-		header[0] = cpu_to_le32((OHCI1394_phy_tcode << 4) |
-					(packet->speed << 16));
+		ohci1394_at_data_set_speed(header, packet->speed);
+		ohci1394_at_data_set_tcode(header, TCODE_LINK_INTERNAL);
+
 		header[1] = cpu_to_le32(packet->header[1]);
 		header[2] = cpu_to_le32(packet->header[2]);
 		d[0].req_count = cpu_to_le16(12);
@@ -1446,9 +1441,14 @@ static int at_context_queue_packet(struct context *ctx,
 		break;
 
 	case TCODE_STREAM_DATA:
-		header[0] = cpu_to_le32((packet->header[0] & 0xffff) |
-					(packet->speed << 16));
-		header[1] = cpu_to_le32(packet->header[0] & 0xffff0000);
+		ohci1394_it_data_set_speed(header, packet->speed);
+		ohci1394_it_data_set_tag(header, isoc_header_get_tag(packet->header[0]));
+		ohci1394_it_data_set_channel(header, isoc_header_get_channel(packet->header[0]));
+		ohci1394_it_data_set_tcode(header, TCODE_STREAM_DATA);
+		ohci1394_it_data_set_sync(header, isoc_header_get_sy(packet->header[0]));
+
+		ohci1394_it_data_set_data_length(header, isoc_header_get_data_length(packet->header[0]));
+
 		d[0].req_count = cpu_to_le16(8);
 		break;
 
@@ -1873,13 +1873,15 @@ static int get_status_for_port(struct fw_ohci *ohci, int port_index,
 {
 	int reg;
 
-	mutex_lock(&ohci->phy_reg_mutex);
-	reg = write_phy_reg(ohci, 7, port_index);
-	if (reg >= 0)
+	scoped_guard(mutex, &ohci->phy_reg_mutex) {
+		reg = write_phy_reg(ohci, 7, port_index);
+		if (reg < 0)
+			return reg;
+
 		reg = read_phy_reg(ohci, 8);
-	mutex_unlock(&ohci->phy_reg_mutex);
-	if (reg < 0)
-		return reg;
+		if (reg < 0)
+			return reg;
+	}
 
 	switch (reg & 0x0f) {
 	case 0x06:
@@ -1917,29 +1919,36 @@ static int get_self_id_pos(struct fw_ohci *ohci, u32 self_id,
 	return i;
 }
 
-static bool initiated_reset(struct fw_ohci *ohci)
+static int detect_initiated_reset(struct fw_ohci *ohci, bool *is_initiated_reset)
 {
 	int reg;
-	int ret = false;
 
-	mutex_lock(&ohci->phy_reg_mutex);
-	reg = write_phy_reg(ohci, 7, 0xe0); /* Select page 7 */
-	if (reg >= 0) {
-		reg = read_phy_reg(ohci, 8);
-		reg |= 0x40;
-		reg = write_phy_reg(ohci, 8, reg); /* set PMODE bit */
-		if (reg >= 0) {
-			reg = read_phy_reg(ohci, 12); /* read register 12 */
-			if (reg >= 0) {
-				if ((reg & 0x08) == 0x08) {
-					/* bit 3 indicates "initiated reset" */
-					ret = true;
-				}
-			}
-		}
-	}
-	mutex_unlock(&ohci->phy_reg_mutex);
-	return ret;
+	guard(mutex)(&ohci->phy_reg_mutex);
+
+	// Select page 7
+	reg = write_phy_reg(ohci, 7, 0xe0);
+	if (reg < 0)
+		return reg;
+
+	reg = read_phy_reg(ohci, 8);
+	if (reg < 0)
+		return reg;
+
+	// set PMODE bit
+	reg |= 0x40;
+	reg = write_phy_reg(ohci, 8, reg);
+	if (reg < 0)
+		return reg;
+
+	// read register 12
+	reg = read_phy_reg(ohci, 12);
+	if (reg < 0)
+		return reg;
+
+	// bit 3 indicates "initiated reset"
+	*is_initiated_reset = !!((reg & 0x08) == 0x08);
+
+	return 0;
 }
 
 /*
@@ -1949,7 +1958,8 @@ static bool initiated_reset(struct fw_ohci *ohci)
  */
 static int find_and_insert_self_id(struct fw_ohci *ohci, int self_id_count)
 {
-	int reg, i, pos;
+	int reg, i, pos, err;
+	bool is_initiated_reset;
 	u32 self_id = 0;
 
 	// link active 1, speed 3, bridge 0, contender 1, more packets 0.
@@ -1978,7 +1988,6 @@ static int find_and_insert_self_id(struct fw_ohci *ohci, int self_id_count)
 
 	for (i = 0; i < 3; i++) {
 		enum phy_packet_self_id_port_status status;
-		int err;
 
 		err = get_status_for_port(ohci, i, &status);
 		if (err < 0)
@@ -1987,7 +1996,10 @@ static int find_and_insert_self_id(struct fw_ohci *ohci, int self_id_count)
 		self_id_sequence_set_port_status(&self_id, 1, i, status);
 	}
 
-	phy_packet_self_id_zero_set_initiated_reset(&self_id, initiated_reset(ohci));
+	err = detect_initiated_reset(ohci, &is_initiated_reset);
+	if (err < 0)
+		return err;
+	phy_packet_self_id_zero_set_initiated_reset(&self_id, is_initiated_reset);
 
 	pos = get_self_id_pos(ohci, self_id, self_id_count);
 	if (pos >= 0) {
@@ -2112,14 +2124,12 @@ static void bus_reset_work(struct work_struct *work)
 		return;
 	}
 
-	/* FIXME: Document how the locking works. */
-	spin_lock_irq(&ohci->lock);
-
-	ohci->generation = -1; /* prevent AT packet queueing */
-	context_stop(&ohci->at_request_ctx);
-	context_stop(&ohci->at_response_ctx);
-
-	spin_unlock_irq(&ohci->lock);
+	// FIXME: Document how the locking works.
+	scoped_guard(spinlock_irq, &ohci->lock) {
+		ohci->generation = -1; // prevent AT packet queueing
+		context_stop(&ohci->at_request_ctx);
+		context_stop(&ohci->at_response_ctx);
+	}
 
 	/*
 	 * Per OHCI 1.2 draft, clause 7.2.3.3, hardware may leave unsent
@@ -2129,52 +2139,41 @@ static void bus_reset_work(struct work_struct *work)
 	at_context_flush(&ohci->at_request_ctx);
 	at_context_flush(&ohci->at_response_ctx);
 
-	spin_lock_irq(&ohci->lock);
+	scoped_guard(spinlock_irq, &ohci->lock) {
+		ohci->generation = generation;
+		reg_write(ohci, OHCI1394_IntEventClear, OHCI1394_busReset);
+		reg_write(ohci, OHCI1394_IntMaskSet, OHCI1394_busReset);
 
-	ohci->generation = generation;
-	reg_write(ohci, OHCI1394_IntEventClear, OHCI1394_busReset);
-	reg_write(ohci, OHCI1394_IntMaskSet, OHCI1394_busReset);
+		if (ohci->quirks & QUIRK_RESET_PACKET)
+			ohci->request_generation = generation;
 
-	if (ohci->quirks & QUIRK_RESET_PACKET)
-		ohci->request_generation = generation;
+		// This next bit is unrelated to the AT context stuff but we have to do it under the
+		// spinlock also. If a new config rom was set up before this reset, the old one is
+		// now no longer in use and we can free it. Update the config rom pointers to point
+		// to the current config rom and clear the next_config_rom pointer so a new update
+		// can take place.
+		if (ohci->next_config_rom != NULL) {
+			if (ohci->next_config_rom != ohci->config_rom) {
+				free_rom      = ohci->config_rom;
+				free_rom_bus  = ohci->config_rom_bus;
+			}
+			ohci->config_rom      = ohci->next_config_rom;
+			ohci->config_rom_bus  = ohci->next_config_rom_bus;
+			ohci->next_config_rom = NULL;
 
-	/*
-	 * This next bit is unrelated to the AT context stuff but we
-	 * have to do it under the spinlock also.  If a new config rom
-	 * was set up before this reset, the old one is now no longer
-	 * in use and we can free it. Update the config rom pointers
-	 * to point to the current config rom and clear the
-	 * next_config_rom pointer so a new update can take place.
-	 */
-
-	if (ohci->next_config_rom != NULL) {
-		if (ohci->next_config_rom != ohci->config_rom) {
-			free_rom      = ohci->config_rom;
-			free_rom_bus  = ohci->config_rom_bus;
+			// Restore config_rom image and manually update config_rom registers.
+			// Writing the header quadlet will indicate that the config rom is ready,
+			// so we do that last.
+			reg_write(ohci, OHCI1394_BusOptions, be32_to_cpu(ohci->config_rom[2]));
+			ohci->config_rom[0] = ohci->next_header;
+			reg_write(ohci, OHCI1394_ConfigROMhdr, be32_to_cpu(ohci->next_header));
 		}
-		ohci->config_rom      = ohci->next_config_rom;
-		ohci->config_rom_bus  = ohci->next_config_rom_bus;
-		ohci->next_config_rom = NULL;
 
-		/*
-		 * Restore config_rom image and manually update
-		 * config_rom registers.  Writing the header quadlet
-		 * will indicate that the config rom is ready, so we
-		 * do that last.
-		 */
-		reg_write(ohci, OHCI1394_BusOptions,
-			  be32_to_cpu(ohci->config_rom[2]));
-		ohci->config_rom[0] = ohci->next_header;
-		reg_write(ohci, OHCI1394_ConfigROMhdr,
-			  be32_to_cpu(ohci->next_header));
+		if (param_remote_dma) {
+			reg_write(ohci, OHCI1394_PhyReqFilterHiSet, ~0);
+			reg_write(ohci, OHCI1394_PhyReqFilterLoSet, ~0);
+		}
 	}
-
-	if (param_remote_dma) {
-		reg_write(ohci, OHCI1394_PhyReqFilterHiSet, ~0);
-		reg_write(ohci, OHCI1394_PhyReqFilterLoSet, ~0);
-	}
-
-	spin_unlock_irq(&ohci->lock);
 
 	if (free_rom)
 		dmam_free_coherent(ohci->card.device, CONFIG_ROM_SIZE, free_rom, free_rom_bus);
@@ -2290,9 +2289,8 @@ static irqreturn_t irq_handler(int irq, void *data)
 		handle_dead_contexts(ohci);
 
 	if (event & OHCI1394_cycle64Seconds) {
-		spin_lock(&ohci->lock);
+		guard(spinlock)(&ohci->lock);
 		update_bus_time(ohci);
-		spin_unlock(&ohci->lock);
 	} else
 		flush_writes(ohci);
 
@@ -2617,33 +2615,26 @@ static int ohci_set_config_rom(struct fw_card *card,
 	if (next_config_rom == NULL)
 		return -ENOMEM;
 
-	spin_lock_irq(&ohci->lock);
+	scoped_guard(spinlock_irq, &ohci->lock) {
+		// If there is not an already pending config_rom update, push our new allocation
+		// into the ohci->next_config_rom and then mark the local variable as null so that
+		// we won't deallocate the new buffer.
+		//
+		// OTOH, if there is a pending config_rom update, just use that buffer with the new
+		// config_rom data, and let this routine free the unused DMA allocation.
+		if (ohci->next_config_rom == NULL) {
+			ohci->next_config_rom = next_config_rom;
+			ohci->next_config_rom_bus = next_config_rom_bus;
+			next_config_rom = NULL;
+		}
 
-	/*
-	 * If there is not an already pending config_rom update,
-	 * push our new allocation into the ohci->next_config_rom
-	 * and then mark the local variable as null so that we
-	 * won't deallocate the new buffer.
-	 *
-	 * OTOH, if there is a pending config_rom update, just
-	 * use that buffer with the new config_rom data, and
-	 * let this routine free the unused DMA allocation.
-	 */
+		copy_config_rom(ohci->next_config_rom, config_rom, length);
 
-	if (ohci->next_config_rom == NULL) {
-		ohci->next_config_rom = next_config_rom;
-		ohci->next_config_rom_bus = next_config_rom_bus;
-		next_config_rom = NULL;
+		ohci->next_header = config_rom[0];
+		ohci->next_config_rom[0] = 0;
+
+		reg_write(ohci, OHCI1394_ConfigROMmap, ohci->next_config_rom_bus);
 	}
-
-	copy_config_rom(ohci->next_config_rom, config_rom, length);
-
-	ohci->next_header = config_rom[0];
-	ohci->next_config_rom[0] = 0;
-
-	reg_write(ohci, OHCI1394_ConfigROMmap, ohci->next_config_rom_bus);
-
-	spin_unlock_irq(&ohci->lock);
 
 	/* If we didn't use the DMA allocation, delete it. */
 	if (next_config_rom != NULL) {
@@ -2713,7 +2704,6 @@ static int ohci_enable_phys_dma(struct fw_card *card,
 				int node_id, int generation)
 {
 	struct fw_ohci *ohci = fw_ohci(card);
-	unsigned long flags;
 	int n, ret = 0;
 
 	if (param_remote_dma)
@@ -2724,12 +2714,10 @@ static int ohci_enable_phys_dma(struct fw_card *card,
 	 * interrupt bit.  Clear physReqResourceAllBuses on bus reset.
 	 */
 
-	spin_lock_irqsave(&ohci->lock, flags);
+	guard(spinlock_irqsave)(&ohci->lock);
 
-	if (ohci->generation != generation) {
-		ret = -ESTALE;
-		goto out;
-	}
+	if (ohci->generation != generation)
+		return -ESTALE;
 
 	/*
 	 * Note, if the node ID contains a non-local bus ID, physical DMA is
@@ -2743,8 +2731,6 @@ static int ohci_enable_phys_dma(struct fw_card *card,
 		reg_write(ohci, OHCI1394_PhyReqFilterHiSet, 1 << (n - 32));
 
 	flush_writes(ohci);
- out:
-	spin_unlock_irqrestore(&ohci->lock, flags);
 
 	return ret;
 }
@@ -2752,7 +2738,6 @@ static int ohci_enable_phys_dma(struct fw_card *card,
 static u32 ohci_read_csr(struct fw_card *card, int csr_offset)
 {
 	struct fw_ohci *ohci = fw_ohci(card);
-	unsigned long flags;
 	u32 value;
 
 	switch (csr_offset) {
@@ -2776,16 +2761,14 @@ static u32 ohci_read_csr(struct fw_card *card, int csr_offset)
 		return get_cycle_time(ohci);
 
 	case CSR_BUS_TIME:
-		/*
-		 * We might be called just after the cycle timer has wrapped
-		 * around but just before the cycle64Seconds handler, so we
-		 * better check here, too, if the bus time needs to be updated.
-		 */
-		spin_lock_irqsave(&ohci->lock, flags);
-		value = update_bus_time(ohci);
-		spin_unlock_irqrestore(&ohci->lock, flags);
-		return value;
+	{
+		// We might be called just after the cycle timer has wrapped around but just before
+		// the cycle64Seconds handler, so we better check here, too, if the bus time needs
+		// to be updated.
 
+		guard(spinlock_irqsave)(&ohci->lock);
+		return update_bus_time(ohci);
+	}
 	case CSR_BUSY_TIMEOUT:
 		value = reg_read(ohci, OHCI1394_ATRetries);
 		return (value >> 4) & 0x0ffff00f;
@@ -2803,7 +2786,6 @@ static u32 ohci_read_csr(struct fw_card *card, int csr_offset)
 static void ohci_write_csr(struct fw_card *card, int csr_offset, u32 value)
 {
 	struct fw_ohci *ohci = fw_ohci(card);
-	unsigned long flags;
 
 	switch (csr_offset) {
 	case CSR_STATE_CLEAR:
@@ -2839,12 +2821,11 @@ static void ohci_write_csr(struct fw_card *card, int csr_offset, u32 value)
 		break;
 
 	case CSR_BUS_TIME:
-		spin_lock_irqsave(&ohci->lock, flags);
-		ohci->bus_time = (update_bus_time(ohci) & 0x40) |
-		                 (value & ~0x7f);
-		spin_unlock_irqrestore(&ohci->lock, flags);
+	{
+		guard(spinlock_irqsave)(&ohci->lock);
+		ohci->bus_time = (update_bus_time(ohci) & 0x40) | (value & ~0x7f);
 		break;
-
+	}
 	case CSR_BUSY_TIMEOUT:
 		value = (value & 0xf) | ((value & 0xf) << 4) |
 			((value & 0xf) << 8) | ((value & 0x0ffff000) << 4);
@@ -3090,54 +3071,52 @@ static struct fw_iso_context *ohci_allocate_iso_context(struct fw_card *card,
 	u32 *mask, regs;
 	int index, ret = -EBUSY;
 
-	spin_lock_irq(&ohci->lock);
+	scoped_guard(spinlock_irq, &ohci->lock) {
+		switch (type) {
+		case FW_ISO_CONTEXT_TRANSMIT:
+			mask     = &ohci->it_context_mask;
+			callback = handle_it_packet;
+			index    = ffs(*mask) - 1;
+			if (index >= 0) {
+				*mask &= ~(1 << index);
+				regs = OHCI1394_IsoXmitContextBase(index);
+				ctx  = &ohci->it_context_list[index];
+			}
+			break;
 
-	switch (type) {
-	case FW_ISO_CONTEXT_TRANSMIT:
-		mask     = &ohci->it_context_mask;
-		callback = handle_it_packet;
-		index    = ffs(*mask) - 1;
-		if (index >= 0) {
-			*mask &= ~(1 << index);
-			regs = OHCI1394_IsoXmitContextBase(index);
-			ctx  = &ohci->it_context_list[index];
+		case FW_ISO_CONTEXT_RECEIVE:
+			channels = &ohci->ir_context_channels;
+			mask     = &ohci->ir_context_mask;
+			callback = handle_ir_packet_per_buffer;
+			index    = *channels & 1ULL << channel ? ffs(*mask) - 1 : -1;
+			if (index >= 0) {
+				*channels &= ~(1ULL << channel);
+				*mask     &= ~(1 << index);
+				regs = OHCI1394_IsoRcvContextBase(index);
+				ctx  = &ohci->ir_context_list[index];
+			}
+			break;
+
+		case FW_ISO_CONTEXT_RECEIVE_MULTICHANNEL:
+			mask     = &ohci->ir_context_mask;
+			callback = handle_ir_buffer_fill;
+			index    = !ohci->mc_allocated ? ffs(*mask) - 1 : -1;
+			if (index >= 0) {
+				ohci->mc_allocated = true;
+				*mask &= ~(1 << index);
+				regs = OHCI1394_IsoRcvContextBase(index);
+				ctx  = &ohci->ir_context_list[index];
+			}
+			break;
+
+		default:
+			index = -1;
+			ret = -ENOSYS;
 		}
-		break;
 
-	case FW_ISO_CONTEXT_RECEIVE:
-		channels = &ohci->ir_context_channels;
-		mask     = &ohci->ir_context_mask;
-		callback = handle_ir_packet_per_buffer;
-		index    = *channels & 1ULL << channel ? ffs(*mask) - 1 : -1;
-		if (index >= 0) {
-			*channels &= ~(1ULL << channel);
-			*mask     &= ~(1 << index);
-			regs = OHCI1394_IsoRcvContextBase(index);
-			ctx  = &ohci->ir_context_list[index];
-		}
-		break;
-
-	case FW_ISO_CONTEXT_RECEIVE_MULTICHANNEL:
-		mask     = &ohci->ir_context_mask;
-		callback = handle_ir_buffer_fill;
-		index    = !ohci->mc_allocated ? ffs(*mask) - 1 : -1;
-		if (index >= 0) {
-			ohci->mc_allocated = true;
-			*mask &= ~(1 << index);
-			regs = OHCI1394_IsoRcvContextBase(index);
-			ctx  = &ohci->ir_context_list[index];
-		}
-		break;
-
-	default:
-		index = -1;
-		ret = -ENOSYS;
+		if (index < 0)
+			return ERR_PTR(ret);
 	}
-
-	spin_unlock_irq(&ohci->lock);
-
-	if (index < 0)
-		return ERR_PTR(ret);
 
 	memset(ctx, 0, sizeof(*ctx));
 	ctx->header_length = 0;
@@ -3160,20 +3139,18 @@ static struct fw_iso_context *ohci_allocate_iso_context(struct fw_card *card,
  out_with_header:
 	free_page((unsigned long)ctx->header);
  out:
-	spin_lock_irq(&ohci->lock);
+	scoped_guard(spinlock_irq, &ohci->lock) {
+		switch (type) {
+		case FW_ISO_CONTEXT_RECEIVE:
+			*channels |= 1ULL << channel;
+			break;
 
-	switch (type) {
-	case FW_ISO_CONTEXT_RECEIVE:
-		*channels |= 1ULL << channel;
-		break;
-
-	case FW_ISO_CONTEXT_RECEIVE_MULTICHANNEL:
-		ohci->mc_allocated = false;
-		break;
+		case FW_ISO_CONTEXT_RECEIVE_MULTICHANNEL:
+			ohci->mc_allocated = false;
+			break;
+		}
+		*mask |= 1 << index;
 	}
-	*mask |= 1 << index;
-
-	spin_unlock_irq(&ohci->lock);
 
 	return ERR_PTR(ret);
 }
@@ -3257,14 +3234,13 @@ static void ohci_free_iso_context(struct fw_iso_context *base)
 {
 	struct fw_ohci *ohci = fw_ohci(base->card);
 	struct iso_context *ctx = container_of(base, struct iso_context, base);
-	unsigned long flags;
 	int index;
 
 	ohci_stop_iso(base);
 	context_release(&ctx->context);
 	free_page((unsigned long)ctx->header);
 
-	spin_lock_irqsave(&ohci->lock, flags);
+	guard(spinlock_irqsave)(&ohci->lock);
 
 	switch (base->type) {
 	case FW_ISO_CONTEXT_TRANSMIT:
@@ -3286,38 +3262,29 @@ static void ohci_free_iso_context(struct fw_iso_context *base)
 		ohci->mc_allocated = false;
 		break;
 	}
-
-	spin_unlock_irqrestore(&ohci->lock, flags);
 }
 
 static int ohci_set_iso_channels(struct fw_iso_context *base, u64 *channels)
 {
 	struct fw_ohci *ohci = fw_ohci(base->card);
-	unsigned long flags;
-	int ret;
 
 	switch (base->type) {
 	case FW_ISO_CONTEXT_RECEIVE_MULTICHANNEL:
+	{
+		guard(spinlock_irqsave)(&ohci->lock);
 
-		spin_lock_irqsave(&ohci->lock, flags);
-
-		/* Don't allow multichannel to grab other contexts' channels. */
+		// Don't allow multichannel to grab other contexts' channels.
 		if (~ohci->ir_context_channels & ~ohci->mc_channels & *channels) {
 			*channels = ohci->ir_context_channels;
-			ret = -EBUSY;
+			return -EBUSY;
 		} else {
 			set_multichannel_mask(ohci, *channels);
-			ret = 0;
+			return 0;
 		}
-
-		spin_unlock_irqrestore(&ohci->lock, flags);
-
-		break;
-	default:
-		ret = -EINVAL;
 	}
-
-	return ret;
+	default:
+		return -EINVAL;
+	}
 }
 
 #ifdef CONFIG_PM
@@ -3392,14 +3359,14 @@ static int queue_iso_transmit(struct iso_context *ctx,
 		d[0].branch_address = cpu_to_le32(d_bus | z);
 
 		header = (__le32 *) &d[1];
-		header[0] = cpu_to_le32(IT_HEADER_SY(p->sy) |
-					IT_HEADER_TAG(p->tag) |
-					IT_HEADER_TCODE(TCODE_STREAM_DATA) |
-					IT_HEADER_CHANNEL(ctx->base.channel) |
-					IT_HEADER_SPEED(ctx->base.speed));
-		header[1] =
-			cpu_to_le32(IT_HEADER_DATA_LENGTH(p->header_length +
-							  p->payload_length));
+
+		ohci1394_it_data_set_speed(header, ctx->base.speed);
+		ohci1394_it_data_set_tag(header, p->tag);
+		ohci1394_it_data_set_channel(header, ctx->base.channel);
+		ohci1394_it_data_set_tcode(header, TCODE_STREAM_DATA);
+		ohci1394_it_data_set_sync(header, p->sy);
+
+		ohci1394_it_data_set_data_length(header, p->header_length + p->payload_length);
 	}
 
 	if (p->header_length > 0) {
@@ -3587,24 +3554,19 @@ static int ohci_queue_iso(struct fw_iso_context *base,
 			  unsigned long payload)
 {
 	struct iso_context *ctx = container_of(base, struct iso_context, base);
-	unsigned long flags;
-	int ret = -ENOSYS;
 
-	spin_lock_irqsave(&ctx->context.ohci->lock, flags);
+	guard(spinlock_irqsave)(&ctx->context.ohci->lock);
+
 	switch (base->type) {
 	case FW_ISO_CONTEXT_TRANSMIT:
-		ret = queue_iso_transmit(ctx, packet, buffer, payload);
-		break;
+		return queue_iso_transmit(ctx, packet, buffer, payload);
 	case FW_ISO_CONTEXT_RECEIVE:
-		ret = queue_iso_packet_per_buffer(ctx, packet, buffer, payload);
-		break;
+		return queue_iso_packet_per_buffer(ctx, packet, buffer, payload);
 	case FW_ISO_CONTEXT_RECEIVE_MULTICHANNEL:
-		ret = queue_iso_buffer_fill(ctx, packet, buffer, payload);
-		break;
+		return queue_iso_buffer_fill(ctx, packet, buffer, payload);
+	default:
+		return -ENOSYS;
 	}
-	spin_unlock_irqrestore(&ctx->context.ohci->lock, flags);
-
-	return ret;
 }
 
 static void ohci_flush_queue_iso(struct fw_iso_context *base)
