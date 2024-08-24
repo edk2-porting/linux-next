@@ -1249,7 +1249,7 @@
 			pinctrl: pinctrl@fffff400 {
 				#address-cells = <1>;
 				#size-cells = <1>;
-				compatible = "microchip,sam9x60-pinctrl", "atmel,at91sam9x5-pinctrl", "atmel,at91rm9200-pinctrl", "simple-bus";
+				compatible = "microchip,sam9x60-pinctrl", "simple-mfd";
 				ranges = <0xfffff400 0xfffff400 0x800>;
 
 				/* mux-mask corresponding to sam9x60 SoC in TFBGA228L package */
@@ -1262,7 +1262,7 @@
 						 >;
 
 				pioA: gpio@fffff400 {
-					compatible = "microchip,sam9x60-gpio", "atmel,at91sam9x5-gpio", "atmel,at91rm9200-gpio";
+					compatible = "microchip,sam9x60-gpio", "atmel,at91rm9200-gpio";
 					reg = <0xfffff400 0x200>;
 					interrupts = <2 IRQ_TYPE_LEVEL_HIGH 1>;
 					#gpio-cells = <2>;
@@ -1273,7 +1273,7 @@
 				};
 
 				pioB: gpio@fffff600 {
-					compatible = "microchip,sam9x60-gpio", "atmel,at91sam9x5-gpio", "atmel,at91rm9200-gpio";
+					compatible = "microchip,sam9x60-gpio", "atmel,at91rm9200-gpio";
 					reg = <0xfffff600 0x200>;
 					interrupts = <3 IRQ_TYPE_LEVEL_HIGH 1>;
 					#gpio-cells = <2>;
@@ -1285,7 +1285,7 @@
 				};
 
 				pioC: gpio@fffff800 {
-					compatible = "microchip,sam9x60-gpio", "atmel,at91sam9x5-gpio", "atmel,at91rm9200-gpio";
+					compatible = "microchip,sam9x60-gpio", "atmel,at91rm9200-gpio";
 					reg = <0xfffff800 0x200>;
 					interrupts = <4 IRQ_TYPE_LEVEL_HIGH 1>;
 					#gpio-cells = <2>;
@@ -1296,7 +1296,7 @@
 				};
 
 				pioD: gpio@fffffa00 {
-					compatible = "microchip,sam9x60-gpio", "atmel,at91sam9x5-gpio", "atmel,at91rm9200-gpio";
+					compatible = "microchip,sam9x60-gpio", "atmel,at91rm9200-gpio";
 					reg = <0xfffffa00 0x200>;
 					interrupts = <44 IRQ_TYPE_LEVEL_HIGH 1>;
 					#gpio-cells = <2>;
@@ -1338,7 +1338,7 @@
 				compatible = "microchip,sam9x60-rtt", "atmel,at91sam9260-rtt";
 				reg = <0xfffffe20 0x20>;
 				interrupts = <1 IRQ_TYPE_LEVEL_HIGH 7>;
-				clocks = <&clk32k 0>;
+				clocks = <&clk32k 1>;
 			};
 
 			pit: timer@fffffe40 {
@@ -1364,7 +1364,7 @@
 				compatible = "microchip,sam9x60-rtc", "atmel,at91sam9x5-rtc";
 				reg = <0xfffffea8 0x100>;
 				interrupts = <1 IRQ_TYPE_LEVEL_HIGH 7>;
-				clocks = <&clk32k 0>;
+				clocks = <&clk32k 1>;
 			};
 
 			watchdog: watchdog@ffffff80 {
