@@ -595,8 +595,13 @@ properties:
 
       - description: Hardkernel Odroid M1
         items:
-          - const: rockchip,rk3568-odroid-m1
+          - const: hardkernel,odroid-m1
           - const: rockchip,rk3568
+
+      - description: Hardkernel Odroid M1S
+        items:
+          - const: hardkernel,odroid-m1s
+          - const: rockchip,rk3566
 
       - description: Hugsun X99 TV Box
         items:
@@ -635,6 +640,11 @@ properties:
         items:
           - const: leez,p710
           - const: rockchip,rk3399
+
+      - description: LCKFB Taishan Pi RK3566
+        items:
+          - const: lckfb,tspi-rk3566
+          - const: rockchip,rk3566
 
       - description: Lunzn FastRhino R66S / R68S
         items:
