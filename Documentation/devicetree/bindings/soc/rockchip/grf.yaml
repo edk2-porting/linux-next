@@ -45,10 +45,16 @@ properties:
               - rockchip,rk3588-pcie3-pipe-grf
               - rockchip,rk3588-usb-grf
               - rockchip,rk3588-usbdpphy-grf
-              - rockchip,rk3588-vo-grf
+              - rockchip,rk3588-vo0-grf
+              - rockchip,rk3588-vo1-grf
               - rockchip,rk3588-vop-grf
               - rockchip,rv1108-usbgrf
           - const: syscon
+      - items:
+          - const: rockchip,rk3588-vo-grf
+          - const: syscon
+        deprecated: true
+        description: Use rockchip,rk3588-vo{0,1}-grf instead.
       - items:
           - enum:
               - rockchip,px30-grf
@@ -278,6 +284,8 @@ allOf:
           contains:
             enum:
               - rockchip,rk3588-vo-grf
+              - rockchip,rk3588-vo0-grf
+              - rockchip,rk3588-vo1-grf
 
     then:
       required:
