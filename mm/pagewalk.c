@@ -783,7 +783,7 @@ pmd_table:
 		fw->pmdp = pmdp;
 		fw->pmd = pmd;
 
-		if (pmd_none(pmd) || pmd_special(pmd)) {
+		if (pmd_none(pmd)) {
 			spin_unlock(ptl);
 			goto not_found;
 		} else if (!pmd_leaf(pmd)) {
