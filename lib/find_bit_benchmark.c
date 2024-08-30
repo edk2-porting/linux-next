@@ -30,18 +30,21 @@ static DECLARE_BITMAP(bitmap, BITMAP_LEN) __initdata;
 static DECLARE_BITMAP(bitmap2, BITMAP_LEN) __initdata;
 
 /*
- * This is Schlemiel the Painter's algorithm. It should be called after
- * all other tests for the same bitmap because it sets all bits of bitmap to 1.
+ * This is Schlemiel the Painter's algorithm.
  */
 static int __init test_find_first_bit(void *bitmap, unsigned long len)
 {
+	unsigned long *cp __free(bitmap) = bitmap_alloc(len, GFP_KERNEL);
 	unsigned long i, cnt;
 	ktime_t time;
 
+	bitmap_copy(cp, bitmap, len);
+
 	time = ktime_get();
 	for (cnt = i = 0; i < len; cnt++) {
-		i = find_first_bit(bitmap, len);
-		__clear_bit(i, bitmap);
+		i = find_first_bit(cp, len);
+		if (i < len)
+			__clear_bit(i, cp);
 	}
 	time = ktime_get() - time;
 	pr_err("find_first_bit:     %18llu ns, %6ld iterations\n", time, cnt);
@@ -51,16 +54,17 @@ static int __init test_find_first_bit(void *bitmap, unsigned long len)
 
 static int __init test_find_first_and_bit(void *bitmap, const void *bitmap2, unsigned long len)
 {
-	static DECLARE_BITMAP(cp, BITMAP_LEN) __initdata;
+	unsigned long *cp __free(bitmap) = bitmap_alloc(len, GFP_KERNEL);
 	unsigned long i, cnt;
 	ktime_t time;
 
-	bitmap_copy(cp, bitmap, BITMAP_LEN);
+	bitmap_copy(cp, bitmap, len);
 
 	time = ktime_get();
 	for (cnt = i = 0; i < len; cnt++) {
 		i = find_first_and_bit(cp, bitmap2, len);
-		__clear_bit(i, cp);
+		if (i < len)
+			__clear_bit(i, cp);
 	}
 	time = ktime_get() - time;
 	pr_err("find_first_and_bit: %18llu ns, %6ld iterations\n", time, cnt);
@@ -165,7 +169,7 @@ static int __init find_bit_test(void)
 	 * traverse only part of bitmap to avoid soft lockup.
 	 */
 	test_find_first_bit(bitmap, BITMAP_LEN / 10);
-	test_find_first_and_bit(bitmap, bitmap2, BITMAP_LEN / 2);
+	test_find_first_and_bit(bitmap, bitmap2, BITMAP_LEN / 10);
 	test_find_next_and_bit(bitmap, bitmap2, BITMAP_LEN);
 
 	pr_err("\nStart testing find_bit() with sparse bitmap\n");
@@ -182,8 +186,8 @@ static int __init find_bit_test(void)
 	test_find_next_zero_bit(bitmap, BITMAP_LEN);
 	test_find_last_bit(bitmap, BITMAP_LEN);
 	test_find_nth_bit(bitmap, BITMAP_LEN);
-	test_find_first_bit(bitmap, BITMAP_LEN);
-	test_find_first_and_bit(bitmap, bitmap2, BITMAP_LEN);
+	test_find_first_bit(bitmap, BITMAP_LEN / 10);
+	test_find_first_and_bit(bitmap, bitmap2, BITMAP_LEN / 10);
 	test_find_next_and_bit(bitmap, bitmap2, BITMAP_LEN);
 
 	/*
