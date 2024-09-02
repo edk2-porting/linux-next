@@ -1532,7 +1532,7 @@
 	fail_make_request=[KNL]
 			General fault injection mechanism.
 			Format: <interval>,<probability>,<space>,<times>
-			See also Documentation/fault-injection/.
+			See also Documentation/dev-tools/fault-injection/.
 
 	fb_tunnels=	[NET]
 			Format: { initns | none }

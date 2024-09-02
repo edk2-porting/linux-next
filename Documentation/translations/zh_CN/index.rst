@@ -73,7 +73,7 @@
 TODOList:
 
 * trace/index
-* fault-injection/index
+* dev-tools/fault-injection/index
 * livepatch/index
 
 面向用户的文档

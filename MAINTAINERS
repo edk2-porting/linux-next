@@ -8536,7 +8536,7 @@ F:	drivers/net/wan/farsync.*
 FAULT INJECTION SUPPORT
 M:	Akinobu Mita <akinobu.mita@gmail.com>
 S:	Supported
-F:	Documentation/fault-injection/
+F:	Documentation/dev-tools/fault-injection/
 F:	lib/fault-inject.c
 
 FBTFT Framebuffer drivers

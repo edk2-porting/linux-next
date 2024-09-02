@@ -102,7 +102,7 @@ y en otros lugares con respecto al envío de parches del kernel de Linux.
     espacio de usuario deben ser CCed a linux-api@vger.kernel.org.
 
 19) Se ha comprobado con la inyección de al menos errores de asignación
-    de slab y página. Consulte ``Documentation/fault-injection/``.
+    de slab y página. Consulte ``Documentation/dev-tools/fault-injection/``.
 
     Si el nuevo código es sustancial, la adición de la inyección de
     errores específica del subsistema podría ser apropiada.

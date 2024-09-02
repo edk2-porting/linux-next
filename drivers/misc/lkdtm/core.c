@@ -15,7 +15,7 @@
  *
  * Debugfs support added by Simon Kagstrom <simon.kagstrom@netinsight.net>
  *
- * See Documentation/fault-injection/provoke-crashes.rst for instructions
+ * See Documentation/dev-tools/fault-injection/provoke-crashes.rst for instructions
  */
 #include "lkdtm.h"
 #include <linux/fs.h>

@@ -64,7 +64,7 @@ TODOList:
 * kernel-hacking/index
 * rust/index
 * trace/index
-* fault-injection/index
+* dev-tools/fault-injection/index
 * livepatch/index
 
 面向用戶的文檔

@@ -211,7 +211,7 @@ Linus對這個問題給出了最佳答案:
 啓用故障注入後，內存分配的可配置失敗的百分比；這些失敗可以限定在特定的代碼
 範圍內。在啓用了故障注入的情況下運行，程序員可以看到當情況惡化時代碼如何響
 應。有關如何使用此工具的詳細信息，請參閱
-Documentation/fault-injection/fault-injection.rst。
+Documentation/dev-tools/fault-injection/fault-injection.rst。
 
 “sparse”靜態分析工具可以發現其他類型的錯誤。sparse可以警告程序員用戶空間
 和內核空間地址之間的混淆、大端序與小端序的混淆、在需要一組位標誌的地方傳遞
