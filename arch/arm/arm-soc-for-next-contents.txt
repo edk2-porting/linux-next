@@ -1,0 +1,45 @@
+soc/arm
+
+soc/dt
+
+soc/drivers
+	patch
+		firmware: turris-mox-rwtm: Use macro constant instead of hardcoded 4096
+		firmware: turris-mox-rwtm: Use ETH_ALEN instead of hardcoded 6
+		firmware: turris-mox-rwtm: Use the boolean type where appropriate
+		firmware: turris-mox-rwtm: Hide signature related constants behind macros
+		firmware: turris-mox-rwtm: Fix driver includes
+		firmware: turris-mox-rwtm: Use sysfs_emit() instead of sprintf()
+		firmware: turris-mox-rwtm: Don't create own kobject type
+		firmware: turris-mox-rwtm: Simplify debugfs code
+		firmware: turris-mox-rwtm: Convert rest to devm_* and get rid of driver .remove()
+		firmware: turris-mox-rwtm: Use dev_err_probe() where possible
+		firmware: turris-mox-rwtm: Drop redundant device pointer
+		firmware: turris-mox-rwtm: Use devm_mutex_init() instead of mutex_init()
+		firmware: turris-mox-rwtm: Use container_of() instead of hwrng .priv member
+		firmware: turris-mox-rwtm: Use EOPNOTSUPP instead of ENOSYS
+		firmware: turris-mox-rwtm: Use ALIGN() instead of hardcoding
+		firmware: turris-mox-rwtm: Deduplicate command execution code
+	samsung/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-6.12
+	drivers/memory
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux-mem-ctrl tags/memory-controller-drv-6.12
+	rockchip/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.12-rockchip-drivers-1
+	versatile/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-integrator tags/versatile-soc-for-v6.12
+	firmware/ffa
+		https://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/ffa-updates-6.12
+	firmware/scmi
+		https://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scmi-updates-6.12
+	tegra/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-soc
+	tegra/firmware
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-firmware
+
+soc/defconfig
+
+soc/late
+
+arm/fixes
+
