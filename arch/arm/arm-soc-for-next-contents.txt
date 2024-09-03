@@ -1,6 +1,28 @@
 soc/arm
 
 soc/dt
+	thead/dt
+		https://github.com/pdp7/linux tags/thead-dt-for-v6.12
+	renesas/dt-binding
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dt-bindings-for-v6.12-tag1
+	renesas/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dts-for-v6.12-tag1
+	samsung/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt64-6.12
+	juno/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/juno-update-6.12
+	tegra/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-dt-bindings
+	tegra/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-arm-dt
+	tegra/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-arm64-dt
+	at91/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-dt-6.12
+	rockchip/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.12-rockchip-dts64-1
+	rockchip/dt32
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.12-rockchip-dts32-1
 
 soc/drivers
 	patch
@@ -36,8 +58,16 @@ soc/drivers
 		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-soc
 	tegra/firmware
 		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-firmware
+	<no branch> (7a99b1c0bce5cf8c554ceecd29ad1e8085557fd3)
+		https://github.com/chleroy/linux tags/soc_fsl-6.12-2
 
 soc/defconfig
+	at91/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-defconfig-6.12
+	renesas/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-defconfig-for-v6.12-tag1
+	tegra/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.12-arm64-defconfig
 
 soc/late
 
