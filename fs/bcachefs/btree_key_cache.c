@@ -118,10 +118,12 @@ static void bkey_cached_free(struct btree_key_cache *bc,
 
 static struct bkey_cached *__bkey_cached_alloc(unsigned key_u64s)
 {
-	struct bkey_cached *ck = kmem_cache_zalloc(bch2_key_cache, GFP_KERNEL);
+	gfp_t gfp = GFP_KERNEL|__GFP_ACCOUNT|__GFP_RECLAIMABLE;
+
+	struct bkey_cached *ck = kmem_cache_zalloc(bch2_key_cache, gfp);
 	if (unlikely(!ck))
 		return NULL;
-	ck->k = kmalloc(key_u64s * sizeof(u64), GFP_KERNEL);
+	ck->k = kmalloc(key_u64s * sizeof(u64), gfp);
 	if (unlikely(!ck->k)) {
 		kmem_cache_free(bch2_key_cache, ck);
 		return NULL;
