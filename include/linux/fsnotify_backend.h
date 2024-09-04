@@ -900,6 +900,15 @@ static inline void fsnotify_init_event(struct fsnotify_event *event)
 	INIT_LIST_HEAD(&event->list);
 }
 
+#ifdef CONFIG_FANOTIFY_ACCESS_PERMISSIONS
+bool fsnotify_file_has_pre_content_watches(struct file *file);
+#else
+static inline bool fsnotify_file_has_pre_content_watches(struct file *file)
+{
+	return false;
+}
+#endif /* CONFIG_FANOTIFY_ACCESS_PERMISSIONS */
+
 #else
 
 static inline int fsnotify(__u32 mask, const void *data, int data_type,
@@ -937,6 +946,11 @@ static inline u32 fsnotify_get_cookie(void)
 
 static inline void fsnotify_unmount_inodes(struct super_block *sb)
 {}
+
+static inline bool fsnotify_file_has_pre_content_watches(struct file *file)
+{
+	return false;
+}
 
 #endif	/* CONFIG_FSNOTIFY */
 
