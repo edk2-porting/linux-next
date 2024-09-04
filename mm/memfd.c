@@ -95,7 +95,6 @@ struct folio *memfd_alloc_folio(struct file *memfd, pgoff_t idx)
 							idx);
 			if (err) {
 				folio_put(folio);
-				free_huge_folio(folio);
 				return ERR_PTR(err);
 			}
 			folio_unlock(folio);
