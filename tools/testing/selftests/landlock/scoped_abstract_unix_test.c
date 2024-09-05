@@ -811,4 +811,109 @@ TEST_F(various_address_sockets, scoped_pathname_sockets)
 		_metadata->exit_code = KSFT_FAIL;
 }
 
+TEST(datagram_sockets)
+{
+	struct service_fixture connected_addr, non_connected_addr;
+	int conn_sock, non_conn_sock;
+	int pipe_parent[2], pipe_child[2];
+	int status;
+	char buf;
+	pid_t child;
+	int num_bytes;
+	char data[64];
+
+	drop_caps(_metadata);
+	memset(&connected_addr, 0, sizeof(connected_addr));
+	set_unix_address(&connected_addr, 0);
+	memset(&non_connected_addr, 0, sizeof(non_connected_addr));
+	set_unix_address(&non_connected_addr, 1);
+
+	ASSERT_EQ(0, pipe2(pipe_parent, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(pipe_child, O_CLOEXEC));
+
+	child = fork();
+	ASSERT_LE(0, child);
+	if (child == 0) {
+		char buf_data[64];
+
+		ASSERT_EQ(0, close(pipe_parent[1]));
+		ASSERT_EQ(0, close(pipe_child[0]));
+
+		conn_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+		non_conn_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+		ASSERT_NE(-1, conn_sock);
+		ASSERT_NE(-1, non_conn_sock);
+
+		ASSERT_EQ(1, read(pipe_parent[0], &buf, 1));
+
+		ASSERT_EQ(0, connect(conn_sock, &connected_addr.unix_addr,
+				     connected_addr.unix_addr_len));
+
+		/* Both connected and non-connected sockets can send
+		 * data when the domain is not scoped.
+		 */
+		memset(buf_data, 'x', sizeof(buf_data));
+		ASSERT_NE(-1, send(conn_sock, buf_data, sizeof(buf_data), 0));
+		ASSERT_NE(-1, sendto(non_conn_sock, buf_data, sizeof(buf_data),
+				     0, &non_connected_addr.unix_addr,
+				     non_connected_addr.unix_addr_len));
+		ASSERT_EQ(1, write(pipe_child[1], ".", 1));
+
+		/* Scopes the domain. */
+		create_scoped_domain(_metadata,
+				     LANDLOCK_SCOPED_ABSTRACT_UNIX_SOCKET);
+
+		/*
+		 * Connected socket sends data to the receiver, but the
+		 * non-connected socket must fail to send data.
+		 */
+		ASSERT_NE(-1, send(conn_sock, buf_data, sizeof(buf_data), 0));
+		ASSERT_EQ(-1, sendto(non_conn_sock, buf_data, sizeof(buf_data),
+				     0, &non_connected_addr.unix_addr,
+				     non_connected_addr.unix_addr_len));
+		ASSERT_EQ(EPERM, errno);
+		ASSERT_EQ(1, write(pipe_child[1], ".", 1));
+
+		EXPECT_EQ(0, close(conn_sock));
+		EXPECT_EQ(0, close(non_conn_sock));
+		_exit(_metadata->exit_code);
+		return;
+	}
+	ASSERT_EQ(0, close(pipe_parent[0]));
+	ASSERT_EQ(0, close(pipe_child[1]));
+
+	conn_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+	non_conn_sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+	ASSERT_NE(-1, conn_sock);
+	ASSERT_NE(-1, non_conn_sock);
+
+	ASSERT_EQ(0, bind(conn_sock, &connected_addr.unix_addr,
+			  connected_addr.unix_addr_len));
+	ASSERT_EQ(0, bind(non_conn_sock, &non_connected_addr.unix_addr,
+			  non_connected_addr.unix_addr_len));
+
+	ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+
+	ASSERT_EQ(1, read(pipe_child[0], &buf, 1));
+	num_bytes = recv(conn_sock, data, sizeof(data) - 1, 0);
+	ASSERT_NE(-1, num_bytes);
+	num_bytes = recv(non_conn_sock, data, sizeof(data) - 1, 0);
+	ASSERT_NE(-1, num_bytes);
+
+	/*
+	 * Connected datagram socket will receive data, but
+	 * non-connected datagram socket does not receive data.
+	 */
+	ASSERT_EQ(1, read(pipe_child[0], &buf, 1));
+	num_bytes = recv(conn_sock, data, sizeof(data) - 1, 0);
+	ASSERT_NE(-1, num_bytes);
+
+	EXPECT_EQ(0, close(conn_sock));
+	EXPECT_EQ(0, close(non_conn_sock));
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	if (WIFSIGNALED(status) || !WIFEXITED(status) ||
+	    WEXITSTATUS(status) != EXIT_SUCCESS)
+		_metadata->exit_code = KSFT_FAIL;
+}
+
 TEST_HARNESS_MAIN
