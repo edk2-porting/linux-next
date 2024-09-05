@@ -611,4 +611,204 @@ TEST_F(outside_socket, socket_with_different_domain)
 		_metadata->exit_code = KSFT_FAIL;
 }
 
+static const char path1[] = TMP_DIR "/s1_variant1";
+static const char path2[] = TMP_DIR "/s2_variant1";
+
+FIXTURE(various_address_sockets)
+{
+	struct service_fixture stream_address, dgram_address;
+};
+
+FIXTURE_VARIANT(various_address_sockets)
+{
+	const int domain;
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(various_address_sockets, pathname_socket_scoped_domain) {
+	/* clang-format on */
+	.domain = SCOPE_SANDBOX,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(various_address_sockets, pathname_socket_other_domain) {
+	/* clang-format on */
+	.domain = OTHER_SANDBOX,
+};
+
+/* clang-format off */
+FIXTURE_VARIANT_ADD(various_address_sockets, pathname_socket_no_domain) {
+	/* clang-format on */
+	.domain = NO_SANDBOX,
+};
+
+FIXTURE_SETUP(various_address_sockets)
+{
+	disable_caps(_metadata);
+	umask(0077);
+	ASSERT_EQ(0, mkdir(TMP_DIR, 0700));
+
+	ASSERT_EQ(0, mknod(path1, S_IFREG | 0700, 0))
+	{
+		TH_LOG("Failed to create file \"%s\": %s", path1,
+		       strerror(errno));
+		ASSERT_EQ(0, unlink(TMP_DIR) & rmdir(TMP_DIR));
+	}
+	ASSERT_EQ(0, mknod(path2, S_IFREG | 0700, 0))
+	{
+		TH_LOG("Failed to create file \"%s\": %s", path2,
+		       strerror(errno));
+		ASSERT_EQ(0, unlink(TMP_DIR) & rmdir(TMP_DIR));
+	}
+	memset(&self->stream_address, 0, sizeof(self->stream_address));
+	set_unix_address(&self->stream_address, 0);
+	memset(&self->dgram_address, 0, sizeof(self->dgram_address));
+	set_unix_address(&self->dgram_address, 1);
+}
+
+FIXTURE_TEARDOWN(various_address_sockets)
+{
+	ASSERT_EQ(0, unlink(path1) & rmdir(path1));
+	ASSERT_EQ(0, unlink(path2) & rmdir(path2));
+	ASSERT_EQ(0, unlink(TMP_DIR) & rmdir(TMP_DIR));
+}
+
+TEST_F(various_address_sockets, scoped_pathname_sockets)
+{
+	const char *const stream_path = path1;
+	const char *const dgram_path = path2;
+	socklen_t size, size_dg;
+	struct sockaddr_un stream_pathname_addr, dgram_pathname_addr;
+	int unnamed_sockets[2];
+	int stream_pathname_socket, dgram_pathname_socket,
+		stream_abstract_socket, dgram_abstract_socket;
+	int pipe_parent[2];
+	pid_t child;
+	int status;
+	char buf_child;
+	char data = 'S';
+	char buf[5];
+	int nbyte;
+
+	ASSERT_EQ(0, socketpair(AF_UNIX, SOCK_DGRAM, 0, unnamed_sockets));
+
+	stream_pathname_addr.sun_family = AF_UNIX;
+	snprintf(stream_pathname_addr.sun_path,
+		 sizeof(stream_pathname_addr.sun_path), "%s", stream_path);
+	size = offsetof(struct sockaddr_un, sun_path) +
+	       strlen(stream_pathname_addr.sun_path);
+
+	dgram_pathname_addr.sun_family = AF_UNIX;
+	snprintf(dgram_pathname_addr.sun_path,
+		 sizeof(dgram_pathname_addr.sun_path), "%s", dgram_path);
+	size_dg = offsetof(struct sockaddr_un, sun_path) +
+		  strlen(dgram_pathname_addr.sun_path);
+
+	ASSERT_EQ(0, pipe2(pipe_parent, O_CLOEXEC));
+
+	child = fork();
+	ASSERT_LE(0, child);
+	if (child == 0) {
+		int err, err_dg;
+
+		ASSERT_EQ(0, close(pipe_parent[1]));
+
+		if (variant->domain == SCOPE_SANDBOX)
+			create_scoped_domain(
+				_metadata,
+				LANDLOCK_SCOPED_ABSTRACT_UNIX_SOCKET);
+		else if (variant->domain == OTHER_SANDBOX)
+			create_fs_domain(_metadata);
+
+		ASSERT_EQ(0, close(unnamed_sockets[1]));
+		ASSERT_NE(-1, write(unnamed_sockets[0], &data, sizeof(data)));
+		ASSERT_EQ(0, close(unnamed_sockets[0]));
+
+		ASSERT_EQ(1, read(pipe_parent[0], &buf_child, 1));
+
+		/* Connect with pathname sockets. */
+		stream_pathname_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+		ASSERT_LE(0, stream_pathname_socket);
+		ASSERT_EQ(0, connect(stream_pathname_socket,
+				     &stream_pathname_addr, size));
+		dgram_pathname_socket = socket(AF_UNIX, SOCK_DGRAM, 0);
+		ASSERT_LE(0, dgram_pathname_socket);
+		ASSERT_EQ(0, connect(dgram_pathname_socket,
+				     &dgram_pathname_addr, size_dg));
+
+		/* Connect with abstract sockets. */
+		stream_abstract_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+		dgram_abstract_socket = socket(AF_UNIX, SOCK_DGRAM, 0);
+
+		ASSERT_NE(-1, stream_abstract_socket);
+		ASSERT_NE(-1, dgram_abstract_socket);
+
+		err = connect(stream_abstract_socket,
+			      &self->stream_address.unix_addr,
+			      self->stream_address.unix_addr_len);
+		err_dg = connect(dgram_abstract_socket,
+				 &self->dgram_address.unix_addr,
+				 self->dgram_address.unix_addr_len);
+		if (variant->domain == SCOPE_SANDBOX) {
+			EXPECT_EQ(-1, err);
+			EXPECT_EQ(-1, err_dg);
+			EXPECT_EQ(EPERM, errno);
+		} else {
+			EXPECT_EQ(0, err);
+			EXPECT_EQ(0, err_dg);
+		}
+		ASSERT_EQ(0, close(stream_abstract_socket));
+		ASSERT_EQ(0, close(dgram_abstract_socket));
+		ASSERT_EQ(0, close(stream_pathname_socket));
+		ASSERT_EQ(0, close(dgram_pathname_socket));
+		_exit(_metadata->exit_code);
+		return;
+	}
+	ASSERT_EQ(0, close(pipe_parent[0]));
+
+	ASSERT_EQ(0, close(unnamed_sockets[0]));
+	nbyte = read(unnamed_sockets[1], buf, sizeof(buf));
+	ASSERT_EQ(sizeof(data), nbyte);
+	buf[nbyte] = '\0';
+	ASSERT_EQ(0, strcmp(&data, buf));
+	ASSERT_LE(0, close(unnamed_sockets[1]));
+
+	/* Sets up pathname servers */
+	stream_pathname_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+	ASSERT_LE(0, stream_pathname_socket);
+	ASSERT_EQ(0, unlink(stream_path));
+	ASSERT_EQ(0, bind(stream_pathname_socket, &stream_pathname_addr, size));
+	ASSERT_EQ(0, listen(stream_pathname_socket, backlog));
+
+	ASSERT_EQ(0, unlink(dgram_path));
+	dgram_pathname_socket = socket(AF_UNIX, SOCK_DGRAM, 0);
+	ASSERT_LE(0, dgram_pathname_socket);
+	ASSERT_EQ(0,
+		  bind(dgram_pathname_socket, &dgram_pathname_addr, size_dg));
+
+	/* Set up abstract servers */
+	stream_abstract_socket = socket(AF_UNIX, SOCK_STREAM, 0);
+	dgram_abstract_socket = socket(AF_UNIX, SOCK_DGRAM, 0);
+	ASSERT_NE(-1, stream_abstract_socket);
+	ASSERT_NE(-1, dgram_abstract_socket);
+	ASSERT_EQ(0,
+		  bind(stream_abstract_socket, &self->stream_address.unix_addr,
+		       self->stream_address.unix_addr_len));
+	ASSERT_EQ(0, bind(dgram_abstract_socket, &self->dgram_address.unix_addr,
+			  self->dgram_address.unix_addr_len));
+	ASSERT_EQ(0, listen(stream_abstract_socket, backlog));
+
+	ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+
+	ASSERT_EQ(0, close(stream_abstract_socket));
+	ASSERT_EQ(0, close(dgram_abstract_socket));
+	ASSERT_EQ(0, close(stream_pathname_socket));
+	ASSERT_EQ(0, close(dgram_pathname_socket));
+
+	if (WIFSIGNALED(status) || !WIFEXITED(status) ||
+	    WEXITSTATUS(status) != EXIT_SUCCESS)
+		_metadata->exit_code = KSFT_FAIL;
+}
+
 TEST_HARNESS_MAIN
