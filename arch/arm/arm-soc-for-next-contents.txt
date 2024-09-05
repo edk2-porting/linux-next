@@ -7,6 +7,8 @@ soc/arm
 		https://git.kernel.org/pub/scm/linux/kernel/git/brgl/linux tags/davinci-updates-for-v6.12-rc1
 	imx/soc
 		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-6.12
+	samsung/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-6.12
 
 soc/dt
 	thead/dt
@@ -51,6 +53,17 @@ soc/dt
 		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm32-for-6.12
 	qcom/dt64
 		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-for-6.12
+	patch
+		arm64: dts: toshiba: Fix pl011 and pl022 clocks
+	<no branch> (488386d7ec680c8900f81b3fd7570797935bf1ff)
+		https://git.kernel.org/pub/scm/linux/kernel/git/amlogic/linux tags/amlogic-arm-dt-for-v6.11
+	amlogic/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/amlogic/linux tags/amlogic-arm64-dt-for-v6.12
+	patch
+		ARM: dts: Fix undocumented LM75 compatible nodes
+		arm64: dts: nuvoton: Add syscon to the system-management node
+		arm64: dts: nuvoton: ma35d1: Add pinctrl and gpio nodes
+		arm64: dts: nuvoton: ma35d1: Add uart pinctrl settings
 
 soc/drivers
 	patch
@@ -92,19 +105,23 @@ soc/drivers
 		soc: fsl: cpm1: qmc: Fix dependency on fsl_soc.h
 	<no branch> (68123510b7c1c610387dd306f92ff539c3c546b5)
 		https://git.kernel.org/pub/scm/linux/kernel/git/ti/linux tags/ti-driver-soc-for-v6.12
-	patch
-		soc: fsl: qe: ucc: Export ucc_mux_set_grant_tsa_bkpt
 	versatile/drivers
 		https://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-integrator tags/integrator-v6.12
 	drivers/reset
 		git://git.pengutronix.de/pza/linux tags/reset-for-v6.12
 	imx/drivers
 		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-6.12
-	qcom/drivers
-		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-6.12
 	omap/drivers
 ti/drivers
 		https://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-omap tags/omap-for-v6.12/drivers-signed
+	patch
+		soc: fsl: qe: ucc: Export ucc_mux_set_grant_tsa_bkpt
+	at91/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-soc-6.12
+	qcom/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-6.12
+	amlogic/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/amlogic/linux tags/amlogic-drivers-for-v6.12
 
 soc/defconfig
 	at91/defconfig
