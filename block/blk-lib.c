@@ -10,7 +10,8 @@
 
 #include "blk.h"
 
-static sector_t bio_discard_limit(struct block_device *bdev, sector_t sector)
+/* The maximum size of a discard that can be issued from a given sector. */
+sector_t bio_discard_limit(struct block_device *bdev, sector_t sector)
 {
 	unsigned int discard_granularity = bdev_discard_granularity(bdev);
 	sector_t granularity_aligned_sector;

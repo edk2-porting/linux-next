@@ -684,4 +684,6 @@ struct bio *bio_chain_and_submit(struct bio *prev, struct bio *new);
 struct bio *blk_alloc_discard_bio(struct block_device *bdev,
 		sector_t *sector, sector_t *nr_sects, gfp_t gfp_mask);
 
+sector_t bio_discard_limit(struct block_device *bdev, sector_t sector);
+
 #endif /* __LINUX_BIO_H */

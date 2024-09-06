@@ -208,6 +208,8 @@ struct fsxattr {
  * (see uapi/linux/blkzoned.h)
  */
 
+#define BLOCK_URING_CMD_DISCARD			_IO(0x12,137)
+
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */
 #define FIGETBSZ   _IO(0x00,2)	/* get the block size used for bmap */
