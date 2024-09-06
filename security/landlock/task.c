@@ -18,6 +18,7 @@
 
 #include "common.h"
 #include "cred.h"
+#include "fs.h"
 #include "ruleset.h"
 #include "setup.h"
 #include "task.h"
@@ -112,7 +113,7 @@ static int hook_ptrace_traceme(struct task_struct *const parent)
 
 /**
  * domain_is_scoped - Checks if the client domain is scoped in the same
- *			domain as the server.
+ *		      domain as the server.
  *
  * @client: IPC sender domain.
  * @server: IPC receiver domain.
@@ -129,7 +130,7 @@ static bool domain_is_scoped(const struct landlock_ruleset *const client,
 	struct landlock_hierarchy *client_walker, *server_walker;
 
 	/* Quick return if client has no domain */
-	if (WARN_ON_ONCE(!client))
+	if (!client)
 		return false;
 
 	client_layer = client->num_layers - 1;
@@ -181,7 +182,7 @@ static bool sock_is_scoped(struct sock *const other,
 {
 	const struct landlock_ruleset *dom_other;
 
-	/* the credentials will not change */
+	/* The credentials will not change. */
 	lockdep_assert_held(&unix_sk(other)->lock);
 	dom_other = landlock_cred(other->sk_socket->file->f_cred)->domain;
 	return domain_is_scoped(domain, dom_other,
@@ -209,7 +210,7 @@ static int hook_unix_stream_connect(struct sock *const sock,
 	const struct landlock_ruleset *const dom =
 		landlock_get_current_domain();
 
-	/* quick return for non-sandboxed processes */
+	/* Quick return for non-landlocked tasks. */
 	if (!dom)
 		return 0;
 
@@ -242,11 +243,71 @@ static int hook_unix_may_send(struct socket *const sock,
 	return 0;
 }
 
+static int hook_task_kill(struct task_struct *const p,
+			  struct kernel_siginfo *const info, const int sig,
+			  const struct cred *const cred)
+{
+	bool is_scoped;
+	const struct landlock_ruleset *target_dom, *dom;
+
+	if (cred) {
+		/* Dealing with USB IO. */
+		dom = landlock_cred(cred)->domain;
+	} else {
+		dom = landlock_get_current_domain();
+	}
+
+	/* Quick return for non-landlocked tasks. */
+	if (!dom)
+		return 0;
+
+	rcu_read_lock();
+	target_dom = landlock_get_task_domain(p);
+	is_scoped = domain_is_scoped(dom, target_dom, LANDLOCK_SCOPED_SIGNAL);
+	rcu_read_unlock();
+	if (is_scoped)
+		return -EPERM;
+
+	return 0;
+}
+
+static int hook_file_send_sigiotask(struct task_struct *tsk,
+				    struct fown_struct *fown, int signum)
+{
+	struct landlock_ruleset *dom;
+	bool is_scoped = false;
+
+	/* Lock already held by send_sigio() and send_sigurg(). */
+	lockdep_assert_held(&fown->lock);
+
+	dom = landlock_file(fown->file)->fown_domain;
+	landlock_get_ruleset(dom);
+
+	/* Quick return for non-landlocked tasks. */
+	if (!dom)
+		goto out_unlock;
+
+	rcu_read_lock();
+	is_scoped = domain_is_scoped(dom, landlock_get_task_domain(tsk),
+				     LANDLOCK_SCOPED_SIGNAL);
+	rcu_read_unlock();
+
+out_unlock:
+	/* Called in an RCU read-side critical section. */
+	landlock_put_ruleset_deferred(dom);
+	if (is_scoped)
+		return -EPERM;
+
+	return 0;
+}
+
 static struct security_hook_list landlock_hooks[] __ro_after_init = {
 	LSM_HOOK_INIT(ptrace_access_check, hook_ptrace_access_check),
 	LSM_HOOK_INIT(ptrace_traceme, hook_ptrace_traceme),
 	LSM_HOOK_INIT(unix_stream_connect, hook_unix_stream_connect),
 	LSM_HOOK_INIT(unix_may_send, hook_unix_may_send),
+	LSM_HOOK_INIT(task_kill, hook_task_kill),
+	LSM_HOOK_INIT(file_send_sigiotask, hook_file_send_sigiotask),
 };
 
 __init void landlock_add_task_hooks(void)

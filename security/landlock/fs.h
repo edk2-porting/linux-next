@@ -52,6 +52,12 @@ struct landlock_file_security {
 	 * needed to authorize later operations on the open file.
 	 */
 	access_mask_t allowed_access;
+	/**
+	 * @fown_domain: A pointer to a &landlock_ruleset of the process owns
+	 * the file. This ruleset is protected by fowner_struct.lock same as
+	 * pid, uid, euid fields in fown_struct.
+	 */
+	struct landlock_ruleset *fown_domain;
 };
 
 /**
