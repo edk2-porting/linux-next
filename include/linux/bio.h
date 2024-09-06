@@ -686,4 +686,8 @@ struct bio *blk_alloc_discard_bio(struct block_device *bdev,
 
 sector_t bio_discard_limit(struct block_device *bdev, sector_t sector);
 
+int blkdev_issue_zero_pages_bio(struct block_device *bdev,
+		sector_t sector, sector_t nr_sects, gfp_t gfp_mask,
+		struct bio **biop, unsigned int flags);
+
 #endif /* __LINUX_BIO_H */

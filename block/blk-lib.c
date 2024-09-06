@@ -193,20 +193,32 @@ static unsigned int __blkdev_sectors_to_bio_pages(sector_t nr_sects)
 	return min(pages, (sector_t)BIO_MAX_VECS);
 }
 
-static void __blkdev_issue_zero_pages(struct block_device *bdev,
+int blkdev_issue_zero_pages_bio(struct block_device *bdev,
 		sector_t sector, sector_t nr_sects, gfp_t gfp_mask,
 		struct bio **biop, unsigned int flags)
 {
+	blk_opf_t opf = REQ_OP_WRITE;
+
+	if (flags & BLKDEV_ZERO_PAGES_NOWAIT) {
+		sector_t max_bio_sectors = BIO_MAX_VECS << PAGE_SECTORS_SHIFT;
+
+		if (nr_sects > max_bio_sectors)
+			return -EAGAIN;
+		opf |= REQ_NOWAIT;
+	}
+
 	while (nr_sects) {
 		unsigned int nr_vecs = __blkdev_sectors_to_bio_pages(nr_sects);
 		struct bio *bio;
 
-		bio = bio_alloc(bdev, nr_vecs, REQ_OP_WRITE, gfp_mask);
+		bio = bio_alloc(bdev, nr_vecs, opf, gfp_mask);
+		if (!bio)
+			return -ENOMEM;
 		bio->bi_iter.bi_sector = sector;
 
 		if ((flags & BLKDEV_ZERO_KILLABLE) &&
 		    fatal_signal_pending(current))
-			break;
+			return -EINTR;
 
 		do {
 			unsigned int len, added;
@@ -223,6 +235,8 @@ static void __blkdev_issue_zero_pages(struct block_device *bdev,
 		*biop = bio_chain_and_submit(*biop, bio);
 		cond_resched();
 	}
+
+	return 0;
 }
 
 static int blkdev_issue_zero_pages(struct block_device *bdev, sector_t sector,
@@ -236,7 +250,7 @@ static int blkdev_issue_zero_pages(struct block_device *bdev, sector_t sector,
 		return -EOPNOTSUPP;
 
 	blk_start_plug(&plug);
-	__blkdev_issue_zero_pages(bdev, sector, nr_sects, gfp, &bio, flags);
+	blkdev_issue_zero_pages_bio(bdev, sector, nr_sects, gfp, &bio, flags);
 	if (bio) {
 		if ((flags & BLKDEV_ZERO_KILLABLE) &&
 		    fatal_signal_pending(current)) {
@@ -286,7 +300,7 @@ int __blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
 	} else {
 		if (flags & BLKDEV_ZERO_NOFALLBACK)
 			return -EOPNOTSUPP;
-		__blkdev_issue_zero_pages(bdev, sector, nr_sects, gfp_mask,
+		blkdev_issue_zero_pages_bio(bdev, sector, nr_sects, gfp_mask,
 				biop, flags);
 	}
 	return 0;
