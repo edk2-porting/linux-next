@@ -24,7 +24,7 @@
  */
 #define TMP_STR_BUF_LEN 320
 /* Patch buffer size */
-#define INSN_BUF_SIZE 16
+#define INSN_BUF_SIZE 32
 
 /* Liveness marks, used for registers and spilled-regs (in stack slots).
  * Read marks propagate upwards until they find a write mark; they record that
@@ -925,6 +925,11 @@ static inline bool type_is_sk_pointer(enum bpf_reg_type type)
 		type == PTR_TO_SOCK_COMMON ||
 		type == PTR_TO_TCP_SOCK ||
 		type == PTR_TO_XDP_SOCK;
+}
+
+static inline bool type_may_be_null(u32 type)
+{
+	return type & PTR_MAYBE_NULL;
 }
 
 static inline void mark_reg_scratched(struct bpf_verifier_env *env, u32 regno)
