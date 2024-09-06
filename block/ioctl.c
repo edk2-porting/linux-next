@@ -775,7 +775,8 @@ static void bio_cmd_bio_end_io(struct bio *bio)
 
 static int blkdev_cmd_write_zeroes(struct io_uring_cmd *cmd,
 				   struct block_device *bdev,
-				   uint64_t start, uint64_t len, bool nowait)
+				   uint64_t start, uint64_t len,
+				   bool nowait, bool zero_pages)
 {
 
 	sector_t bs_mask = (bdev_logical_block_size(bdev) >> SECTOR_SHIFT) - 1;
@@ -793,6 +794,20 @@ static int blkdev_cmd_write_zeroes(struct io_uring_cmd *cmd,
 	err = blk_validate_byte_range(bdev, start, len);
 	if (err)
 		return err;
+
+	if (zero_pages) {
+		struct blk_iou_cmd *bic = io_uring_cmd_to_pdu(cmd,
+						struct blk_iou_cmd);
+
+		err = blkdev_issue_zero_pages_bio(bdev, sector, nr_sects,
+						  gfp, &prev,
+						  BLKDEV_ZERO_PAGES_NOWAIT);
+		if (!prev)
+			return -EAGAIN;
+		if (err)
+			bic->res = err;
+		goto out_submit;
+	}
 
 	if (!limit)
 		return -EOPNOTSUPP;
@@ -827,7 +842,7 @@ static int blkdev_cmd_write_zeroes(struct io_uring_cmd *cmd,
 	}
 	if (!prev)
 		return -EAGAIN;
-
+out_submit:
 	prev->bi_private = cmd;
 	prev->bi_end_io = bio_cmd_bio_end_io;
 	submit_bio(prev);
@@ -905,7 +920,10 @@ int blkdev_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
 		return blkdev_cmd_discard(cmd, bdev, start, len, bic->nowait);
 	case BLOCK_URING_CMD_WRITE_ZEROES:
 		return blkdev_cmd_write_zeroes(cmd, bdev, start, len,
-					       bic->nowait);
+					       bic->nowait, false);
+	case BLOCK_URING_CMD_WRITE_ZERO_PAGE:
+		return blkdev_cmd_write_zeroes(cmd, bdev, start, len,
+					       bic->nowait, true);
 	}
 	return -EINVAL;
 }
