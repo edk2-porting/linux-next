@@ -269,4 +269,104 @@ TEST(signal_scoping_threads)
 	EXPECT_EQ(0, close(thread_pipe[1]));
 }
 
+// FIXME:
+#define SOCKET_PATH "/tmp/unix_sock_test"
+
+const short backlog = 10;
+
+static volatile sig_atomic_t signal_received;
+
+static void handle_sigurg(int sig)
+{
+	if (sig == SIGURG)
+		signal_received = 1;
+	else
+		signal_received = -1;
+}
+
+static int setup_signal_handler(int signal)
+{
+	struct sigaction sa;
+
+	sa.sa_handler = handle_sigurg;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = SA_SIGINFO | SA_RESTART;
+	return sigaction(SIGURG, &sa, NULL);
+}
+
+/*
+ * Sending an out of bound message will trigger the SIGURG signal
+ * through file_send_sigiotask.
+ */
+TEST(test_sigurg_socket)
+{
+	int sock_fd, recv_sock;
+	struct sockaddr_un addr, paddr;
+	socklen_t size;
+	char oob_buf, buffer;
+	int status;
+	int pipe_parent[2], pipe_child[2];
+	pid_t child;
+
+	ASSERT_EQ(0, pipe2(pipe_parent, O_CLOEXEC));
+	ASSERT_EQ(0, pipe2(pipe_child, O_CLOEXEC));
+
+	memset(&addr, 0, sizeof(addr));
+	addr.sun_family = AF_UNIX;
+	snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", SOCKET_PATH);
+	unlink(SOCKET_PATH);
+	size = sizeof(addr);
+
+	child = fork();
+	ASSERT_LE(0, child);
+	if (child == 0) {
+		oob_buf = '.';
+
+		ASSERT_EQ(0, close(pipe_parent[1]));
+		ASSERT_EQ(0, close(pipe_child[0]));
+
+		sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+		ASSERT_NE(-1, sock_fd);
+
+		ASSERT_EQ(1, read(pipe_parent[0], &buffer, 1));
+		ASSERT_EQ(0, connect(sock_fd, &addr, sizeof(addr)));
+
+		ASSERT_EQ(1, read(pipe_parent[0], &buffer, 1));
+		ASSERT_NE(-1, send(sock_fd, &oob_buf, 1, MSG_OOB));
+		ASSERT_EQ(1, write(pipe_child[1], ".", 1));
+
+		EXPECT_EQ(0, close(sock_fd));
+
+		_exit(_metadata->exit_code);
+		return;
+	}
+	ASSERT_EQ(0, close(pipe_parent[0]));
+	ASSERT_EQ(0, close(pipe_child[1]));
+
+	sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	ASSERT_NE(-1, sock_fd);
+	ASSERT_EQ(0, bind(sock_fd, &addr, size));
+	ASSERT_EQ(0, listen(sock_fd, backlog));
+
+	ASSERT_NE(-1, setup_signal_handler(SIGURG));
+	ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+	recv_sock = accept(sock_fd, &paddr, &size);
+	ASSERT_NE(-1, recv_sock);
+
+	create_scoped_domain(_metadata, LANDLOCK_SCOPED_SIGNAL);
+
+	ASSERT_NE(-1, fcntl(recv_sock, F_SETOWN, getpid()));
+	ASSERT_EQ(1, write(pipe_parent[1], ".", 1));
+	ASSERT_EQ(1, read(pipe_child[0], &buffer, 1));
+	ASSERT_EQ(1, recv(recv_sock, &oob_buf, 1, MSG_OOB));
+
+	ASSERT_EQ(1, signal_received);
+	EXPECT_EQ(0, close(sock_fd));
+	EXPECT_EQ(0, close(recv_sock));
+	ASSERT_EQ(child, waitpid(child, &status, 0));
+	if (WIFSIGNALED(status) || !WIFEXITED(status) ||
+	    WEXITSTATUS(status) != EXIT_SUCCESS)
+		_metadata->exit_code = KSFT_FAIL;
+}
+
 TEST_HARNESS_MAIN
