@@ -1309,10 +1309,8 @@ cifs_readv_callback(struct mid_q_entry *mid)
 	if (rdata->result == 0 || rdata->result == -EAGAIN)
 		iov_iter_advance(&rdata->subreq.io_iter, rdata->got_bytes);
 	rdata->credits.value = 0;
-	netfs_subreq_terminated(&rdata->subreq,
-				(rdata->result == 0 || rdata->result == -EAGAIN) ?
-				rdata->got_bytes : rdata->result,
-				false);
+	rdata->subreq.transferred += rdata->got_bytes;
+	netfs_read_subreq_terminated(&rdata->subreq, rdata->result, false);
 	release_mid(mid);
 	add_credits(server, &credits, 0);
 }
@@ -1713,7 +1711,6 @@ cifs_async_writev(struct cifs_io_subrequest *wdata)
 	rqst.rq_iov = iov;
 	rqst.rq_nvec = 2;
 	rqst.rq_iter = wdata->subreq.io_iter;
-	rqst.rq_iter_size = iov_iter_count(&wdata->subreq.io_iter);
 
 	cifs_dbg(FYI, "async write at %llu %zu bytes\n",
 		 wdata->subreq.start, wdata->subreq.len);
