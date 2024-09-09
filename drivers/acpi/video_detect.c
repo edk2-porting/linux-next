@@ -550,6 +550,14 @@ static const struct dmi_system_id video_detect_dmi_table[] = {
 		},
 	},
 	{
+	 .callback = video_detect_force_native,
+	 /* Apple MacBook Pro 9,2 */
+	 .matches = {
+		DMI_MATCH(DMI_SYS_VENDOR, "Apple Inc."),
+		DMI_MATCH(DMI_PRODUCT_NAME, "MacBookPro9,2"),
+		},
+	},
+	{
 	 /* https://bugzilla.redhat.com/show_bug.cgi?id=1217249 */
 	 .callback = video_detect_force_native,
 	 /* Apple MacBook Pro 12,1 */
@@ -896,7 +904,6 @@ static const struct dmi_system_id video_detect_dmi_table[] = {
 	 /* Lenovo Yoga Tab 3 Pro YT3-X90F */
 	 .matches = {
 		DMI_MATCH(DMI_SYS_VENDOR, "Intel Corporation"),
-		DMI_MATCH(DMI_PRODUCT_NAME, "CHERRYVIEW D1 PLATFORM"),
 		DMI_MATCH(DMI_PRODUCT_VERSION, "Blade3-10A-001"),
 		},
 	},
