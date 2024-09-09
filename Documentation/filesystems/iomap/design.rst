@@ -426,7 +426,7 @@ iomap is concerned:
 
 The exact locking requirements are specific to the filesystem; for
 certain operations, some of these locks can be elided.
-All further mention of locking are *recommendations*, not mandates.
+All further mentions of locking are *recommendations*, not mandates.
 Each filesystem author must figure out the locking for themself.
 
 Bugs and Limitations
