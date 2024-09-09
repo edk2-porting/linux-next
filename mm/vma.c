@@ -1260,7 +1260,8 @@ int vms_gather_munmap_vmas(struct vma_munmap_struct *vms,
 			 * split, despite we could. This is unlikely enough
 			 * failure that it's not worth optimizing it for.
 			 */
-			error = userfaultfd_unmap_prep(next, vms->start, vms->end, vms->uf);
+			error = userfaultfd_unmap_prep(next, vms->start,
+						       vms->end, vms->uf);
 			if (error)
 				goto userfaultfd_error;
 		}
