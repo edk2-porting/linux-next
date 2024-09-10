@@ -9,6 +9,7 @@
 #include <string.h>
 #include <regex.h>
 
+#include <xalloc.h>
 #include "internal.h"
 #include "lkc.h"
 
@@ -1321,8 +1322,6 @@ const char *prop_get_type_name(enum prop_type type)
 		return "imply";
 	case P_RANGE:
 		return "range";
-	case P_SYMBOL:
-		return "symbol";
 	case P_UNKNOWN:
 		break;
 	}
