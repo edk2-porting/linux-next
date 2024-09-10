@@ -203,6 +203,7 @@ struct parse_events_modifier {
 	bool hypervisor : 1;	/* 'h' */
 	bool guest : 1;		/* 'G' */
 	bool host : 1;		/* 'H' */
+	bool retire_lat : 1;	/* 'R' */
 };
 
 int parse_events__modifier_event(struct parse_events_state *parse_state, void *loc,
@@ -284,5 +285,7 @@ static inline bool is_sdt_event(char *str __maybe_unused)
 	return false;
 }
 #endif /* HAVE_LIBELF_SUPPORT */
+
+size_t default_breakpoint_len(void);
 
 #endif /* __PERF_PARSE_EVENTS_H */
