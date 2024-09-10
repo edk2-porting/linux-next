@@ -227,26 +227,6 @@ static void swap_zeromap_folio_clear(struct folio *folio)
 }
 
 /*
- * Return the index of the first subpage which is not zero-filled
- * according to swap_info_struct->zeromap.
- * If all pages are zero-filled according to zeromap, it will return
- * folio_nr_pages(folio).
- */
-static unsigned int swap_zeromap_folio_test(struct folio *folio)
-{
-	struct swap_info_struct *sis = swp_swap_info(folio->swap);
-	swp_entry_t entry;
-	unsigned int i;
-
-	for (i = 0; i < folio_nr_pages(folio); i++) {
-		entry = page_swap_entry(folio_page(folio, i));
-		if (!test_bit(swp_offset(entry), sis->zeromap))
-			return i;
-	}
-	return i;
-}
-
-/*
  * We may have stale swap cache pages in memory: notice
  * them here and get rid of the unnecessary final write.
  */
@@ -310,6 +290,7 @@ static inline void count_swpout_vm_event(struct folio *folio)
 	}
 	count_mthp_stat(folio_order(folio), MTHP_STAT_SWPOUT);
 #endif
+	count_memcg_folio_events(folio, PSWPOUT, folio_nr_pages(folio));
 	count_vm_events(PSWPOUT, folio_nr_pages(folio));
 }
 
@@ -505,6 +486,7 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 		for (p = 0; p < sio->pages; p++) {
 			struct folio *folio = page_folio(sio->bvec[p].bv_page);
 
+			count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 			folio_mark_uptodate(folio);
 			folio_unlock(folio);
 		}
@@ -522,18 +504,20 @@ static void sio_read_complete(struct kiocb *iocb, long ret)
 
 static bool swap_read_folio_zeromap(struct folio *folio)
 {
-	unsigned int idx = swap_zeromap_folio_test(folio);
-
-	if (idx == 0)
-		return false;
+	int nr_pages = folio_nr_pages(folio);
+	bool is_zeromap;
 
 	/*
 	 * Swapping in a large folio that is partially in the zeromap is not
 	 * currently handled. Return true without marking the folio uptodate so
 	 * that an IO error is emitted (e.g. do_swap_page() will sigbus).
 	 */
-	if (WARN_ON_ONCE(idx < folio_nr_pages(folio)))
+	if (WARN_ON_ONCE(swap_zeromap_batch(folio->swap, nr_pages,
+			&is_zeromap) != nr_pages))
 		return true;
+
+	if (!is_zeromap)
+		return false;
 
 	folio_zero_range(folio, 0, folio_size(folio));
 	folio_mark_uptodate(folio);
@@ -588,6 +572,7 @@ static void swap_read_folio_bdev_sync(struct folio *folio,
 	 * attempt to access it in the page fault retry time check.
 	 */
 	get_task_struct(current);
+	count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 	count_vm_event(PSWPIN);
 	submit_bio_wait(&bio);
 	__end_swap_bio_read(&bio);
@@ -603,6 +588,7 @@ static void swap_read_folio_bdev_async(struct folio *folio,
 	bio->bi_iter.bi_sector = swap_folio_sector(folio);
 	bio->bi_end_io = end_swap_bio_read;
 	bio_add_folio_nofail(bio, folio, folio_size(folio), 0);
+	count_memcg_folio_events(folio, PSWPIN, folio_nr_pages(folio));
 	count_vm_event(PSWPIN);
 	submit_bio(bio);
 }

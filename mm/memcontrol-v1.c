@@ -2729,6 +2729,8 @@ static const char *const memcg1_stat_names[] = {
 static const unsigned int memcg1_events[] = {
 	PGPGIN,
 	PGPGOUT,
+	PSWPIN,
+	PSWPOUT,
 	PGFAULT,
 	PGMAJFAULT,
 };
