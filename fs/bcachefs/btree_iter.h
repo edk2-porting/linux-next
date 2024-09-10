@@ -6,6 +6,14 @@
 #include "btree_types.h"
 #include "trace.h"
 
+#include <linux/sched/mm.h>
+
+void bch2_trans_updates_to_text(struct printbuf *, struct btree_trans *);
+void bch2_btree_path_to_text(struct printbuf *, struct btree_trans *, btree_path_idx_t);
+void bch2_trans_paths_to_text(struct printbuf *, struct btree_trans *);
+void bch2_dump_trans_updates(struct btree_trans *);
+void bch2_dump_trans_paths_updates(struct btree_trans *);
+
 static inline int __bkey_err(const struct bkey *k)
 {
 	return PTR_ERR_OR_ZERO(k);
@@ -13,16 +21,28 @@ static inline int __bkey_err(const struct bkey *k)
 
 #define bkey_err(_k)	__bkey_err((_k).k)
 
-static inline void __btree_path_get(struct btree_path *path, bool intent)
+static inline void __btree_path_get(struct btree_trans *trans, struct btree_path *path, bool intent)
 {
+	unsigned idx = path - trans->paths;
+
+	EBUG_ON(!test_bit(idx, trans->paths_allocated));
+	if (unlikely(path->ref == U8_MAX)) {
+		bch2_dump_trans_paths_updates(trans);
+		panic("path %u refcount overflow\n", idx);
+	}
+
 	path->ref++;
 	path->intent_ref += intent;
+	trace_btree_path_get_ll(trans, path);
 }
 
-static inline bool __btree_path_put(struct btree_path *path, bool intent)
+static inline bool __btree_path_put(struct btree_trans *trans, struct btree_path *path, bool intent)
 {
+	EBUG_ON(!test_bit(path - trans->paths, trans->paths_allocated));
 	EBUG_ON(!path->ref);
 	EBUG_ON(!path->intent_ref && intent);
+
+	trace_btree_path_put_ll(trans, path);
 	path->intent_ref -= intent;
 	return --path->ref == 0;
 }
@@ -511,6 +531,12 @@ void bch2_set_btree_iter_dontneed(struct btree_iter *);
 
 void *__bch2_trans_kmalloc(struct btree_trans *, size_t);
 
+/**
+ * bch2_trans_kmalloc - allocate memory for use by the current transaction
+ *
+ * Must be called after bch2_trans_begin, which on second and further calls
+ * frees all memory allocated in this transaction
+ */
 static inline void *bch2_trans_kmalloc(struct btree_trans *trans, size_t size)
 {
 	size = roundup(size, 8);
@@ -814,20 +840,6 @@ transaction_restart:							\
 
 struct bkey_s_c bch2_btree_iter_peek_and_restart_outlined(struct btree_iter *);
 
-static inline struct bkey_s_c
-__bch2_btree_iter_peek_and_restart(struct btree_trans *trans,
-				   struct btree_iter *iter, unsigned flags)
-{
-	struct bkey_s_c k;
-
-	while (btree_trans_too_many_iters(trans) ||
-	       (k = bch2_btree_iter_peek_type(iter, flags),
-		bch2_err_matches(bkey_err(k), BCH_ERR_transaction_restart)))
-		bch2_trans_begin(trans);
-
-	return k;
-}
-
 #define for_each_btree_key_upto_norestart(_trans, _iter, _btree_id,	\
 			   _start, _end, _flags, _k, _ret)		\
 	for (bch2_trans_iter_init((_trans), &(_iter), (_btree_id),	\
@@ -861,29 +873,33 @@ __bch2_btree_iter_peek_and_restart(struct btree_trans *trans,
 	(_do) ?: bch2_trans_relock(_trans);				\
 })
 
-#define allocate_dropping_locks_errcode(_trans, _do)			\
-({									\
-	gfp_t _gfp = GFP_NOWAIT|__GFP_NOWARN;				\
-	int _ret = _do;							\
-									\
-	if (bch2_err_matches(_ret, ENOMEM)) {				\
-		_gfp = GFP_KERNEL;					\
-		_ret = drop_locks_do(trans, _do);			\
-	}								\
-	_ret;								\
+#define memalloc_flags_do(_flags, _do)						\
+({										\
+	unsigned _saved_flags = memalloc_flags_save(_flags);			\
+	typeof(_do) _ret = _do;							\
+	memalloc_noreclaim_restore(_saved_flags);				\
+	_ret;									\
 })
 
-#define allocate_dropping_locks(_trans, _ret, _do)			\
-({									\
-	gfp_t _gfp = GFP_NOWAIT|__GFP_NOWARN;				\
-	typeof(_do) _p = _do;						\
-									\
-	_ret = 0;							\
-	if (unlikely(!_p)) {						\
-		_gfp = GFP_KERNEL;					\
-		_ret = drop_locks_do(trans, ((_p = _do), 0));		\
-	}								\
-	_p;								\
+#define allocate_dropping_locks_errcode(_trans, _do)				\
+({										\
+	int _ret = memalloc_flags_do(PF_MEMALLOC_NORECLAIM|PF_MEMALLOC_NOWARN, _do);\
+										\
+	if (bch2_err_matches(_ret, ENOMEM)) {					\
+		_ret = drop_locks_do(_trans, _do);				\
+	}									\
+	_ret;									\
+})
+
+#define allocate_dropping_locks(_trans, _ret, _do)				\
+({										\
+	typeof(_do) _p = memalloc_flags_do(PF_MEMALLOC_NORECLAIM|PF_MEMALLOC_NOWARN, _do);\
+										\
+	_ret = 0;								\
+	if (unlikely(!_p)) {							\
+		_ret = drop_locks_do(_trans, ((_p = _do), 0));			\
+	}									\
+	_p;									\
 })
 
 #define bch2_trans_run(_c, _do)						\
@@ -893,12 +909,6 @@ __bch2_btree_iter_peek_and_restart(struct btree_trans *trans,
 	bch2_trans_put(trans);						\
 	_ret;								\
 })
-
-void bch2_trans_updates_to_text(struct printbuf *, struct btree_trans *);
-void bch2_btree_path_to_text(struct printbuf *, struct btree_trans *, btree_path_idx_t);
-void bch2_trans_paths_to_text(struct printbuf *, struct btree_trans *);
-void bch2_dump_trans_updates(struct btree_trans *);
-void bch2_dump_trans_paths_updates(struct btree_trans *);
 
 struct btree_trans *__bch2_trans_get(struct bch_fs *, unsigned);
 void bch2_trans_put(struct btree_trans *);
