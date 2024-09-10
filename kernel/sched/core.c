@@ -259,6 +259,9 @@ static inline int rb_sched_core_cmp(const void *key, const struct rb_node *node)
 
 void sched_core_enqueue(struct rq *rq, struct task_struct *p)
 {
+	if (p->se.sched_delayed)
+		return;
+
 	rq->core->core_task_seq++;
 
 	if (!p->core_cookie)
@@ -269,6 +272,9 @@ void sched_core_enqueue(struct rq *rq, struct task_struct *p)
 
 void sched_core_dequeue(struct rq *rq, struct task_struct *p, int flags)
 {
+	if (p->se.sched_delayed)
+		return;
+
 	rq->core->core_task_seq++;
 
 	if (sched_core_enqueued(p)) {
@@ -3668,8 +3674,6 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		rq->idle_stamp = 0;
 	}
 #endif
-
-	p->dl_server = NULL;
 }
 
 /*
@@ -5841,8 +5845,8 @@ static inline void schedule_debug(struct task_struct *prev, bool preempt)
 	schedstat_inc(this_rq()->sched_count);
 }
 
-static void put_prev_task_balance(struct rq *rq, struct task_struct *prev,
-				  struct rq_flags *rf)
+static void prev_balance(struct rq *rq, struct task_struct *prev,
+			 struct rq_flags *rf)
 {
 #ifdef CONFIG_SMP
 	const struct sched_class *class;
@@ -5859,16 +5863,6 @@ static void put_prev_task_balance(struct rq *rq, struct task_struct *prev,
 			break;
 	}
 #endif
-
-	put_prev_task(rq, prev);
-
-	/*
-	 * We've updated @prev and no longer need the server link, clear it.
-	 * Must be done before ->pick_next_task() because that can (re)set
-	 * ->dl_server.
-	 */
-	if (prev->dl_server)
-		prev->dl_server = NULL;
 }
 
 /*
@@ -5879,6 +5873,8 @@ __pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	const struct sched_class *class;
 	struct task_struct *p;
+
+	rq->dl_server = NULL;
 
 	/*
 	 * Optimization: we know that if all tasks are in the fair class we can
@@ -5895,34 +5891,28 @@ __pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 
 		/* Assume the next prioritized class is idle_sched_class */
 		if (!p) {
-			put_prev_task(rq, prev);
-			p = pick_next_task_idle(rq);
+			p = pick_task_idle(rq);
+			put_prev_set_next_task(rq, prev, p);
 		}
-
-		/*
-		 * This is a normal CFS pick, but the previous could be a DL pick.
-		 * Clear it as previous is no longer picked.
-		 */
-		if (prev->dl_server)
-			prev->dl_server = NULL;
-
-		/*
-		 * This is the fast path; it cannot be a DL server pick;
-		 * therefore even if @p == @prev, ->dl_server must be NULL.
-		 */
-		if (p->dl_server)
-			p->dl_server = NULL;
 
 		return p;
 	}
 
 restart:
-	put_prev_task_balance(rq, prev, rf);
+	prev_balance(rq, prev, rf);
 
 	for_each_class(class) {
-		p = class->pick_next_task(rq);
-		if (p)
-			return p;
+		if (class->pick_next_task) {
+			p = class->pick_next_task(rq, prev);
+			if (p)
+				return p;
+		} else {
+			p = class->pick_task(rq);
+			if (p) {
+				put_prev_set_next_task(rq, prev, p);
+				return p;
+			}
+		}
 	}
 
 	BUG(); /* The idle class should always have a runnable task. */
@@ -5951,6 +5941,8 @@ static inline struct task_struct *pick_task(struct rq *rq)
 {
 	const struct sched_class *class;
 	struct task_struct *p;
+
+	rq->dl_server = NULL;
 
 	for_each_class(class) {
 		p = class->pick_task(rq);
@@ -5990,6 +5982,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		 * another cpu during offline.
 		 */
 		rq->core_pick = NULL;
+		rq->core_dl_server = NULL;
 		return __pick_next_task(rq, prev, rf);
 	}
 
@@ -6008,16 +6001,13 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		WRITE_ONCE(rq->core_sched_seq, rq->core->core_pick_seq);
 
 		next = rq->core_pick;
-		if (next != prev) {
-			put_prev_task(rq, prev);
-			set_next_task(rq, next);
-		}
-
+		rq->dl_server = rq->core_dl_server;
 		rq->core_pick = NULL;
-		goto out;
+		rq->core_dl_server = NULL;
+		goto out_set_next;
 	}
 
-	put_prev_task_balance(rq, prev, rf);
+	prev_balance(rq, prev, rf);
 
 	smt_mask = cpu_smt_mask(cpu);
 	need_sync = !!rq->core->core_cookie;
@@ -6058,6 +6048,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		next = pick_task(rq);
 		if (!next->core_cookie) {
 			rq->core_pick = NULL;
+			rq->core_dl_server = NULL;
 			/*
 			 * For robustness, update the min_vruntime_fi for
 			 * unconstrained picks as well.
@@ -6085,7 +6076,9 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		if (i != cpu && (rq_i != rq->core || !core_clock_updated))
 			update_rq_clock(rq_i);
 
-		p = rq_i->core_pick = pick_task(rq_i);
+		rq_i->core_pick = p = pick_task(rq_i);
+		rq_i->core_dl_server = rq_i->dl_server;
+
 		if (!max || prio_less(max, p, fi_before))
 			max = p;
 	}
@@ -6109,6 +6102,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		}
 
 		rq_i->core_pick = p;
+		rq_i->core_dl_server = NULL;
 
 		if (p == rq_i->idle) {
 			if (rq_i->nr_running) {
@@ -6169,6 +6163,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 
 		if (i == cpu) {
 			rq_i->core_pick = NULL;
+			rq_i->core_dl_server = NULL;
 			continue;
 		}
 
@@ -6177,6 +6172,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 
 		if (rq_i->curr == rq_i->core_pick) {
 			rq_i->core_pick = NULL;
+			rq_i->core_dl_server = NULL;
 			continue;
 		}
 
@@ -6184,8 +6180,7 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 	}
 
 out_set_next:
-	set_next_task(rq, next);
-out:
+	put_prev_set_next_task(rq, prev, next);
 	if (rq->core->core_forceidle_count && next == rq->idle)
 		queue_core_balance(rq);
 
@@ -6421,19 +6416,12 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
  * Constants for the sched_mode argument of __schedule().
  *
  * The mode argument allows RT enabled kernels to differentiate a
- * preemption from blocking on an 'sleeping' spin/rwlock. Note that
- * SM_MASK_PREEMPT for !RT has all bits set, which allows the compiler to
- * optimize the AND operation out and just check for zero.
+ * preemption from blocking on an 'sleeping' spin/rwlock.
  */
-#define SM_NONE			0x0
-#define SM_PREEMPT		0x1
-#define SM_RTLOCK_WAIT		0x2
-
-#ifndef CONFIG_PREEMPT_RT
-# define SM_MASK_PREEMPT	(~0U)
-#else
-# define SM_MASK_PREEMPT	SM_PREEMPT
-#endif
+#define SM_IDLE			(-1)
+#define SM_NONE			0
+#define SM_PREEMPT		1
+#define SM_RTLOCK_WAIT		2
 
 /*
  * __schedule() is the main scheduler function.
@@ -6474,9 +6462,14 @@ pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
  *
  * WARNING: must be called with preemption disabled!
  */
-static void __sched notrace __schedule(unsigned int sched_mode)
+static void __sched notrace __schedule(int sched_mode)
 {
 	struct task_struct *prev, *next;
+	/*
+	 * On PREEMPT_RT kernel, SM_RTLOCK_WAIT is noted
+	 * as a preemption by schedule_debug() and RCU.
+	 */
+	bool preempt = sched_mode > SM_NONE;
 	unsigned long *switch_count;
 	unsigned long prev_state;
 	struct rq_flags rf;
@@ -6487,13 +6480,13 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
 
-	schedule_debug(prev, !!sched_mode);
+	schedule_debug(prev, preempt);
 
 	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
 		hrtick_clear(rq);
 
 	local_irq_disable();
-	rcu_note_context_switch(!!sched_mode);
+	rcu_note_context_switch(preempt);
 
 	/*
 	 * Make sure that signal_pending_state()->signal_pending() below
@@ -6522,12 +6515,20 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 
 	switch_count = &prev->nivcsw;
 
+	/* Task state changes only considers SM_PREEMPT as preemption */
+	preempt = sched_mode == SM_PREEMPT;
+
 	/*
 	 * We must load prev->state once (task_struct::state is volatile), such
 	 * that we form a control dependency vs deactivate_task() below.
 	 */
 	prev_state = READ_ONCE(prev->__state);
-	if (!(sched_mode & SM_MASK_PREEMPT) && prev_state) {
+	if (sched_mode == SM_IDLE) {
+		if (!rq->nr_running) {
+			next = prev;
+			goto picked;
+		}
+	} else if (!preempt && prev_state) {
 		if (signal_pending_state(prev_state, prev)) {
 			WRITE_ONCE(prev->__state, TASK_RUNNING);
 		} else {
@@ -6558,6 +6559,7 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 	}
 
 	next = pick_next_task(rq, prev, &rf);
+picked:
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
 #ifdef CONFIG_SCHED_DEBUG
@@ -6599,7 +6601,7 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 		psi_account_irqtime(rq, prev, next);
 		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
-		trace_sched_switch(sched_mode & SM_MASK_PREEMPT, prev, next, prev_state);
+		trace_sched_switch(preempt, prev, next, prev_state);
 
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
@@ -6675,7 +6677,7 @@ static void sched_update_worker(struct task_struct *tsk)
 	}
 }
 
-static __always_inline void __schedule_loop(unsigned int sched_mode)
+static __always_inline void __schedule_loop(int sched_mode)
 {
 	do {
 		preempt_disable();
@@ -6720,7 +6722,7 @@ void __sched schedule_idle(void)
 	 */
 	WARN_ON_ONCE(current->__state);
 	do {
-		__schedule(SM_NONE);
+		__schedule(SM_IDLE);
 	} while (need_resched());
 }
 
@@ -8401,6 +8403,7 @@ void __init sched_init(void)
 #ifdef CONFIG_SCHED_CORE
 		rq->core = rq;
 		rq->core_pick = NULL;
+		rq->core_dl_server = NULL;
 		rq->core_enabled = 0;
 		rq->core_tree = RB_ROOT;
 		rq->core_forceidle_count = 0;

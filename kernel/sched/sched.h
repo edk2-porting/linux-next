@@ -362,7 +362,6 @@ extern void dl_server_start(struct sched_dl_entity *dl_se);
 extern void dl_server_stop(struct sched_dl_entity *dl_se);
 extern void dl_server_init(struct sched_dl_entity *dl_se, struct rq *rq,
 		    dl_server_has_tasks_f has_tasks,
-		    dl_server_pick_f pick_next,
 		    dl_server_pick_f pick_task);
 
 extern void dl_server_update_idle_time(struct rq *rq,
@@ -604,6 +603,7 @@ struct cfs_rq {
 	unsigned int		h_nr_running;      /* SCHED_{NORMAL,BATCH,IDLE} */
 	unsigned int		idle_nr_running;   /* SCHED_IDLE */
 	unsigned int		idle_h_nr_running; /* SCHED_IDLE */
+	unsigned int		h_nr_delayed;
 
 	s64			avg_vruntime;
 	u64			avg_load;
@@ -814,8 +814,10 @@ struct dl_rq {
 
 static inline void se_update_runnable(struct sched_entity *se)
 {
-	if (!entity_is_task(se))
-		se->runnable_weight = se->my_q->h_nr_running;
+	if (!entity_is_task(se)) {
+		struct cfs_rq *cfs_rq = se->my_q;
+		se->runnable_weight = cfs_rq->h_nr_running - cfs_rq->h_nr_delayed;
+	}
 }
 
 static inline long se_runnable(struct sched_entity *se)
@@ -1067,6 +1069,7 @@ struct rq {
 	unsigned int		nr_uninterruptible;
 
 	struct task_struct __rcu	*curr;
+	struct sched_dl_entity	*dl_server;
 	struct task_struct	*idle;
 	struct task_struct	*stop;
 	unsigned long		next_balance;
@@ -1194,6 +1197,7 @@ struct rq {
 	/* per rq */
 	struct rq		*core;
 	struct task_struct	*core_pick;
+	struct sched_dl_entity	*core_dl_server;
 	unsigned int		core_enabled;
 	unsigned int		core_sched_seq;
 	struct rb_root		core_tree;
@@ -2301,16 +2305,24 @@ struct sched_class {
 
 	void (*wakeup_preempt)(struct rq *rq, struct task_struct *p, int flags);
 
-	struct task_struct *(*pick_next_task)(struct rq *rq);
+	struct task_struct *(*pick_task)(struct rq *rq);
+	/*
+	 * Optional! When implemented pick_next_task() should be equivalent to:
+	 *
+	 *   next = pick_task();
+	 *   if (next) {
+	 *       put_prev_task(prev);
+	 *       set_next_task_first(next);
+	 *   }
+	 */
+	struct task_struct *(*pick_next_task)(struct rq *rq, struct task_struct *prev);
 
-	void (*put_prev_task)(struct rq *rq, struct task_struct *p);
+	void (*put_prev_task)(struct rq *rq, struct task_struct *p, struct task_struct *next);
 	void (*set_next_task)(struct rq *rq, struct task_struct *p, bool first);
 
 #ifdef CONFIG_SMP
 	int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
 	int  (*select_task_rq)(struct task_struct *p, int task_cpu, int flags);
-
-	struct task_struct * (*pick_task)(struct rq *rq);
 
 	void (*migrate_task_rq)(struct task_struct *p, int new_cpu);
 
@@ -2355,7 +2367,7 @@ struct sched_class {
 static inline void put_prev_task(struct rq *rq, struct task_struct *prev)
 {
 	WARN_ON_ONCE(rq->curr != prev);
-	prev->sched_class->put_prev_task(rq, prev);
+	prev->sched_class->put_prev_task(rq, prev, NULL);
 }
 
 static inline void set_next_task(struct rq *rq, struct task_struct *next)
@@ -2363,6 +2375,30 @@ static inline void set_next_task(struct rq *rq, struct task_struct *next)
 	next->sched_class->set_next_task(rq, next, false);
 }
 
+static inline void
+__put_prev_set_next_dl_server(struct rq *rq,
+			      struct task_struct *prev,
+			      struct task_struct *next)
+{
+	prev->dl_server = NULL;
+	next->dl_server = rq->dl_server;
+	rq->dl_server = NULL;
+}
+
+static inline void put_prev_set_next_task(struct rq *rq,
+					  struct task_struct *prev,
+					  struct task_struct *next)
+{
+	WARN_ON_ONCE(rq->curr != prev);
+
+	__put_prev_set_next_dl_server(rq, prev, next);
+
+	if (next == prev)
+		return;
+
+	prev->sched_class->put_prev_task(rq, prev, next);
+	next->sched_class->set_next_task(rq, next, true);
+}
 
 /*
  * Helper to define a sched_class instance; each one is placed in a separate
@@ -2418,7 +2454,7 @@ static inline bool sched_fair_runnable(struct rq *rq)
 }
 
 extern struct task_struct *pick_next_task_fair(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
-extern struct task_struct *pick_next_task_idle(struct rq *rq);
+extern struct task_struct *pick_task_idle(struct rq *rq);
 
 #define SCA_CHECK		0x01
 #define SCA_MIGRATE_DISABLE	0x02
