@@ -149,9 +149,11 @@ static int no_open(struct inode *inode, struct file *file)
  * inode_init_always - perform inode structure initialisation
  * @sb: superblock inode belongs to
  * @inode: inode to initialise
+ * @gfp: allocation flags
  *
  * These are initializations that need to be done on every inode
  * allocation as the fields are not initialised by slab allocation.
+ * If there are additional allocations required @gfp is used.
  */
 int inode_init_always_gfp(struct super_block *sb, struct inode *inode, gfp_t gfp)
 {
