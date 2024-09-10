@@ -11,6 +11,8 @@
 #include <linux/blktrace_api.h>
 #include <linux/pr.h>
 #include <linux/uaccess.h>
+#include <linux/pagemap.h>
+#include <linux/io_uring/cmd.h>
 #include "blk.h"
 
 static int blkpg_do_ioctl(struct block_device *bdev,
@@ -92,41 +94,49 @@ static int compat_blkpg_ioctl(struct block_device *bdev,
 }
 #endif
 
+static int blk_validate_byte_range(struct block_device *bdev,
+				   uint64_t start, uint64_t len)
+{
+	unsigned int bs_mask = bdev_logical_block_size(bdev) - 1;
+	uint64_t end;
+
+	if ((start | len) & bs_mask)
+		return -EINVAL;
+	if (!len)
+		return -EINVAL;
+	if (check_add_overflow(start, len, &end) || end > bdev_nr_bytes(bdev))
+		return -EINVAL;
+
+	return 0;
+}
+
 static int blk_ioctl_discard(struct block_device *bdev, blk_mode_t mode,
 		unsigned long arg)
 {
-	unsigned int bs_mask = bdev_logical_block_size(bdev) - 1;
-	uint64_t range[2], start, len, end;
+	uint64_t range[2], start, len;
 	struct bio *prev = NULL, *bio;
 	sector_t sector, nr_sects;
 	struct blk_plug plug;
 	int err;
 
-	if (!(mode & BLK_OPEN_WRITE))
-		return -EBADF;
-
-	if (!bdev_max_discard_sectors(bdev))
-		return -EOPNOTSUPP;
-	if (bdev_read_only(bdev))
-		return -EPERM;
-
 	if (copy_from_user(range, (void __user *)arg, sizeof(range)))
 		return -EFAULT;
-
 	start = range[0];
 	len = range[1];
 
-	if (!len)
-		return -EINVAL;
-	if ((start | len) & bs_mask)
-		return -EINVAL;
+	if (!bdev_max_discard_sectors(bdev))
+		return -EOPNOTSUPP;
 
-	if (check_add_overflow(start, len, &end) ||
-	    end > bdev_nr_bytes(bdev))
-		return -EINVAL;
+	if (!(mode & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+	err = blk_validate_byte_range(bdev, start, len);
+	if (err)
+		return err;
 
 	filemap_invalidate_lock(bdev->bd_mapping);
-	err = truncate_bdev_range(bdev, mode, start, end - 1);
+	err = truncate_bdev_range(bdev, mode, start, start + len - 1);
 	if (err)
 		goto fail;
 
@@ -735,3 +745,185 @@ long compat_blkdev_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	return ret;
 }
 #endif
+
+struct blk_iou_cmd {
+	int res;
+	bool nowait;
+};
+
+static void blk_cmd_complete(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	struct blk_iou_cmd *bic = io_uring_cmd_to_pdu(cmd, struct blk_iou_cmd);
+
+	if (bic->res == -EAGAIN && bic->nowait)
+		io_uring_cmd_issue_blocking(cmd);
+	else
+		io_uring_cmd_done(cmd, bic->res, 0, issue_flags);
+}
+
+static void bio_cmd_bio_end_io(struct bio *bio)
+{
+	struct io_uring_cmd *cmd = bio->bi_private;
+	struct blk_iou_cmd *bic = io_uring_cmd_to_pdu(cmd, struct blk_iou_cmd);
+
+	if (unlikely(bio->bi_status) && !bic->res)
+		bic->res = blk_status_to_errno(bio->bi_status);
+
+	io_uring_cmd_do_in_task_lazy(cmd, blk_cmd_complete);
+	bio_put(bio);
+}
+
+static int blkdev_cmd_write_zeroes(struct io_uring_cmd *cmd,
+				   struct block_device *bdev,
+				   uint64_t start, uint64_t len,
+				   bool nowait, bool zero_pages)
+{
+
+	sector_t bs_mask = (bdev_logical_block_size(bdev) >> SECTOR_SHIFT) - 1;
+	sector_t limit = bdev_write_zeroes_sectors(bdev);
+	sector_t sector = start >> SECTOR_SHIFT;
+	sector_t nr_sects = len >> SECTOR_SHIFT;
+	struct bio *prev = NULL, *bio;
+	gfp_t gfp = nowait ? GFP_NOWAIT : GFP_KERNEL;
+	int err;
+
+	if (!(file_to_blk_mode(cmd->file) & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+	err = blk_validate_byte_range(bdev, start, len);
+	if (err)
+		return err;
+
+	if (zero_pages) {
+		struct blk_iou_cmd *bic = io_uring_cmd_to_pdu(cmd,
+						struct blk_iou_cmd);
+
+		err = blkdev_issue_zero_pages_bio(bdev, sector, nr_sects,
+						  gfp, &prev,
+						  BLKDEV_ZERO_PAGES_NOWAIT);
+		if (!prev)
+			return -EAGAIN;
+		if (err)
+			bic->res = err;
+		goto out_submit;
+	}
+
+	if (!limit)
+		return -EOPNOTSUPP;
+	/*
+	 * Don't allow multi-bio non-blocking submissions as subsequent bios
+	 * may fail but we won't get a direct indication of that. Normally,
+	 * the caller should retry from a blocking context.
+	 */
+	if (nowait && nr_sects > limit)
+		return -EAGAIN;
+
+	err = filemap_invalidate_pages(bdev->bd_mapping, start,
+					start + len - 1, nowait);
+	if (err)
+		return err;
+
+	limit = min(limit, (UINT_MAX >> SECTOR_SHIFT) & ~bs_mask);
+	while (nr_sects) {
+		sector_t bio_sects = min(nr_sects, limit);
+
+		bio = bio_alloc(bdev, 0, REQ_OP_WRITE_ZEROES|REQ_NOUNMAP, gfp);
+		if (!bio)
+			break;
+		if (nowait)
+			bio->bi_opf |= REQ_NOWAIT;
+		bio->bi_iter.bi_sector = sector;
+		bio->bi_iter.bi_size = bio_sects << SECTOR_SHIFT;
+		sector += bio_sects;
+		nr_sects -= bio_sects;
+
+		prev = bio_chain_and_submit(prev, bio);
+	}
+	if (!prev)
+		return -EAGAIN;
+out_submit:
+	prev->bi_private = cmd;
+	prev->bi_end_io = bio_cmd_bio_end_io;
+	submit_bio(prev);
+	return -EIOCBQUEUED;
+}
+
+static int blkdev_cmd_discard(struct io_uring_cmd *cmd,
+			      struct block_device *bdev,
+			      uint64_t start, uint64_t len, bool nowait)
+{
+	gfp_t gfp = nowait ? GFP_NOWAIT : GFP_KERNEL;
+	sector_t sector = start >> SECTOR_SHIFT;
+	sector_t nr_sects = len >> SECTOR_SHIFT;
+	struct bio *prev = NULL, *bio;
+	int err;
+
+	if (!bdev_max_discard_sectors(bdev))
+		return -EOPNOTSUPP;
+
+	if (!(file_to_blk_mode(cmd->file) & BLK_OPEN_WRITE))
+		return -EBADF;
+	if (bdev_read_only(bdev))
+		return -EPERM;
+	err = blk_validate_byte_range(bdev, start, len);
+	if (err)
+		return err;
+
+	/*
+	 * Don't allow multi-bio non-blocking submissions as subsequent bios
+	 * may fail but we won't get a direct indication of that. Normally,
+	 * the caller should retry from a blocking context.
+	 */
+	if (nowait && nr_sects > bio_discard_limit(bdev, sector))
+		return -EAGAIN;
+
+	err = filemap_invalidate_pages(bdev->bd_mapping, start,
+					start + len - 1, nowait);
+	if (err)
+		return err;
+
+	while ((bio = blk_alloc_discard_bio(bdev, &sector, &nr_sects, gfp))) {
+		if (nowait)
+			bio->bi_opf |= REQ_NOWAIT;
+		prev = bio_chain_and_submit(prev, bio);
+	}
+	if (!prev)
+		return -EAGAIN;
+
+	prev->bi_private = cmd;
+	prev->bi_end_io = bio_cmd_bio_end_io;
+	submit_bio(prev);
+	return -EIOCBQUEUED;
+}
+
+int blkdev_uring_cmd(struct io_uring_cmd *cmd, unsigned int issue_flags)
+{
+	struct block_device *bdev = I_BDEV(cmd->file->f_mapping->host);
+	struct blk_iou_cmd *bic = io_uring_cmd_to_pdu(cmd, struct blk_iou_cmd);
+	const struct io_uring_sqe *sqe = cmd->sqe;
+	u32 cmd_op = cmd->cmd_op;
+	uint64_t start, len;
+
+	if (unlikely(sqe->ioprio || sqe->__pad1 || sqe->len ||
+		     sqe->rw_flags || sqe->file_index))
+		return -EINVAL;
+
+	bic->res = 0;
+	bic->nowait = issue_flags & IO_URING_F_NONBLOCK;
+
+	start = READ_ONCE(sqe->addr);
+	len = READ_ONCE(sqe->addr3);
+
+	switch (cmd_op) {
+	case BLOCK_URING_CMD_DISCARD:
+		return blkdev_cmd_discard(cmd, bdev, start, len, bic->nowait);
+	case BLOCK_URING_CMD_WRITE_ZEROES:
+		return blkdev_cmd_write_zeroes(cmd, bdev, start, len,
+					       bic->nowait, false);
+	case BLOCK_URING_CMD_WRITE_ZERO_PAGE:
+		return blkdev_cmd_write_zeroes(cmd, bdev, start, len,
+					       bic->nowait, true);
+	}
+	return -EINVAL;
+}
