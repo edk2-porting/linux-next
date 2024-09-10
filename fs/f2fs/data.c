@@ -3562,13 +3562,12 @@ reserve_block:
 }
 
 static int f2fs_write_begin(struct file *file, struct address_space *mapping,
-		loff_t pos, unsigned len, struct page **pagep, void **fsdata)
+		loff_t pos, unsigned len, struct folio **foliop, void **fsdata)
 {
 	struct inode *inode = mapping->host;
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
-	struct page *page = NULL;
 	struct folio *folio;
-	pgoff_t index = ((unsigned long long) pos) >> PAGE_SHIFT;
+	pgoff_t index = pos >> PAGE_SHIFT;
 	bool need_balance = false;
 	bool use_cow = false;
 	block_t blkaddr = NULL_ADDR;
@@ -3584,7 +3583,7 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 	/*
 	 * We should check this at this moment to avoid deadlock on inode page
 	 * and #0 page. The locking rule for inline_data conversion should be:
-	 * lock_page(page #0) -> lock_page(inode_page)
+	 * folio_lock(folio #0) -> folio_lock(inode_page)
 	 */
 	if (index != 0) {
 		err = f2fs_convert_inline_inode(inode);
@@ -3595,18 +3594,20 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 #ifdef CONFIG_F2FS_FS_COMPRESSION
 	if (f2fs_compressed_file(inode)) {
 		int ret;
+		struct page *page;
 
 		*fsdata = NULL;
 
 		if (len == PAGE_SIZE && !(f2fs_is_atomic_file(inode)))
 			goto repeat;
 
-		ret = f2fs_prepare_compress_overwrite(inode, pagep,
+		ret = f2fs_prepare_compress_overwrite(inode, &page,
 							index, fsdata);
 		if (ret < 0) {
 			err = ret;
 			goto fail;
 		} else if (ret) {
+			*foliop = page_folio(page);
 			return 0;
 		}
 	}
@@ -3614,20 +3615,19 @@ static int f2fs_write_begin(struct file *file, struct address_space *mapping,
 
 repeat:
 	/*
-	 * Do not use grab_cache_page_write_begin() to avoid deadlock due to
-	 * wait_for_stable_page. Will wait that below with our IO control.
+	 * Do not use FGP_STABLE to avoid deadlock.
+	 * Will wait that below with our IO control.
 	 */
-	page = f2fs_pagecache_get_page(mapping, index,
+	folio = __filemap_get_folio(mapping, index,
 				FGP_LOCK | FGP_WRITE | FGP_CREAT, GFP_NOFS);
-	if (!page) {
-		err = -ENOMEM;
+	if (IS_ERR(folio)) {
+		err = PTR_ERR(folio);
 		goto fail;
 	}
 
 	/* TODO: cluster can be compressed due to race with .writepage */
 
-	*pagep = page;
-	folio = page_folio(page);
+	*foliop = folio;
 
 	if (f2fs_is_atomic_file(inode))
 		err = prepare_atomic_write_begin(sbi, folio, pos, len,
@@ -3636,7 +3636,7 @@ repeat:
 		err = prepare_write_begin(sbi, folio, pos, len,
 					&blkaddr, &need_balance);
 	if (err)
-		goto fail;
+		goto put_folio;
 
 	if (need_balance && !IS_NOQUOTA(inode) &&
 			has_not_enough_free_secs(sbi, 0, 0)) {
@@ -3644,20 +3644,21 @@ repeat:
 		f2fs_balance_fs(sbi, true);
 		folio_lock(folio);
 		if (folio->mapping != mapping) {
-			/* The page got truncated from under us */
-			f2fs_put_page(page, 1);
+			/* The folio got truncated from under us */
+			folio_unlock(folio);
+			folio_put(folio);
 			goto repeat;
 		}
 	}
 
-	f2fs_wait_on_page_writeback(page, DATA, false, true);
+	f2fs_wait_on_page_writeback(&folio->page, DATA, false, true);
 
-	if (len == PAGE_SIZE || folio_test_uptodate(folio))
+	if (len == folio_size(folio) || folio_test_uptodate(folio))
 		return 0;
 
 	if (!(pos & (PAGE_SIZE - 1)) && (pos + len) >= i_size_read(inode) &&
 	    !f2fs_verity_in_progress(inode)) {
-		folio_zero_segment(folio, len, folio_size(folio));
+		folio_zero_segment(folio, len, PAGE_SIZE);
 		return 0;
 	}
 
@@ -3668,28 +3669,31 @@ repeat:
 		if (!f2fs_is_valid_blkaddr(sbi, blkaddr,
 				DATA_GENERIC_ENHANCE_READ)) {
 			err = -EFSCORRUPTED;
-			goto fail;
+			goto put_folio;
 		}
 		err = f2fs_submit_page_read(use_cow ?
 				F2FS_I(inode)->cow_inode : inode,
 				folio, blkaddr, 0, true);
 		if (err)
-			goto fail;
+			goto put_folio;
 
 		folio_lock(folio);
 		if (unlikely(folio->mapping != mapping)) {
-			f2fs_put_page(page, 1);
+			folio_unlock(folio);
+			folio_put(folio);
 			goto repeat;
 		}
 		if (unlikely(!folio_test_uptodate(folio))) {
 			err = -EIO;
-			goto fail;
+			goto put_folio;
 		}
 	}
 	return 0;
 
+put_folio:
+	folio_unlock(folio);
+	folio_put(folio);
 fail:
-	f2fs_put_page(page, 1);
 	f2fs_write_failed(inode, pos + len);
 	return err;
 }
@@ -3697,9 +3701,8 @@ fail:
 static int f2fs_write_end(struct file *file,
 			struct address_space *mapping,
 			loff_t pos, unsigned len, unsigned copied,
-			struct page *page, void *fsdata)
+			struct folio *folio, void *fsdata)
 {
-	struct folio *folio = page_folio(page);
 	struct inode *inode = folio->mapping->host;
 
 	trace_f2fs_write_end(inode, pos, len, copied);
@@ -3745,7 +3748,8 @@ static int f2fs_write_end(struct file *file,
 					pos + copied);
 	}
 unlock_out:
-	f2fs_put_page(page, 1);
+	folio_unlock(folio);
+	folio_put(folio);
 	f2fs_update_time(F2FS_I_SB(inode), REQ_TIME);
 	return copied;
 }

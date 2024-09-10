@@ -1132,7 +1132,7 @@ int ext4_block_write_begin(handle_t *handle, struct folio *folio,
  */
 static int ext4_write_begin(struct file *file, struct address_space *mapping,
 			    loff_t pos, unsigned len,
-			    struct page **pagep, void **fsdata)
+			    struct folio **foliop, void **fsdata)
 {
 	struct inode *inode = mapping->host;
 	int ret, needed_blocks;
@@ -1157,7 +1157,7 @@ static int ext4_write_begin(struct file *file, struct address_space *mapping,
 
 	if (ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
 		ret = ext4_try_to_write_inline_data(mapping, inode, pos, len,
-						    pagep);
+						    foliop);
 		if (ret < 0)
 			return ret;
 		if (ret == 1)
@@ -1250,7 +1250,7 @@ retry_journal:
 		folio_put(folio);
 		return ret;
 	}
-	*pagep = &folio->page;
+	*foliop = folio;
 	return ret;
 }
 
@@ -1278,9 +1278,8 @@ static int write_end_fn(handle_t *handle, struct inode *inode,
 static int ext4_write_end(struct file *file,
 			  struct address_space *mapping,
 			  loff_t pos, unsigned len, unsigned copied,
-			  struct page *page, void *fsdata)
+			  struct folio *folio, void *fsdata)
 {
-	struct folio *folio = page_folio(page);
 	handle_t *handle = ext4_journal_current_handle();
 	struct inode *inode = mapping->host;
 	loff_t old_size = inode->i_size;
@@ -1295,7 +1294,7 @@ static int ext4_write_end(struct file *file,
 		return ext4_write_inline_data_end(inode, pos, len, copied,
 						  folio);
 
-	copied = block_write_end(file, mapping, pos, len, copied, page, fsdata);
+	copied = block_write_end(file, mapping, pos, len, copied, folio, fsdata);
 	/*
 	 * it's important to update i_size while still holding folio lock:
 	 * page writeout could otherwise come in and zero beyond i_size.
@@ -1382,9 +1381,8 @@ static void ext4_journalled_zero_new_buffers(handle_t *handle,
 static int ext4_journalled_write_end(struct file *file,
 				     struct address_space *mapping,
 				     loff_t pos, unsigned len, unsigned copied,
-				     struct page *page, void *fsdata)
+				     struct folio *folio, void *fsdata)
 {
-	struct folio *folio = page_folio(page);
 	handle_t *handle = ext4_journal_current_handle();
 	struct inode *inode = mapping->host;
 	loff_t old_size = inode->i_size;
@@ -2899,7 +2897,7 @@ static int ext4_nonda_switch(struct super_block *sb)
 
 static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 			       loff_t pos, unsigned len,
-			       struct page **pagep, void **fsdata)
+			       struct folio **foliop, void **fsdata)
 {
 	int ret, retries = 0;
 	struct folio *folio;
@@ -2914,14 +2912,14 @@ static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 	if (ext4_nonda_switch(inode->i_sb) || ext4_verity_in_progress(inode)) {
 		*fsdata = (void *)FALL_BACK_TO_NONDELALLOC;
 		return ext4_write_begin(file, mapping, pos,
-					len, pagep, fsdata);
+					len, foliop, fsdata);
 	}
 	*fsdata = (void *)0;
 	trace_ext4_da_write_begin(inode, pos, len);
 
 	if (ext4_test_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA)) {
 		ret = ext4_da_write_inline_data_begin(mapping, inode, pos, len,
-						      pagep, fsdata);
+						      foliop, fsdata);
 		if (ret < 0)
 			return ret;
 		if (ret == 1)
@@ -2953,7 +2951,7 @@ retry:
 		return ret;
 	}
 
-	*pagep = &folio->page;
+	*foliop = folio;
 	return ret;
 }
 
@@ -2999,7 +2997,7 @@ static int ext4_da_do_write_end(struct address_space *mapping,
 	 * flag, which all that's needed to trigger page writeback.
 	 */
 	copied = block_write_end(NULL, mapping, pos, len, copied,
-			&folio->page, NULL);
+			folio, NULL);
 	new_i_size = pos + copied;
 
 	/*
@@ -3050,15 +3048,14 @@ static int ext4_da_do_write_end(struct address_space *mapping,
 static int ext4_da_write_end(struct file *file,
 			     struct address_space *mapping,
 			     loff_t pos, unsigned len, unsigned copied,
-			     struct page *page, void *fsdata)
+			     struct folio *folio, void *fsdata)
 {
 	struct inode *inode = mapping->host;
 	int write_mode = (int)(unsigned long)fsdata;
-	struct folio *folio = page_folio(page);
 
 	if (write_mode == FALL_BACK_TO_NONDELALLOC)
 		return ext4_write_end(file, mapping, pos,
-				      len, copied, &folio->page, fsdata);
+				      len, copied, folio, fsdata);
 
 	trace_ext4_da_write_end(inode, pos, len, copied);
 

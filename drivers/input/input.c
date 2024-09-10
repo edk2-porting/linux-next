@@ -1081,9 +1081,11 @@ static inline void input_wakeup_procfs_readers(void)
 
 static __poll_t input_proc_devices_poll(struct file *file, poll_table *wait)
 {
+	struct seq_file *m = file->private_data;
+
 	poll_wait(file, &input_devices_poll_wait, wait);
-	if (file->f_version != input_devices_state) {
-		file->f_version = input_devices_state;
+	if (*(u64 *)m->private != input_devices_state) {
+		*(u64 *)m->private = input_devices_state;
 		return EPOLLIN | EPOLLRDNORM;
 	}
 
@@ -1210,7 +1212,7 @@ static const struct seq_operations input_devices_seq_ops = {
 
 static int input_proc_devices_open(struct inode *inode, struct file *file)
 {
-	return seq_open(file, &input_devices_seq_ops);
+	return seq_open_private(file, &input_devices_seq_ops, sizeof(u64));
 }
 
 static const struct proc_ops input_devices_proc_ops = {

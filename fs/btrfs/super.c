@@ -2199,7 +2199,7 @@ static struct file_system_type btrfs_fs_type = {
 	.parameters		= btrfs_fs_parameters,
 	.kill_sb		= btrfs_kill_super,
 	.fs_flags		= FS_REQUIRES_DEV | FS_BINARY_MOUNTDATA |
-				  FS_ALLOW_IDMAP | FS_ALLOW_HSM,
+				  FS_ALLOW_IDMAP | FS_ALLOW_HSM | FS_MGTIME,
  };
 
 MODULE_ALIAS_FS("btrfs");
