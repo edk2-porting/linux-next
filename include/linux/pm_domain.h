@@ -198,8 +198,11 @@ struct generic_pm_domain {
 			spinlock_t slock;
 			unsigned long lock_flags;
 		};
+		struct {
+			raw_spinlock_t raw_slock;
+			unsigned long raw_lock_flags;
+		};
 	};
-
 };
 
 static inline struct generic_pm_domain *pd_to_genpd(struct dev_pm_domain *pd)
@@ -265,7 +268,6 @@ int pm_genpd_remove_subdomain(struct generic_pm_domain *genpd,
 int pm_genpd_init(struct generic_pm_domain *genpd,
 		  struct dev_power_governor *gov, bool is_off);
 int pm_genpd_remove(struct generic_pm_domain *genpd);
-struct device *dev_to_genpd_dev(struct device *dev);
 int dev_pm_genpd_set_performance_state(struct device *dev, unsigned int state);
 int dev_pm_genpd_add_notifier(struct device *dev, struct notifier_block *nb);
 int dev_pm_genpd_remove_notifier(struct device *dev);
@@ -313,11 +315,6 @@ static inline int pm_genpd_init(struct generic_pm_domain *genpd,
 static inline int pm_genpd_remove(struct generic_pm_domain *genpd)
 {
 	return -EOPNOTSUPP;
-}
-
-static inline struct device *dev_to_genpd_dev(struct device *dev)
-{
-	return ERR_PTR(-EOPNOTSUPP);
 }
 
 static inline int dev_pm_genpd_set_performance_state(struct device *dev,
@@ -473,6 +470,9 @@ struct device *dev_pm_domain_attach_by_name(struct device *dev,
 int dev_pm_domain_attach_list(struct device *dev,
 			      const struct dev_pm_domain_attach_data *data,
 			      struct dev_pm_domain_list **list);
+int devm_pm_domain_attach_list(struct device *dev,
+			       const struct dev_pm_domain_attach_data *data,
+			       struct dev_pm_domain_list **list);
 void dev_pm_domain_detach(struct device *dev, bool power_off);
 void dev_pm_domain_detach_list(struct dev_pm_domain_list *list);
 int dev_pm_domain_start(struct device *dev);
@@ -499,6 +499,14 @@ static inline int dev_pm_domain_attach_list(struct device *dev,
 {
 	return 0;
 }
+
+static inline int devm_pm_domain_attach_list(struct device *dev,
+					     const struct dev_pm_domain_attach_data *data,
+					     struct dev_pm_domain_list **list)
+{
+	return 0;
+}
+
 static inline void dev_pm_domain_detach(struct device *dev, bool power_off) {}
 static inline void dev_pm_domain_detach_list(struct dev_pm_domain_list *list) {}
 static inline int dev_pm_domain_start(struct device *dev)
