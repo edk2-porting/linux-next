@@ -324,8 +324,8 @@ static inline void bio_next_folio(struct folio_iter *fi, struct bio *bio)
 void bio_trim(struct bio *bio, sector_t offset, sector_t size);
 extern struct bio *bio_split(struct bio *bio, int sectors,
 			     gfp_t gfp, struct bio_set *bs);
-struct bio *bio_split_rw(struct bio *bio, const struct queue_limits *lim,
-		unsigned *segs, struct bio_set *bs, unsigned max_bytes);
+int bio_split_rw_at(struct bio *bio, const struct queue_limits *lim,
+		unsigned *segs, unsigned max_bytes);
 
 /**
  * bio_next_split - get next @sectors from a bio, splitting if necessary
@@ -683,5 +683,11 @@ struct bio *bio_chain_and_submit(struct bio *prev, struct bio *new);
 
 struct bio *blk_alloc_discard_bio(struct block_device *bdev,
 		sector_t *sector, sector_t *nr_sects, gfp_t gfp_mask);
+
+sector_t bio_discard_limit(struct block_device *bdev, sector_t sector);
+
+int blkdev_issue_zero_pages_bio(struct block_device *bdev,
+		sector_t sector, sector_t nr_sects, gfp_t gfp_mask,
+		struct bio **biop, unsigned int flags);
 
 #endif /* __LINUX_BIO_H */

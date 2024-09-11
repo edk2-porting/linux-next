@@ -1098,6 +1098,7 @@ int blkdev_issue_secure_erase(struct block_device *bdev, sector_t sector,
 #define BLKDEV_ZERO_NOUNMAP	(1 << 0)  /* do not free blocks */
 #define BLKDEV_ZERO_NOFALLBACK	(1 << 1)  /* don't write explicit zeroes */
 #define BLKDEV_ZERO_KILLABLE	(1 << 2)  /* interruptible by fatal signals */
+#define BLKDEV_ZERO_PAGES_NOWAIT (1 << 3) /* non-blocking submission  */
 
 extern int __blkdev_issue_zeroout(struct block_device *bdev, sector_t sector,
 		sector_t nr_sects, gfp_t gfp_mask, struct bio **biop,
@@ -1187,7 +1188,8 @@ static inline unsigned int queue_max_segment_size(const struct request_queue *q)
 	return q->limits.max_segment_size;
 }
 
-static inline unsigned int queue_limits_max_zone_append_sectors(struct queue_limits *l)
+static inline unsigned int
+queue_limits_max_zone_append_sectors(const struct queue_limits *l)
 {
 	unsigned int max_sectors = min(l->chunk_sectors, l->max_hw_sectors);
 
