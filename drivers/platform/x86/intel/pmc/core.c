@@ -729,12 +729,11 @@ static int pmc_core_substate_res_show(struct seq_file *s, void *unused)
 	struct pmc *pmc = pmcdev->pmcs[PMC_IDX_MAIN];
 	const int lpm_adj_x2 = pmc->map->lpm_res_counter_step_x2;
 	u32 offset = pmc->map->lpm_residency_offset;
-	unsigned int i;
 	int mode;
 
 	seq_printf(s, "%-10s %-15s\n", "Substate", "Residency");
 
-	pmc_for_each_mode(i, mode, pmcdev) {
+	pmc_for_each_mode(mode, pmcdev) {
 		seq_printf(s, "%-10s %-15llu\n", pmc_lpm_modes[mode],
 			   adjust_lpm_residency(pmc, offset + (4 * mode), lpm_adj_x2));
 	}
@@ -788,20 +787,21 @@ DEFINE_SHOW_ATTRIBUTE(pmc_core_substate_l_sts_regs);
 static void pmc_core_substate_req_header_show(struct seq_file *s, int pmc_index)
 {
 	struct pmc_dev *pmcdev = s->private;
-	unsigned int i;
 	int mode;
 
 	seq_printf(s, "%30s |", "Element");
-	pmc_for_each_mode(i, mode, pmcdev)
+	pmc_for_each_mode(mode, pmcdev)
 		seq_printf(s, " %9s |", pmc_lpm_modes[mode]);
 
-	seq_printf(s, " %9s |\n", "Status");
+	seq_printf(s, " %9s |", "Status");
+	seq_printf(s, " %11s |\n", "Live Status");
 }
 
 static int pmc_core_substate_req_regs_show(struct seq_file *s, void *unused)
 {
 	struct pmc_dev *pmcdev = s->private;
 	u32 sts_offset;
+	u32 sts_offset_live;
 	u32 *lpm_req_regs;
 	unsigned int mp, pmc_index;
 	int num_maps;
@@ -816,6 +816,7 @@ static int pmc_core_substate_req_regs_show(struct seq_file *s, void *unused)
 		maps = pmc->map->lpm_sts;
 		num_maps = pmc->map->lpm_num_maps;
 		sts_offset = pmc->map->lpm_status_offset;
+		sts_offset_live = pmc->map->lpm_live_status_offset;
 		lpm_req_regs = pmc->lpm_req_regs;
 
 		/*
@@ -833,19 +834,23 @@ static int pmc_core_substate_req_regs_show(struct seq_file *s, void *unused)
 		for (mp = 0; mp < num_maps; mp++) {
 			u32 req_mask = 0;
 			u32 lpm_status;
+			u32 lpm_status_live;
 			const struct pmc_bit_map *map;
-			int mode, idx, i, len = 32;
+			int mode, i, len = 32;
 
 			/*
 			 * Capture the requirements and create a mask so that we only
 			 * show an element if it's required for at least one of the
 			 * enabled low power modes
 			 */
-			pmc_for_each_mode(idx, mode, pmcdev)
+			pmc_for_each_mode(mode, pmcdev)
 				req_mask |= lpm_req_regs[mp + (mode * num_maps)];
 
 			/* Get the last latched status for this map */
 			lpm_status = pmc_core_reg_read(pmc, sts_offset + (mp * 4));
+
+			/* Get the runtime status for this map */
+			lpm_status_live = pmc_core_reg_read(pmc, sts_offset_live + (mp * 4));
 
 			/*  Loop over elements in this map */
 			map = maps[mp];
@@ -864,7 +869,7 @@ static int pmc_core_substate_req_regs_show(struct seq_file *s, void *unused)
 				seq_printf(s, "pmc%d: %26s |", pmc_index, map[i].name);
 
 				/* Loop over the enabled states and display if required */
-				pmc_for_each_mode(idx, mode, pmcdev) {
+				pmc_for_each_mode(mode, pmcdev) {
 					bool required = lpm_req_regs[mp + (mode * num_maps)] &
 							bit_mask;
 					seq_printf(s, " %9s |", required ? "Required" : " ");
@@ -872,6 +877,9 @@ static int pmc_core_substate_req_regs_show(struct seq_file *s, void *unused)
 
 				/* In Status column, show the last captured state of this agent */
 				seq_printf(s, " %9s |", lpm_status & bit_mask ? "Yes" : " ");
+
+				/* In Live status column, show the live state of this agent */
+				seq_printf(s, " %11s |", lpm_status_live & bit_mask ? "Yes" : " ");
 
 				seq_puts(s, "\n");
 			}
@@ -926,7 +934,6 @@ static int pmc_core_lpm_latch_mode_show(struct seq_file *s, void *unused)
 {
 	struct pmc_dev *pmcdev = s->private;
 	struct pmc *pmc = pmcdev->pmcs[PMC_IDX_MAIN];
-	unsigned int idx;
 	bool c10;
 	u32 reg;
 	int mode;
@@ -940,7 +947,7 @@ static int pmc_core_lpm_latch_mode_show(struct seq_file *s, void *unused)
 		c10 = true;
 	}
 
-	pmc_for_each_mode(idx, mode, pmcdev) {
+	pmc_for_each_mode(mode, pmcdev) {
 		if ((BIT(mode) & reg) && !c10)
 			seq_printf(s, " [%s]", pmc_lpm_modes[mode]);
 		else
@@ -961,7 +968,6 @@ static ssize_t pmc_core_lpm_latch_mode_write(struct file *file,
 	struct pmc *pmc = pmcdev->pmcs[PMC_IDX_MAIN];
 	bool clear = false, c10 = false;
 	unsigned char buf[8];
-	unsigned int idx;
 	int m, mode;
 	u32 reg;
 
@@ -980,7 +986,7 @@ static ssize_t pmc_core_lpm_latch_mode_write(struct file *file,
 	mode = sysfs_match_string(pmc_lpm_modes, buf);
 
 	/* Check string matches enabled mode */
-	pmc_for_each_mode(idx, m, pmcdev)
+	pmc_for_each_mode(m, pmcdev)
 		if (mode == m)
 			break;
 
