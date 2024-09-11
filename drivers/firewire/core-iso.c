@@ -131,6 +131,13 @@ size_t fw_iso_buffer_lookup(struct fw_iso_buffer *buffer, dma_addr_t completed)
 	return 0;
 }
 
+static void flush_completions_work(struct work_struct *work)
+{
+	struct fw_iso_context *ctx = container_of(work, struct fw_iso_context, work);
+
+	fw_iso_context_flush_completions(ctx);
+}
+
 struct fw_iso_context *fw_iso_context_create(struct fw_card *card,
 		int type, int channel, int speed, size_t header_size,
 		fw_iso_callback_t callback, void *callback_data)
@@ -149,6 +156,8 @@ struct fw_iso_context *fw_iso_context_create(struct fw_card *card,
 	ctx->header_size = header_size;
 	ctx->callback.sc = callback;
 	ctx->callback_data = callback_data;
+	INIT_WORK(&ctx->work, flush_completions_work);
+	mutex_init(&ctx->flushing_completions_mutex);
 
 	trace_isoc_outbound_allocate(ctx, channel, speed);
 	trace_isoc_inbound_single_allocate(ctx, channel, header_size);
@@ -165,6 +174,8 @@ void fw_iso_context_destroy(struct fw_iso_context *ctx)
 	trace_isoc_inbound_multiple_destroy(ctx);
 
 	ctx->card->driver->free_iso_context(ctx);
+
+	mutex_destroy(&ctx->flushing_completions_mutex);
 }
 EXPORT_SYMBOL(fw_iso_context_destroy);
 
@@ -209,23 +220,50 @@ void fw_iso_context_queue_flush(struct fw_iso_context *ctx)
 }
 EXPORT_SYMBOL(fw_iso_context_queue_flush);
 
+/**
+ * fw_iso_context_flush_completions() - process isochronous context in current process context.
+ * @ctx: the isochronous context
+ *
+ * Process the isochronous context in the current process context. The registered callback function
+ * is called if some packets have been already transferred since the last time. If it is required
+ * to process the context asynchronously, fw_iso_context_schedule_flush_completions() is available
+ * instead.
+ *
+ * Context: Process context due to mutex_trylock().
+ */
 int fw_iso_context_flush_completions(struct fw_iso_context *ctx)
 {
 	trace_isoc_outbound_flush_completions(ctx);
 	trace_isoc_inbound_single_flush_completions(ctx);
 	trace_isoc_inbound_multiple_flush_completions(ctx);
 
-	return ctx->card->driver->flush_iso_completions(ctx);
+	scoped_cond_guard(mutex_try, /* nothing to do */, &ctx->flushing_completions_mutex) {
+		return ctx->card->driver->flush_iso_completions(ctx);
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL(fw_iso_context_flush_completions);
 
 int fw_iso_context_stop(struct fw_iso_context *ctx)
 {
+	int err;
+
 	trace_isoc_outbound_stop(ctx);
 	trace_isoc_inbound_single_stop(ctx);
 	trace_isoc_inbound_multiple_stop(ctx);
 
-	return ctx->card->driver->stop_iso(ctx);
+	might_sleep();
+
+	// Avoid dead lock due to programming mistake.
+	if (WARN_ON_ONCE(current_work() == &ctx->work))
+		return 0;
+
+	err = ctx->card->driver->stop_iso(ctx);
+
+	cancel_work_sync(&ctx->work);
+
+	return err;
 }
 EXPORT_SYMBOL(fw_iso_context_stop);
 
@@ -375,9 +413,8 @@ void fw_iso_resource_manage(struct fw_card *card, int generation,
 	u32 channels_lo = channels_mask >> 32;	/* channels 63...32 */
 	int irm_id, ret, c = -EINVAL;
 
-	spin_lock_irq(&card->lock);
-	irm_id = card->irm_node->node_id;
-	spin_unlock_irq(&card->lock);
+	scoped_guard(spinlock_irq, &card->lock)
+		irm_id = card->irm_node->node_id;
 
 	if (channels_hi)
 		c = manage_channel(card, irm_id, generation, channels_hi,
