@@ -129,14 +129,6 @@ static inline blk_status_t virtblk_result(u8 status)
 	}
 }
 
-static inline struct virtio_blk_vq *get_virtio_blk_vq(struct blk_mq_hw_ctx *hctx)
-{
-	struct virtio_blk *vblk = hctx->queue->queuedata;
-	struct virtio_blk_vq *vq = &vblk->vqs[hctx->queue_num];
-
-	return vq;
-}
-
 static int virtblk_add_req(struct virtqueue *vq, struct virtblk_req *vbr)
 {
 	struct scatterlist out_hdr, in_hdr, *sgs[3];
@@ -377,8 +369,7 @@ static void virtblk_done(struct virtqueue *vq)
 
 static void virtio_commit_rqs(struct blk_mq_hw_ctx *hctx)
 {
-	struct virtio_blk *vblk = hctx->queue->queuedata;
-	struct virtio_blk_vq *vq = &vblk->vqs[hctx->queue_num];
+	struct virtio_blk_vq *vq = hctx->driver_data;
 	bool kick;
 
 	spin_lock_irq(&vq->lock);
@@ -428,10 +419,10 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 			   const struct blk_mq_queue_data *bd)
 {
 	struct virtio_blk *vblk = hctx->queue->queuedata;
+	struct virtio_blk_vq *vq = hctx->driver_data;
 	struct request *req = bd->rq;
 	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
 	unsigned long flags;
-	int qid = hctx->queue_num;
 	bool notify = false;
 	blk_status_t status;
 	int err;
@@ -440,26 +431,26 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 	if (unlikely(status))
 		return status;
 
-	spin_lock_irqsave(&vblk->vqs[qid].lock, flags);
-	err = virtblk_add_req(vblk->vqs[qid].vq, vbr);
+	spin_lock_irqsave(&vq->lock, flags);
+	err = virtblk_add_req(vq->vq, vbr);
 	if (err) {
-		virtqueue_kick(vblk->vqs[qid].vq);
+		virtqueue_kick(vq->vq);
 		/* Don't stop the queue if -ENOMEM: we may have failed to
 		 * bounce the buffer due to global resource outage.
 		 */
 		if (err == -ENOSPC)
 			blk_mq_stop_hw_queue(hctx);
-		spin_unlock_irqrestore(&vblk->vqs[qid].lock, flags);
+		spin_unlock_irqrestore(&vq->lock, flags);
 		virtblk_unmap_data(req, vbr);
 		return virtblk_fail_to_queue(req, err);
 	}
 
-	if (bd->last && virtqueue_kick_prepare(vblk->vqs[qid].vq))
+	if (bd->last && virtqueue_kick_prepare(vq->vq))
 		notify = true;
-	spin_unlock_irqrestore(&vblk->vqs[qid].lock, flags);
+	spin_unlock_irqrestore(&vq->lock, flags);
 
 	if (notify)
-		virtqueue_notify(vblk->vqs[qid].vq);
+		virtqueue_notify(vq->vq);
 	return BLK_STS_OK;
 }
 
@@ -504,7 +495,7 @@ static void virtio_queue_rqs(struct request **rqlist)
 	struct request *requeue_list = NULL;
 
 	rq_list_for_each_safe(rqlist, req, next) {
-		struct virtio_blk_vq *vq = get_virtio_blk_vq(req->mq_hctx);
+		struct virtio_blk_vq *vq = req->mq_hctx->driver_data;
 		bool kick;
 
 		if (!virtblk_prep_rq_batch(req)) {
@@ -1163,6 +1154,16 @@ static const struct attribute_group *virtblk_attr_groups[] = {
 	NULL,
 };
 
+static int virtblk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
+		unsigned int hctx_idx)
+{
+	struct virtio_blk *vblk = data;
+	struct virtio_blk_vq *vq = &vblk->vqs[hctx_idx];
+
+	hctx->driver_data = vq;
+	return 0;
+}
+
 static void virtblk_map_queues(struct blk_mq_tag_set *set)
 {
 	struct virtio_blk *vblk = set->driver_data;
@@ -1204,7 +1205,7 @@ static void virtblk_complete_batch(struct io_comp_batch *iob)
 static int virtblk_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 {
 	struct virtio_blk *vblk = hctx->queue->queuedata;
-	struct virtio_blk_vq *vq = get_virtio_blk_vq(hctx);
+	struct virtio_blk_vq *vq = hctx->driver_data;
 	struct virtblk_req *vbr;
 	unsigned long flags;
 	unsigned int len;
@@ -1235,6 +1236,7 @@ static const struct blk_mq_ops virtio_mq_ops = {
 	.queue_rqs	= virtio_queue_rqs,
 	.commit_rqs	= virtio_commit_rqs,
 	.complete	= virtblk_request_done,
+	.init_hctx	= virtblk_init_hctx,
 	.map_queues	= virtblk_map_queues,
 	.poll		= virtblk_poll,
 };
