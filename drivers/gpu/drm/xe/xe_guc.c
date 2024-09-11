@@ -583,7 +583,7 @@ static s32 guc_pc_get_cur_freq(struct xe_guc_pc *guc_pc)
  * extreme thermal throttling. And a system that is that hot during boot is probably
  * dead anyway!
  */
-#if defined(CONFIG_DRM_XE_DEBUG)
+#if IS_ENABLED(CONFIG_DRM_XE_DEBUG)
 #define GUC_LOAD_RETRY_LIMIT	20
 #else
 #define GUC_LOAD_RETRY_LIMIT	3
@@ -985,7 +985,7 @@ timeout:
 		BUILD_BUG_ON(FIELD_MAX(GUC_HXG_MSG_0_TYPE) != GUC_HXG_TYPE_RESPONSE_SUCCESS);
 		BUILD_BUG_ON((GUC_HXG_TYPE_RESPONSE_SUCCESS ^ GUC_HXG_TYPE_RESPONSE_FAILURE) != 1);
 
-		ret = xe_mmio_wait32(gt, reply_reg,  resp_mask, resp_mask,
+		ret = xe_mmio_wait32(gt, reply_reg, resp_mask, resp_mask,
 				     1000000, &header, false);
 
 		if (unlikely(FIELD_GET(GUC_HXG_MSG_0_ORIGIN, header) !=
