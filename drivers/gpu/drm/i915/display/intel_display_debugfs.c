@@ -3,6 +3,7 @@
  * Copyright © 2020 Intel Corporation
  */
 
+#include <linux/debugfs.h>
 #include <linux/string_helpers.h>
 
 #include <drm/drm_debugfs.h>
@@ -15,8 +16,8 @@
 #include "i915_reg.h"
 #include "intel_alpm.h"
 #include "intel_crtc.h"
-#include "intel_de.h"
 #include "intel_crtc_state_dump.h"
+#include "intel_de.h"
 #include "intel_display_debugfs.h"
 #include "intel_display_debugfs_params.h"
 #include "intel_display_power.h"
@@ -27,6 +28,7 @@
 #include "intel_dp_link_training.h"
 #include "intel_dp_mst.h"
 #include "intel_drrs.h"
+#include "intel_fb.h"
 #include "intel_fbc.h"
 #include "intel_fbdev.h"
 #include "intel_hdcp.h"

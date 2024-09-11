@@ -9,10 +9,19 @@
 #include "intel_atomic.h"
 #include "intel_display.h"
 #include "intel_display_trace.h"
+#include "intel_fb.h"
 #include "intel_mchbar_regs.h"
 #include "intel_wm.h"
 #include "skl_watermark.h"
 #include "vlv_sideband.h"
+
+struct intel_watermark_params {
+	u16 fifo_size;
+	u16 max_wm;
+	u8 default_wm;
+	u8 guard_size;
+	u8 cacheline_size;
+};
 
 /* used in computing the new watermarks state */
 struct intel_wm_config {
@@ -136,6 +145,7 @@ static void chv_set_memory_pm5(struct drm_i915_private *dev_priv, bool enable)
 
 static bool _intel_set_memory_cxsr(struct drm_i915_private *dev_priv, bool enable)
 {
+	struct intel_display *display = &dev_priv->display;
 	bool was_enabled;
 	u32 val;
 
@@ -177,7 +187,7 @@ static bool _intel_set_memory_cxsr(struct drm_i915_private *dev_priv, bool enabl
 		return false;
 	}
 
-	trace_intel_memory_cxsr(dev_priv, was_enabled, enable);
+	trace_intel_memory_cxsr(display, was_enabled, enable);
 
 	drm_dbg_kms(&dev_priv->drm, "memory self-refresh is %s (was %s)\n",
 		    str_enabled_disabled(enable),
@@ -715,10 +725,11 @@ static unsigned int g4x_tlb_miss_wa(int fifo_size, int width, int cpp)
 static void g4x_write_wm_values(struct drm_i915_private *dev_priv,
 				const struct g4x_wm_values *wm)
 {
+	struct intel_display *display = &dev_priv->display;
 	enum pipe pipe;
 
 	for_each_pipe(dev_priv, pipe)
-		trace_g4x_wm(intel_crtc_for_pipe(dev_priv, pipe), wm);
+		trace_g4x_wm(intel_crtc_for_pipe(display, pipe), wm);
 
 	intel_uncore_write(&dev_priv->uncore, DSPFW1(dev_priv),
 			   FW_WM(wm->sr.plane, SR) |
@@ -747,10 +758,11 @@ static void g4x_write_wm_values(struct drm_i915_private *dev_priv,
 static void vlv_write_wm_values(struct drm_i915_private *dev_priv,
 				const struct vlv_wm_values *wm)
 {
+	struct intel_display *display = &dev_priv->display;
 	enum pipe pipe;
 
 	for_each_pipe(dev_priv, pipe) {
-		trace_vlv_wm(intel_crtc_for_pipe(dev_priv, pipe), wm);
+		trace_vlv_wm(intel_crtc_for_pipe(display, pipe), wm);
 
 		intel_uncore_write(&dev_priv->uncore, VLV_DDL(pipe),
 				   (wm->ddl[pipe].plane[PLANE_CURSOR] << DDL_CURSOR_SHIFT) |
@@ -2088,12 +2100,13 @@ static void i965_update_wm(struct drm_i915_private *dev_priv)
 static struct intel_crtc *intel_crtc_for_plane(struct drm_i915_private *i915,
 					       enum i9xx_plane_id i9xx_plane)
 {
+	struct intel_display *display = &i915->display;
 	struct intel_plane *plane;
 
 	for_each_intel_plane(&i915->drm, plane) {
 		if (plane->id == PLANE_PRIMARY &&
 		    plane->i9xx_plane == i9xx_plane)
-			return intel_crtc_for_pipe(i915, plane->pipe);
+			return intel_crtc_for_pipe(display, plane->pipe);
 	}
 
 	return NULL;
@@ -3716,6 +3729,7 @@ static void g4x_wm_get_hw_state(struct drm_i915_private *dev_priv)
 
 static void g4x_wm_sanitize(struct drm_i915_private *dev_priv)
 {
+	struct intel_display *display = &dev_priv->display;
 	struct intel_plane *plane;
 	struct intel_crtc *crtc;
 
@@ -3723,7 +3737,7 @@ static void g4x_wm_sanitize(struct drm_i915_private *dev_priv)
 
 	for_each_intel_plane(&dev_priv->drm, plane) {
 		struct intel_crtc *crtc =
-			intel_crtc_for_pipe(dev_priv, plane->pipe);
+			intel_crtc_for_pipe(display, plane->pipe);
 		struct intel_crtc_state *crtc_state =
 			to_intel_crtc_state(crtc->base.state);
 		struct intel_plane_state *plane_state =
@@ -3871,6 +3885,7 @@ static void vlv_wm_get_hw_state(struct drm_i915_private *dev_priv)
 
 static void vlv_wm_sanitize(struct drm_i915_private *dev_priv)
 {
+	struct intel_display *display = &dev_priv->display;
 	struct intel_plane *plane;
 	struct intel_crtc *crtc;
 
@@ -3878,7 +3893,7 @@ static void vlv_wm_sanitize(struct drm_i915_private *dev_priv)
 
 	for_each_intel_plane(&dev_priv->drm, plane) {
 		struct intel_crtc *crtc =
-			intel_crtc_for_pipe(dev_priv, plane->pipe);
+			intel_crtc_for_pipe(display, plane->pipe);
 		struct intel_crtc_state *crtc_state =
 			to_intel_crtc_state(crtc->base.state);
 		struct intel_plane_state *plane_state =
