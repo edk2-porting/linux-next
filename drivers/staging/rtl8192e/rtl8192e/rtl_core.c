@@ -25,7 +25,7 @@
 int hwwep = 1;
 static char *ifname = "wlan%d";
 
-static struct pci_device_id rtl8192_pci_id_tbl[] = {
+static const struct pci_device_id rtl8192_pci_id_tbl[] = {
 	{PCI_DEVICE(0x10ec, 0x8192)},
 	{PCI_DEVICE(0x07aa, 0x0044)},
 	{PCI_DEVICE(0x07aa, 0x0047)},
@@ -173,7 +173,7 @@ bool rtl92e_set_rf_state(struct net_device *dev,
 				else
 					priv->blinked_ingpio = false;
 				rtllib_mgnt_disconnect(priv->rtllib,
-						      WLAN_REASON_DISASSOC_STA_HAS_LEFT);
+						       WLAN_REASON_DISASSOC_STA_HAS_LEFT);
 			}
 		}
 		if ((change_source == RF_CHANGE_BY_HW) && !priv->hw_radio_off)
@@ -322,7 +322,7 @@ static int _rtl92e_qos_handle_probe_response(struct r8192_priv *priv,
 
 	if (network->flags & NETWORK_HAS_QOS_MASK) {
 		if (active_network &&
-				(network->flags & NETWORK_HAS_QOS_PARAMETERS))
+		    (network->flags & NETWORK_HAS_QOS_PARAMETERS))
 			network->qos_data.active = network->qos_data.supported;
 
 		if ((network->qos_data.active == 1) && (active_network == 1) &&

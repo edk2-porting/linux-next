@@ -289,7 +289,7 @@ static void _rtl92e_read_eeprom_info(struct net_device *dev)
 
 		for (i = 0; i < 6; i += 2) {
 			usValue = rtl92e_eeprom_read(dev,
-				 (EEPROM_NODE_ADDRESS_BYTE_0 + i) >> 1);
+						     (EEPROM_NODE_ADDRESS_BYTE_0 + i) >> 1);
 			*(u16 *)(&addr[i]) = usValue;
 		}
 		eth_hw_addr_set(dev, addr);
@@ -987,10 +987,10 @@ void  rtl92e_fill_tx_cmd_desc(struct net_device *dev, struct tx_desc_cmd *entry,
 	if (dma_mapping_error(&priv->pdev->dev, mapping))
 		netdev_err(dev, "%s(): DMA Mapping error\n", __func__);
 	memset(entry, 0, 12);
-	entry->LINIP = cb_desc->bLastIniPkt;
+	entry->LINIP = cb_desc->last_ini_pkt;
 	entry->FirstSeg = 1;
 	entry->LastSeg = 1;
-	if (cb_desc->bCmdOrInit == DESC_PACKET_TYPE_INIT) {
+	if (cb_desc->cmd_or_init == DESC_PACKET_TYPE_INIT) {
 		entry->CmdInit = DESC_PACKET_TYPE_INIT;
 	} else {
 		struct tx_desc *entry_tmp = (struct tx_desc *)entry;
@@ -1145,23 +1145,21 @@ static long _rtl92e_signal_scale_mapping(struct r8192_priv *priv, long currsig)
 			_pdrvinfo->RxRate == DESC90_RATE11M) &&\
 			!_pdrvinfo->RxHT)
 
-static void _rtl92e_query_rxphystatus(
-	struct r8192_priv *priv,
-	struct rtllib_rx_stats *pstats,
-	struct rx_desc  *pdesc,
-	struct rx_fwinfo   *pdrvinfo,
-	struct rtllib_rx_stats *precord_stats,
-	bool bpacket_match_bssid,
-	bool bpacket_toself,
-	bool bPacketBeacon,
-	bool bToSelfBA
-	)
+static void _rtl92e_query_rxphystatus(struct r8192_priv *priv,
+				      struct rtllib_rx_stats *pstats,
+				      struct rx_desc  *pdesc,
+				      struct rx_fwinfo   *pdrvinfo,
+				      struct rtllib_rx_stats *precord_stats,
+				      bool bpacket_match_bssid,
+				      bool bpacket_toself,
+				      bool bPacketBeacon,
+				      bool bToSelfBA)
 {
 	struct phy_sts_ofdm_819xpci *pofdm_buf;
 	struct phy_sts_cck_819xpci *pcck_buf;
 	u8 *prxpkt;
 	u8 i, max_spatial_stream, tmp_rxevm;
-	s8 rx_pwr[4], rx_pwr_all = 0;
+	s8 rx_pwr[RF90_PATH_MAX], rx_pwr_all = 0;
 	s8 rx_evmX;
 	u8 evm, pwdb_all;
 	u32 RSSI, total_rssi = 0;
@@ -1322,8 +1320,7 @@ static void _rtl92e_query_rxphystatus(
 
 	if (is_cck_rate) {
 		pstats->SignalStrength = precord_stats->SignalStrength =
-					 _rtl92e_signal_scale_mapping(priv,
-					 (long)pwdb_all);
+					 _rtl92e_signal_scale_mapping(priv, (long)pwdb_all);
 
 	} else {
 		if (rf_rx_num != 0)
@@ -1509,7 +1506,7 @@ static void _rtl92e_translate_rx_signal_stats(struct net_device *dev,
 				  (fc & IEEE80211_FCTL_TODS) ? hdr->addr1 :
 				  (fc & IEEE80211_FCTL_FROMDS) ? hdr->addr2 :
 				  hdr->addr3) &&
-		 (!pstats->bHwError) && (!pstats->bCRC) && (!pstats->bICV));
+		 (!pstats->hw_error) && (!pstats->bCRC) && (!pstats->bICV));
 	bpacket_toself = bpacket_match_bssid &&		/* check this */
 			 ether_addr_equal(praddr, priv->rtllib->dev->dev_addr);
 	if (ieee80211_is_beacon(hdr->frame_control))
@@ -1521,9 +1518,8 @@ static void _rtl92e_translate_rx_signal_stats(struct net_device *dev,
 	rtl92e_copy_mpdu_stats(pstats, &previous_stats);
 }
 
-static void _rtl92e_update_received_rate_histogram_stats(
-					   struct net_device *dev,
-					   struct rtllib_rx_stats *pstats)
+static void _rtl92e_update_received_rate_histogram_stats(struct net_device *dev,
+							 struct rtllib_rx_stats *pstats)
 {
 	struct r8192_priv *priv = (struct r8192_priv *)rtllib_priv(dev);
 	u32 rcvType = 1;
@@ -1634,13 +1630,13 @@ bool rtl92e_get_rx_stats(struct net_device *dev, struct rtllib_rx_stats *stats,
 
 	stats->bICV = pdesc->ICV;
 	stats->bCRC = pdesc->CRC32;
-	stats->bHwError = pdesc->CRC32 | pdesc->ICV;
+	stats->hw_error = pdesc->CRC32 | pdesc->ICV;
 
 	stats->Length = pdesc->Length;
 	if (stats->Length < 24)
-		stats->bHwError |= 1;
+		stats->hw_error |= 1;
 
-	if (stats->bHwError)
+	if (stats->hw_error)
 		return false;
 
 	stats->RxDrvInfoSize = pdesc->RxDrvInfoSize;
@@ -1837,8 +1833,8 @@ bool rtl92e_is_rx_stuck(struct net_device *dev)
 	rx_chk_cnt++;
 	if (priv->undecorated_smoothed_pwdb >= (RATE_ADAPTIVE_TH_HIGH + 5)) {
 		rx_chk_cnt = 0;
-	} else if ((priv->undecorated_smoothed_pwdb < (RATE_ADAPTIVE_TH_HIGH + 5))
-	  && (((priv->current_chnl_bw != HT_CHANNEL_WIDTH_20) &&
+	} else if ((priv->undecorated_smoothed_pwdb < (RATE_ADAPTIVE_TH_HIGH + 5)) &&
+	  (((priv->current_chnl_bw != HT_CHANNEL_WIDTH_20) &&
 	  (priv->undecorated_smoothed_pwdb >= RATE_ADAPTIVE_TH_LOW_40M))
 	  || ((priv->current_chnl_bw == HT_CHANNEL_WIDTH_20) &&
 	  (priv->undecorated_smoothed_pwdb >= RATE_ADAPTIVE_TH_LOW_20M)))) {
@@ -1858,7 +1854,6 @@ bool rtl92e_is_rx_stuck(struct net_device *dev)
 			return bStuck;
 		rx_chk_cnt = 0;
 	}
-
 
 	slot_index = (priv->silent_reset_rx_slot_index++) % SilentResetRxSoltNum;
 
