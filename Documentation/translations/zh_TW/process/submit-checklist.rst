@@ -88,7 +88,7 @@ Linux內核補丁提交檢查單
     請參閱 ``Documentation/ABI/README`` 。更改用戶空間接口的補丁應該抄送
     linux-api@vger.kernel.org。
 
-19) 已通過至少注入slab和page分配失敗進行檢查。請參閱 ``Documentation/fault-injection/`` 。
+19) 已通過至少注入slab和page分配失敗進行檢查。請參閱 ``Documentation/dev-tools/fault-injection/`` 。
     如果新代碼是實質性的，那麼添加子系統特定的故障注入可能是合適的。
 
 20) 新添加的代碼已經用 ``gcc -W`` 編譯（使用 ``make EXTRA-CFLAGS=-W`` ）。這

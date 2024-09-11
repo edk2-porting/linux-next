@@ -124,7 +124,7 @@ Test your code
 3) All codepaths have been exercised with all lockdep features enabled.
 
 4) Has been checked with injection of at least slab and page-allocation
-   failures.  See ``Documentation/fault-injection/``.
+   failures.  See ``Documentation/dev-tools/fault-injection/``.
    If the new code is substantial, addition of subsystem-specific fault
    injection might be appropriate.
 

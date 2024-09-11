@@ -57,7 +57,6 @@ Various other manuals with useful information for all kernel developers.
    Testing guide <dev-tools/testing-overview>
    Hacking guide <kernel-hacking/index>
    Tracing <trace/index>
-   Fault injection <fault-injection/index>
    Livepatching <livepatch/index>
    Rust <rust/index>
 

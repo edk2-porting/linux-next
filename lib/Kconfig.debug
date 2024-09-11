@@ -2034,7 +2034,7 @@ config FAULT_INJECTION
 	depends on DEBUG_KERNEL
 	help
 	  Provide fault-injection framework.
-	  For more details, see Documentation/fault-injection/.
+	  For more details, see Documentation/dev-tools/fault-injection/.
 
 config FAILSLAB
 	bool "Fault-injection capability for kmalloc"
@@ -2240,7 +2240,7 @@ config LKDTM
 	called lkdtm.
 
 	Documentation on how to use the module can be found in
-	Documentation/fault-injection/provoke-crashes.rst
+	Documentation/dev-tools/fault-injection/provoke-crashes.rst
 
 config CPUMASK_KUNIT_TEST
 	tristate "KUnit test for cpumask" if !KUNIT_ALL_TESTS

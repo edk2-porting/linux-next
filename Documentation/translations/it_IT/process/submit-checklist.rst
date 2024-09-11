@@ -99,7 +99,7 @@ sottomissione delle patch, in particolare
     essere inviate in copia anche a linux-api@vger.kernel.org.
 
 20) La patch è stata verificata con l'iniezione di fallimenti in slab e
-    nell'allocazione di pagine.  Vedere ``Documentation/fault-injection/``.
+    nell'allocazione di pagine.  Vedere ``Documentation/dev-tools/fault-injection/``.
 
     Se il nuovo codice è corposo, potrebbe essere opportuno aggiungere
     l'iniezione di fallimenti specifici per il sottosistema.

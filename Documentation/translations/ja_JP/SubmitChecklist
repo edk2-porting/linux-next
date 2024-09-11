@@ -90,7 +90,7 @@ Linux カーネルパッチ投稿者向けチェックリスト
 
 19: 少なくともslabアロケーションとpageアロケーションに失敗した場合の
     挙動について、fault-injectionを利用して確認してください。
-    Documentation/fault-injection/ を参照してください。
+    Documentation/dev-tools/fault-injection/ を参照してください。
 
     追加したコードがかなりの量であったならば、サブシステム特有の
     fault-injectionを追加したほうが良いかもしれません。

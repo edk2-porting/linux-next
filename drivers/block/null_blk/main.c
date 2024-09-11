@@ -100,7 +100,7 @@ MODULE_PARM_DESC(home_node, "Home node for the device");
 #ifdef CONFIG_BLK_DEV_NULL_BLK_FAULT_INJECTION
 /*
  * For more details about fault injection, please refer to
- * Documentation/fault-injection/fault-injection.rst.
+ * Documentation/dev-tools/fault-injection/fault-injection.rst.
  */
 static char g_timeout_str[80];
 module_param_string(timeout, g_timeout_str, sizeof(g_timeout_str), 0444);

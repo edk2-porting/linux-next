@@ -16,7 +16,7 @@ struct kmem_cache;
 
 /*
  * For explanation of the elements of this struct, see
- * Documentation/fault-injection/fault-injection.rst
+ * Documentation/dev-tools/fault-injection/fault-injection.rst
  */
 struct fault_attr {
 	unsigned long probability;

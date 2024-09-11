@@ -20,7 +20,7 @@ enum { FAULT_INJ_STR_SIZE = 80 };
 
 /*
  * For more details about fault injection, please refer to
- * Documentation/fault-injection/fault-injection.rst.
+ * Documentation/dev-tools/fault-injection/fault-injection.rst.
  */
 static char g_trigger_eh_str[FAULT_INJ_STR_SIZE];
 module_param_cb(trigger_eh, &ufs_fault_ops, g_trigger_eh_str, 0644);
