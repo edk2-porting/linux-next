@@ -5149,8 +5149,16 @@ struct extent_buffer *btrfs_alloc_tree_block(struct btrfs_trans_handle *trans,
 			parent = ins.objectid;
 		flags |= BTRFS_BLOCK_FLAG_FULL_BACKREF;
 		owning_root = reloc_src_root;
-	} else
-		BUG_ON(parent > 0);
+	} else {
+		if (unlikely(parent > 0)) {
+			/*
+			 * Other roots than reloc tree don't expect start
+			 * offset of a parent block.
+			 */
+			ret = -EUCLEAN;
+			goto out_free_reserved;
+		}
+	}
 
 	if (root_objectid != BTRFS_TREE_LOG_OBJECTID) {
 		struct btrfs_delayed_extent_op *extent_op;
@@ -6551,13 +6559,13 @@ int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range)
 			continue;
 
 		ret = btrfs_trim_free_extents(device, &group_trimmed);
+
+		trimmed += group_trimmed;
 		if (ret) {
 			dev_failed++;
 			dev_ret = ret;
 			break;
 		}
-
-		trimmed += group_trimmed;
 	}
 	mutex_unlock(&fs_devices->device_list_mutex);
 

@@ -3406,7 +3406,8 @@ static int selinux_path_notify(const struct path *path, u64 mask,
 		perm |= FILE__WATCH_WITH_PERM;
 
 	/* watches on read-like events need the file:watch_reads permission */
-	if (mask & (FS_ACCESS | FS_ACCESS_PERM | FS_CLOSE_NOWRITE))
+	if (mask & (FS_ACCESS | FS_ACCESS_PERM | FS_PRE_ACCESS |
+		    FS_CLOSE_NOWRITE))
 		perm |= FILE__WATCH_READS;
 
 	return path_has_perm(current_cred(), path, perm);
@@ -3950,7 +3951,7 @@ static int selinux_file_send_sigiotask(struct task_struct *tsk,
 	struct file_security_struct *fsec;
 
 	/* struct fown_struct is never outside the context of a struct file */
-	file = container_of(fown, struct file, f_owner);
+	file = fown->file;
 
 	fsec = selinux_file(file);
 

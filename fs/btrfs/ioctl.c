@@ -543,13 +543,11 @@ static noinline int btrfs_ioctl_fitrim(struct btrfs_fs_info *fs_info,
 
 	range.minlen = max(range.minlen, minlen);
 	ret = btrfs_trim_fs(fs_info, &range);
-	if (ret < 0)
-		return ret;
 
 	if (copy_to_user(arg, &range, sizeof(range)))
 		return -EFAULT;
 
-	return 0;
+	return ret;
 }
 
 int __pure btrfs_is_empty_uuid(const u8 *uuid)
@@ -2637,6 +2635,15 @@ static int btrfs_ioctl_defrag(struct file *file, void __user *argp)
 		if (!capable(CAP_SYS_ADMIN) &&
 		    inode_permission(&nop_mnt_idmap, inode, MAY_WRITE)) {
 			ret = -EPERM;
+			goto out;
+		}
+
+		/*
+		 * Don't allow defrag on pre-content watched files, as it could
+		 * populate the page cache with 0's via readahead.
+		 */
+		if (fsnotify_file_has_pre_content_watches(file)) {
+			ret = -EINVAL;
 			goto out;
 		}
 
@@ -4765,11 +4772,10 @@ long btrfs_ioctl(struct file *file, unsigned int
 			return ret;
 		ret = btrfs_sync_fs(inode->i_sb, 1);
 		/*
-		 * The transaction thread may want to do more work,
-		 * namely it pokes the cleaner kthread that will start
-		 * processing uncleaned subvols.
+		 * There may be work for the cleaner kthread to do (subvolume
+		 * deletion, delayed iputs, defrag inodes, etc), so wake it up.
 		 */
-		wake_up_process(fs_info->transaction_kthread);
+		wake_up_process(fs_info->cleaner_kthread);
 		return ret;
 	}
 	case BTRFS_IOC_START_SYNC:
