@@ -98,7 +98,11 @@ extern int mmap_rnd_compat_bits __read_mostly;
 #endif
 
 #ifndef PHYSMEM_END
-# define PHYSMEM_END	((1ULL << MAX_PHYSMEM_BITS) - 1)
+# ifdef MAX_PHYSMEM_BITS
+#  define PHYSMEM_END		((1ULL << MAX_PHYSMEM_BITS) - 1)
+# else
+#  define PHYSMEM_END		(-1ULL)
+# endif
 #endif
 
 #include <asm/page.h>
