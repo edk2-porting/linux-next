@@ -3270,6 +3270,9 @@ static int __kvm_read_guest_page(struct kvm_memory_slot *slot, gfn_t gfn,
 	int r;
 	unsigned long addr;
 
+	if (WARN_ON_ONCE(offset + len > PAGE_SIZE))
+		return -EFAULT;
+
 	addr = gfn_to_hva_memslot_prot(slot, gfn, NULL);
 	if (kvm_is_error_hva(addr))
 		return -EFAULT;
@@ -3343,6 +3346,9 @@ static int __kvm_read_guest_atomic(struct kvm_memory_slot *slot, gfn_t gfn,
 	int r;
 	unsigned long addr;
 
+	if (WARN_ON_ONCE(offset + len > PAGE_SIZE))
+		return -EFAULT;
+
 	addr = gfn_to_hva_memslot_prot(slot, gfn, NULL);
 	if (kvm_is_error_hva(addr))
 		return -EFAULT;
@@ -3372,6 +3378,9 @@ static int __kvm_write_guest_page(struct kvm *kvm,
 {
 	int r;
 	unsigned long addr;
+
+	if (WARN_ON_ONCE(offset + len > PAGE_SIZE))
+		return -EFAULT;
 
 	addr = gfn_to_hva_memslot(memslot, gfn);
 	if (kvm_is_error_hva(addr))
@@ -3576,7 +3585,7 @@ int kvm_clear_guest(struct kvm *kvm, gpa_t gpa, unsigned long len)
 	int ret;
 
 	while ((seg = next_segment(len, offset)) != 0) {
-		ret = kvm_write_guest_page(kvm, gfn, zero_page, offset, len);
+		ret = kvm_write_guest_page(kvm, gfn, zero_page, offset, seg);
 		if (ret < 0)
 			return ret;
 		offset = 0;
