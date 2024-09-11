@@ -184,6 +184,32 @@ __check_eq_str(const char *srcfile, unsigned int line,
 		result;							\
 	})
 
+static bool __init
+__check_neq_range_ulong(const char *srcfile, unsigned int line,
+		 const unsigned long exp_ulong_begin,
+		 const unsigned long exp_ulong_end,
+		 unsigned long x)
+{
+	if (exp_ulong_begin <= x && exp_ulong_end >= x) {
+		pr_err("[%s:%u] did not value %lu within range [%lu,%lu]\n",
+			srcfile, line, x, exp_ulong_begin, exp_ulong_end);
+		return false;
+	}
+	return true;
+}
+
+#define __expect_neq_range(suffix, ...)					\
+	({								\
+		int result = 0;						\
+		total_tests++;						\
+		if (!__check_neq_range_ ## suffix(__FILE__, __LINE__,	\
+					   ##__VA_ARGS__)) {		\
+			failed_tests++;					\
+			result = 1;					\
+		}							\
+		result;							\
+	})
+
 #define expect_eq_ulong(...)		__expect_eq(ulong, ##__VA_ARGS__)
 #define expect_eq_uint(x, y)		expect_eq_ulong((unsigned int)(x), (unsigned int)(y))
 #define expect_eq_bitmap(...)		__expect_eq(bitmap, ##__VA_ARGS__)
@@ -191,6 +217,9 @@ __check_eq_str(const char *srcfile, unsigned int line,
 #define expect_eq_u32_array(...)	__expect_eq(u32_array, ##__VA_ARGS__)
 #define expect_eq_clump8(...)		__expect_eq(clump8, ##__VA_ARGS__)
 #define expect_eq_str(...)		__expect_eq(str, ##__VA_ARGS__)
+
+#define expect_neq_range_ulong(...)		__expect_neq_range(ulong, ##__VA_ARGS__)
+#define expect_neq_range_uint(begin, end, y)	expect_neq_range_ulong((unsigned int)(begin), (unsigned int) end, (unsigned int)(y))
 
 static void __init test_zero_clear(void)
 {
@@ -849,6 +878,57 @@ static void __init test_for_each_set_bit(void)
 	expect_eq_bitmap(orig, copy, 500);
 }
 
+static void __init test_for_each_binaryops_bit(void)
+{
+	DECLARE_BITMAP(orig1, 500);
+	DECLARE_BITMAP(orig2, 500);
+	unsigned int bit, count;
+
+	bitmap_zero(orig1, 500);
+	bitmap_zero(orig2, 500);
+
+	/* Set individual bits in orig1 and orig2 with stride 10 (expected in both orig1 & orig2) */
+	for (bit = 0; bit < 500; bit += 10) {
+		bitmap_set(orig1, bit, 1);
+		bitmap_set(orig2, bit, 1);
+	}
+	/* Set individual bits in orig1 with offset 1, stride 10 (expected in orig1 only) */
+	for (bit = 1; bit < 500; bit += 10)
+		bitmap_set(orig1, bit, 1);
+	/* Set individual bits in orig2 with offset 2, stride 10 (expected in orig2 only). */
+	for (bit = 2; bit < 500; bit += 10)
+		bitmap_set(orig2, bit, 1);
+
+	count = 0;
+	for_each_and_bit(bit, orig1, orig2, 500) {	/* orig1 & orig2 */
+		expect_neq_range_uint(1, 9, bit % 10);
+		count++;
+	}
+	expect_eq_uint(50, count);
+
+	count = 0;
+	for_each_andnot_bit(bit, orig1, orig2, 500) {	/* orig1 & ~orig2 */
+		expect_neq_range_uint(0, 0, bit % 10);
+		expect_neq_range_uint(2, 9, bit % 10);
+		count++;
+	}
+	expect_eq_uint(50, count);
+
+	count = 0;
+	for_each_nor_bit(bit, orig1, orig2, 500) {	/* ~(orig1 | orig2) */
+		expect_neq_range_uint(0, 2, bit % 10);
+		count++;
+	}
+	expect_eq_uint(7 * 50, count);
+
+	count = 0;
+	for_each_or_bit(bit, orig1, orig2, 500) {	/* orig1 | orig2 */
+		expect_neq_range_uint(3, 9, bit % 10);
+		count++;
+	}
+	expect_eq_uint(3 * 50, count);
+}
+
 static void __init test_for_each_set_bit_from(void)
 {
 	DECLARE_BITMAP(orig, 500);
@@ -1482,6 +1562,7 @@ static void __init selftest(void)
 	test_for_each_clear_bitrange_from();
 	test_for_each_set_clump8();
 	test_for_each_set_bit_wrap();
+	test_for_each_binaryops_bit();
 }
 
 KSTM_MODULE_LOADERS(test_bitmap);
