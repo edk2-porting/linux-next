@@ -170,25 +170,25 @@
 			};
 		};
 
-		pm8010-thermal {
-			polling-delay-passive = <100>;
+		// pm8010-thermal {
+		// 	polling-delay-passive = <100>;
 
-			thermal-sensors = <&pm8010_temp_alarm>;
+		// 	thermal-sensors = <&pm8010_temp_alarm>;
 
-			trips {
-				trip0 {
-					temperature = <95000>;
-					hysteresis = <0>;
-					type = "passive";
-				};
+		// 	trips {
+		// 		trip0 {
+		// 			temperature = <95000>;
+		// 			hysteresis = <0>;
+		// 			type = "passive";
+		// 		};
 
-				trip1 {
-					temperature = <115000>;
-					hysteresis = <0>;
-					type = "hot";
-				};
-			};
-		};
+		// 		trip1 {
+		// 			temperature = <115000>;
+		// 			hysteresis = <0>;
+		// 			type = "hot";
+		// 		};
+		// 	};
+		// };
 	};
 };
 
@@ -461,19 +461,19 @@
 		};
 	};
 
-	pm8010: pmic@c {
-		compatible = "qcom,pm8010", "qcom,spmi-pmic";
-		reg = <0xc SPMI_USID>;
-		#address-cells = <1>;
-		#size-cells = <0>;
+	// pm8010: pmic@c {
+	// 	compatible = "qcom,pm8010", "qcom,spmi-pmic";
+	// 	reg = <0xc SPMI_USID>;
+	// 	#address-cells = <1>;
+	// 	#size-cells = <0>;
 
-		pm8010_temp_alarm: temp-alarm@2400 {
-			compatible = "qcom,spmi-temp-alarm";
-			reg = <0x2400>;
-			interrupts = <0xc 0x24 0x0 IRQ_TYPE_EDGE_BOTH>;
-			#thermal-sensor-cells = <0>;
-		};
-	};
+	// 	pm8010_temp_alarm: temp-alarm@2400 {
+	// 		compatible = "qcom,spmi-temp-alarm";
+	// 		reg = <0x2400>;
+	// 		interrupts = <0xc 0x24 0x0 IRQ_TYPE_EDGE_BOTH>;
+	// 		#thermal-sensor-cells = <0>;
+	// 	};
+	// };
 };
 
 &spmi_bus1 {

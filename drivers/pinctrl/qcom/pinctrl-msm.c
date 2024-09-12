@@ -4,6 +4,7 @@
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
  */
 
+#include "linux/printk.h"
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
@@ -86,6 +87,8 @@ struct msm_pinctrl {
 static u32 msm_readl_##name(struct msm_pinctrl *pctrl, \
 			    const struct msm_pingroup *g) \
 { \
+	pr_info("pctrl->regs[g->tile]: %p, g->name##_reg: 0x%x\n", pctrl->regs[g->tile], g->name##_reg); \
+	pr_info("actual address: %p\n", pctrl->regs[g->tile] + g->name##_reg); \
 	return readl(pctrl->regs[g->tile] + g->name##_reg); \
 } \
 static void msm_writel_##name(u32 val, struct msm_pinctrl *pctrl, \
@@ -688,12 +691,17 @@ static void msm_gpio_dbg_show_one(struct seq_file *s,
 		"pull up",
 	};
 
-	if (!gpiochip_line_is_valid(chip, offset))
+	pr_info("offset %d, gpio %d\n", offset, gpio);
+
+	if (!gpiochip_line_is_valid(chip, offset)) {
+		pr_info("gpio %d is not valid\n", gpio);
 		return;
+	}
 
 	g = &pctrl->soc->groups[offset];
 	ctl_reg = msm_readl_ctl(pctrl, g);
 	io_reg = msm_readl_io(pctrl, g);
+	pr_info("ctl_reg value: %u, io_reg value: %u", ctl_reg, io_reg);
 
 	is_out = !!(ctl_reg & BIT(g->oe_bit));
 	func = (ctl_reg >> g->mux_bit) & 7;

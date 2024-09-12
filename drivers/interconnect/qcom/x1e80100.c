@@ -1968,7 +1968,7 @@ static struct platform_driver qnoc_driver = {
 	.driver = {
 		.name = "qnoc-x1e80100",
 		.of_match_table = qnoc_of_match,
-		.sync_state = icc_sync_state,
+		// .sync_state = icc_sync_state,
 	},
 };
 

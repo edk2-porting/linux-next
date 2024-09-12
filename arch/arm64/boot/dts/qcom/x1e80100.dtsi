@@ -751,7 +751,10 @@
 				 <0>,
 				 <&usb_1_ss0_qmpphy QMP_USB43DP_USB3_PIPE_CLK>,
 				 <&usb_1_ss1_qmpphy QMP_USB43DP_USB3_PIPE_CLK>,
-				 <&usb_1_ss2_qmpphy QMP_USB43DP_USB3_PIPE_CLK>;
+				 <&usb_1_ss2_qmpphy QMP_USB43DP_USB3_PIPE_CLK>,
+				 <&ufs_mem_phy 0>,
+				 <&ufs_mem_phy 1>,
+				 <&ufs_mem_phy 2>;
 
 			power-domains = <&rpmhpd RPMHPD_CX>;
 			#clock-cells = <1>;
@@ -2879,77 +2882,154 @@
 			#interconnect-cells = <2>;
 		};
 
-		ufs_mem_hc: ufs@1d84000 {
-			compatible = "qcom,x1e80100-ufshc", "qcom,ufshc",
-				     "jedec,ufs-2.0";
-			reg = <0 0x01d84000 0 0x3000>;
-			interrupts = <GIC_SPI 265 IRQ_TYPE_LEVEL_HIGH>;
-			phys = <&ufs_mem_phy>;
-			phy-names = "ufsphy";
-			lanes-per-direction = <1>;
-			#reset-cells = <1>;
-			resets = <&gcc GCC_UFS_PHY_BCR>;
-			reset-names = "rst";
-
-			power-domains = <&gcc GCC_UFS_PHY_GDSC>;
-
-			iommus = <&apps_smmu 0xa0 0x0>;
-
-			clock-names = "core_clk",
-				      "bus_aggr_clk",
-				      "iface_clk",
-				      "core_clk_unipro",
-				      "ref_clk",
-				      "tx_lane0_sync_clk",
-				      "rx_lane0_sync_clk";
-			clocks = <&gcc GCC_UFS_PHY_AXI_CLK>,
-				 <&gcc GCC_AGGRE_UFS_PHY_AXI_CLK>,
-				 <&gcc GCC_UFS_PHY_AHB_CLK>,
-				 <&gcc GCC_UFS_PHY_UNIPRO_CORE_CLK>,
-				 <&rpmhcc RPMH_CXO_CLK>,
-				 <&gcc GCC_UFS_PHY_TX_SYMBOL_0_CLK>,
-				 <&gcc GCC_UFS_PHY_RX_SYMBOL_0_CLK>;
-			freq-table-hz = <50000000 200000000>,
-					<0 0>,
-					<0 0>,
-					<37500000 150000000>,
-					<0 0>,
-					<0 0>,
-					<0 0>;
-
-			interconnects = <&aggre1_noc MASTER_UFS_MEM QCOM_ICC_TAG_ALWAYS
-					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
-					<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
-					 &config_noc SLAVE_UFS_MEM_CFG QCOM_ICC_TAG_ALWAYS>;
-			interconnect-names = "ufs-ddr", "cpu-ufs";
-
-			qcom,ice = <&ice>;
-
-			status = "disabled";
-		};
-
-		ufs_mem_phy: phy@1d87000 {
-			compatible = "qcom,x1e80100-qmp-ufs-phy";
-			reg = <0 0x01d87000 0 0x1000>;
+		ufs_mem_phy: phy@1d80000 {
+			compatible = "qcom,x1e80100-qmp-ufs-phy", "qcom,sm8550-qmp-ufs-phy";
+			reg = <0x0 0x01d80000 0x0 0x2000>;
 			clocks = <&rpmhcc RPMH_CXO_CLK>,
 				 <&gcc GCC_UFS_PHY_PHY_AUX_CLK>,
 				 <&tcsr TCSR_UFS_PHY_CLKREF_EN>;
 			clock-names = "ref",
 				      "ref_aux",
 				      "qref";
-			power-domains = <&gcc GCC_UFS_PHY_GDSC>;
+
+			power-domains = <&gcc GCC_UFS_MEM_PHY_GDSC>;
+
 			resets = <&ufs_mem_hc 0>;
 			reset-names = "ufsphy";
+
+			#clock-cells = <1>;
 			#phy-cells = <0>;
+
 			status = "disabled";
 		};
 
-		ice: crypto@1d90000 {
-			compatible = "qcom,x1e80100-inline-crypto-engine",
+		ufs_mem_hc: ufs@1d84000 {
+			compatible = "qcom,x1e80100-ufshc", "qcom,sm8550-ufshc",
+					 "qcom,ufshc", "jedec,ufs-2.0";
+			reg = <0 0x01d84000 0 0x3000>;
+			interrupts = <GIC_SPI 265 IRQ_TYPE_LEVEL_HIGH>;
+			phys = <&ufs_mem_phy>;
+			phy-names = "ufsphy";
+			lanes-per-direction = <2>;
+			#reset-cells = <1>;
+			resets = <&gcc GCC_UFS_PHY_BCR>;
+			reset-names = "rst";
+
+			power-domains = <&gcc GCC_UFS_PHY_GDSC>;
+			required-opps = <&rpmhpd_opp_nom>;
+
+			iommus = <&apps_smmu 0x1a0 0x0>;
+			dma-coherent;
+
+			operating-points-v2 = <&ufs_opp_table>;
+			interconnects = <&aggre1_noc MASTER_UFS_MEM 0 &mc_virt SLAVE_EBI1 0>,
+					<&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_UFS_MEM_CFG 0>;
+
+			interconnect-names = "ufs-ddr", "cpu-ufs";
+			clock-names = "core_clk",
+				      "bus_aggr_clk",
+				      "iface_clk",
+				      "core_clk_unipro",
+				      "ref_clk",
+				      "tx_lane0_sync_clk",
+				      "rx_lane0_sync_clk",
+				      "rx_lane1_sync_clk";
+			clocks = <&gcc GCC_UFS_PHY_AXI_CLK>,
+				 <&gcc GCC_AGGRE_UFS_PHY_AXI_CLK>,
+				 <&gcc GCC_UFS_PHY_AHB_CLK>,
+				 <&gcc GCC_UFS_PHY_UNIPRO_CORE_CLK>,
+				 <&rpmhcc RPMH_CXO_CLK>,
+				 <&gcc GCC_UFS_PHY_TX_SYMBOL_0_CLK>,
+				 <&gcc GCC_UFS_PHY_RX_SYMBOL_0_CLK>,
+				 <&gcc GCC_UFS_PHY_RX_SYMBOL_1_CLK>;
+			// freq-table-hz = <50000000 200000000>,
+			// 		<0 0>,
+			// 		<0 0>,
+			// 		<37500000 150000000>,
+			// 		<0 0>,
+			// 		<0 0>,
+			// 		<0 0>;
+
+			// interconnects = <&aggre1_noc MASTER_UFS_MEM QCOM_ICC_TAG_ALWAYS
+			// 		 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
+			// 		<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
+			// 		 &config_noc SLAVE_UFS_MEM_CFG QCOM_ICC_TAG_ALWAYS>;
+			// interconnect-names = "ufs-ddr", "cpu-ufs";
+
+			qcom,ice = <&ice>;
+
+			status = "disabled";
+
+			ufs_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-75000000 {
+					opp-hz = /bits/ 64 <75000000>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <75000000>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-150000000 {
+					opp-hz = /bits/ 64 <150000000>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <150000000>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>;
+					required-opps = <&rpmhpd_opp_svs>;
+				};
+
+				opp-300000000 {
+					opp-hz = /bits/ 64 <300000000>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <300000000>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>,
+						 /bits/ 64 <0>;
+					required-opps = <&rpmhpd_opp_nom>;
+				};
+			};
+		};
+
+		// ufs_mem_phy: phy@1d87000 {
+		// 	compatible = "qcom,x1e80100-qmp-ufs-phy", "qcom,sm8550-qmp-ufs-phy";
+		// 	reg = <0 0x01d87000 0 0x1000>;
+		// 	clocks = <&rpmhcc RPMH_CXO_CLK>,
+		// 		 <&gcc GCC_UFS_PHY_PHY_AUX_CLK>,
+		// 		 <&tcsr TCSR_UFS_PHY_CLKREF_EN>;
+		// 	clock-names = "ref",
+		// 		      "ref_aux",
+		// 		      "qref";
+		// 	power-domains = <&gcc GCC_UFS_PHY_GDSC>;
+		// 	resets = <&ufs_mem_hc 0>;
+		// 	reset-names = "ufsphy";
+		// 	#phy-cells = <0>;
+		// 	status = "disabled";
+		// };
+
+		ice: crypto@1d88000 {
+			compatible = "qcom,sm8550-inline-crypto-engine",
 				     "qcom,inline-crypto-engine";
-			reg = <0 0x01d90000 0 0x8000>;
+			reg = <0 0x01d88000 0 0x8000>;
 			clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
 		};
+
+		// ice: crypto@1d90000 {
+		// 	compatible = "qcom,x1e80100-inline-crypto-engine",
+		// 		     "qcom,inline-crypto-engine";
+		// 	reg = <0 0x01d90000 0 0x8000>;
+		// 	clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
+		// };
 
 		pcie6a: pci@1bf8000 {
 			device_type = "pci";
@@ -4182,6 +4262,12 @@
 				phy-names = "usb2-phy";
 				maximum-speed = "high-speed";
 
+				snps,dis_u2_susphy_quirk;
+				snps,dis_enblslpm_quirk;
+				snps,usb3_lpm_capable;
+
+				// dma-coherent;
+
 				ports {
 					#address-cells = <1>;
 					#size-cells = <0>;
@@ -5077,7 +5163,7 @@
 			#interrupt-cells = <2>;
 
 			gpio-ranges = <&tlmm 0 0 239>;
-			wakeup-parent = <&pdc>;
+			// wakeup-parent = <&pdc>;
 
 			qup_i2c0_data_clk: qup-i2c0-data-clk-state {
 				/* SDA, SCL */
@@ -6090,7 +6176,8 @@
 			      <0 0x25a00000 0 0x200000>,
 			      <0 0x25c00000 0 0x200000>,
 			      <0 0x25e00000 0 0x200000>,
-			      <0 0x26000000 0 0x200000>;
+			      <0 0x26000000 0 0x200000>,
+				  <0 0x26200000 0 0x200000>;
 			reg-names = "llcc0_base",
 				    "llcc1_base",
 				    "llcc2_base",
@@ -6099,7 +6186,8 @@
 				    "llcc5_base",
 				    "llcc6_base",
 				    "llcc7_base",
-				    "llcc_broadcast_base";
+				    "llcc_broadcast_base",
+					"llcc_broadcast_and_base";
 			interrupts = <GIC_SPI 266 IRQ_TYPE_LEVEL_HIGH>;
 		};
 
