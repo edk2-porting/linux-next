@@ -1853,6 +1853,13 @@ static bool can_steal_fallback(unsigned int order, int start_mt)
 	if (order >= pageblock_order)
 		return true;
 
+	/*
+	 * movable pages won't cause permanent fragmentation, so when you alloc small pages,
+	 * you just need to temporarily steal unmovable or reclaimable pages that are closest
+	 * to the request size. After a while, memory compact may occur to form large contiguous
+	 * pages, and the next movable allocation may not need to steal. Unmovable and reclaimable
+	 * allocation need to actually steal pages.
+	 */
 	if (order >= pageblock_order / 2 ||
 		start_mt == MIGRATE_RECLAIMABLE ||
 		start_mt == MIGRATE_UNMOVABLE ||
