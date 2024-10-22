@@ -149,6 +149,7 @@
 /* CQHCI vendor specific registers */
 #define CQHCI_VENDOR_CFG1	0xA00
 #define CQHCI_VENDOR_DIS_RST_ON_CQ_EN	(0x3 << 13)
+#define RCLK_TOGGLE BIT(1)
 
 struct sdhci_msm_offset {
 	u32 core_hc_mode;
@@ -294,6 +295,7 @@ struct sdhci_msm_host {
 	u32 dll_config;
 	u32 ddr_config;
 	bool vqmmc_enabled;
+	bool toggle_fifo_clk;
 };
 
 static const struct sdhci_msm_offset *sdhci_priv_msm_offset(struct sdhci_host *host)
@@ -1173,6 +1175,39 @@ static int sdhci_msm_restore_sdr_dll_config(struct sdhci_host *host)
 	ret = msm_config_cm_dll_phase(host, msm_host->saved_tuning_phase);
 
 	return ret;
+}
+
+/*
+ * After MCLK ugating, toggle the FIFO write clock to get
+ * the FIFO pointers and flags to valid state.
+ */
+static void sdhci_msm_toggle_fifo_write_clk(struct sdhci_host *host)
+{
+	u32 config;
+	struct mmc_ios ios = host->mmc->ios;
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = sdhci_pltfm_priv(pltfm_host);
+	const struct sdhci_msm_offset *msm_offset = msm_host->offset;
+
+	if ((msm_host->tuning_done || ios.enhanced_strobe) &&
+		host->mmc->ios.timing == MMC_TIMING_MMC_HS400) {
+		/*
+		 * Select MCLK as DLL input clock.
+		 */
+		config = readl_relaxed(host->ioaddr + msm_offset->core_dll_config_3);
+		config |= RCLK_TOGGLE;
+		writel_relaxed(config, host->ioaddr + msm_offset->core_dll_config_3);
+
+		/* ensure above write as toggling same bit quickly */
+		wmb();
+		udelay(2);
+
+		/*
+		 * Select RCLK as DLL input clock
+		 */
+		config &= ~RCLK_TOGGLE;
+		writel_relaxed(config, host->ioaddr + msm_offset->core_dll_config_3);
+	}
 }
 
 static void sdhci_msm_set_cdr(struct sdhci_host *host, bool enable)
@@ -2613,6 +2648,9 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	if (core_major == 1 && core_minor >= 0x71)
 		msm_host->uses_tassadar_dll = true;
 
+	if (core_major == 1 && core_minor >= 0x6B)
+		msm_host->toggle_fifo_clk = true;
+
 	ret = sdhci_msm_register_vreg(msm_host);
 	if (ret)
 		goto clk_disable;
@@ -2746,6 +2784,9 @@ static __maybe_unused int sdhci_msm_runtime_resume(struct device *dev)
 				       msm_host->bulk_clks);
 	if (ret)
 		return ret;
+
+	if (msm_host->toggle_fifo_clk)
+		sdhci_msm_toggle_fifo_write_clk(host);
 	/*
 	 * Whenever core-clock is gated dynamically, it's needed to
 	 * restore the SDR DLL settings when the clock is ungated.
