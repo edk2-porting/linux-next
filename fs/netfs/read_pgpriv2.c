@@ -18,8 +18,7 @@
  * third mark in the folio queue is used to indicate that this folio needs
  * writing.
  */
-void netfs_pgpriv2_mark_copy_to_cache(struct netfs_io_subrequest *subreq,
-				      struct netfs_io_request *rreq,
+void netfs_pgpriv2_mark_copy_to_cache(struct netfs_io_request *rreq,
 				      struct folio_queue *folioq,
 				      int slot)
 {
