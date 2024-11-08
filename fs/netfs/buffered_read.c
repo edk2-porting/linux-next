@@ -131,7 +131,8 @@ static ssize_t netfs_prepare_read_iterator(struct netfs_io_subrequest *subreq)
 			struct folio_queue *tail = rreq->buffer_tail, *new;
 			size_t added;
 
-			new = netfs_folioq_alloc(GFP_NOFS);
+			new = netfs_folioq_alloc(rreq->debug_id, GFP_NOFS,
+						 netfs_trace_folioq_alloc_read_prep);
 			if (!new)
 				return -ENOMEM;
 			new->prev = tail;
@@ -357,9 +358,11 @@ static int netfs_prime_buffer(struct netfs_io_request *rreq)
 	struct folio_batch put_batch;
 	size_t added;
 
-	folioq = netfs_folioq_alloc(GFP_KERNEL);
+	folioq = netfs_folioq_alloc(rreq->debug_id, GFP_KERNEL,
+				    netfs_trace_folioq_alloc_read_prime);
 	if (!folioq)
 		return -ENOMEM;
+
 	rreq->buffer = folioq;
 	rreq->buffer_tail = folioq;
 	rreq->submitted = rreq->start;
@@ -432,7 +435,8 @@ static int netfs_create_singular_buffer(struct netfs_io_request *rreq, struct fo
 {
 	struct folio_queue *folioq;
 
-	folioq = netfs_folioq_alloc(GFP_KERNEL);
+	folioq = netfs_folioq_alloc(rreq->debug_id, GFP_KERNEL,
+				    netfs_trace_folioq_alloc_read_sing);
 	if (!folioq)
 		return -ENOMEM;
 
