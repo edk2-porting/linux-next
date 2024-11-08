@@ -390,6 +390,8 @@ static unsigned long get_next_ra_size(struct file_ra_state *ra,
 		return 4 * cur;
 	if (cur <= max / 2)
 		return 2 * cur;
+	if (cur > max)
+		return cur;
 	return max;
 }
 
