@@ -74,6 +74,8 @@ soc/dt
 		https://github.com/AsahiLinux/linux tags/asahi-soc-dt-6.13
 	samsung/dt-bindings
 		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-6.13
+	rockchips/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.13-armsoc/drivers1
 
 soc/drivers
 	patch
@@ -106,6 +108,8 @@ soc/drivers
 		firmware: turris-mox-rwtm: Document the driver private data structure
 		platform: cznic: turris-omnia-mcu: Document the driver private data structure
 		platform: cznic: turris-omnia-mcu: Rename variable holding GPIO line names
+	qcom/drivers-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-6.13-2
 
 soc/defconfig
 	broadcom/defconfig
