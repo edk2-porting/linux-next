@@ -76,6 +76,10 @@ soc/dt
 		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-6.13
 	rockchips/dt-bindings
 		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.13-armsoc/drivers1
+	at91/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-dt-6.13
+	at91/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-soc-6.13
 
 soc/drivers
 	patch
@@ -122,6 +126,8 @@ soc/defconfig
 		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-defconfig-for-v6.13-tag1
 	k3/defconfig
 		https://git.kernel.org/pub/scm/linux/kernel/git/ti/linux tags/ti-k3-config-for-v6.13
+	at91/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-defconfig-6.13
 
 soc/late
 
