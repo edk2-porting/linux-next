@@ -4879,7 +4879,7 @@ static inline bool mas_anode_descend(struct ma_state *mas, unsigned long size)
 		if (gap >= size) {
 			if (ma_is_leaf(type)) {
 				found = true;
-				goto done;
+				break;
 			}
 
 			mas->node = mas_slot(mas, slots, offset);
@@ -4896,9 +4896,6 @@ next_slot:
 		}
 	}
 
-	if (mte_is_root(mas->node))
-		found = true;
-done:
 	mas->offset = offset;
 	return found;
 }
