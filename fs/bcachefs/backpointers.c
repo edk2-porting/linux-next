@@ -28,23 +28,6 @@ int bch2_backpointer_validate(struct bch_fs *c, struct bkey_s_c k,
 	bkey_fsck_err_on(bp.k->p.inode == BCH_SB_MEMBER_INVALID,
 			 c, backpointer_dev_bad,
 			 "backpointer for BCH_SB_MEMBER_INVALID");
-
-	rcu_read_lock();
-	struct bch_dev *ca = bch2_dev_rcu_noerror(c, bp.k->p.inode);
-	if (!ca) {
-		/* these will be caught by fsck */
-		rcu_read_unlock();
-		return 0;
-	}
-
-	struct bpos bucket = bp_pos_to_bucket(ca, bp.k->p);
-	struct bpos bp_pos = bucket_pos_to_bp_noerror(ca, bucket, bp.v->bucket_offset);
-	rcu_read_unlock();
-
-	bkey_fsck_err_on((bp.v->bucket_offset >> MAX_EXTENT_COMPRESS_RATIO_SHIFT) >= ca->mi.bucket_size ||
-			 !bpos_eq(bp.k->p, bp_pos),
-			 c, backpointer_bucket_offset_wrong,
-			 "backpointer bucket_offset wrong (%llu)", (u64) bp.v->bucket_offset);
 fsck_err:
 	return ret;
 }
@@ -76,7 +59,6 @@ void bch2_backpointer_swab(struct bkey_s k)
 {
 	struct bkey_s_backpointer bp = bkey_s_to_backpointer(k);
 
-	bp.v->bucket_offset	= swab40(bp.v->bucket_offset);
 	bp.v->bucket_len	= swab32(bp.v->bucket_len);
 	bch2_bpos_swab(&bp.v->pos);
 }
