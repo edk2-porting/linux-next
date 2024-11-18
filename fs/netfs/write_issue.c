@@ -862,7 +862,7 @@ int netfs_writeback_single(struct address_space *mapping,
 	struct netfs_inode *ictx = netfs_inode(mapping->host);
 	struct folio_queue *fq;
 	size_t size = iov_iter_count(iter);
-	int ret;
+	int ret = 0;
 
 	if (WARN_ON_ONCE(!iov_iter_is_folioq(iter)))
 		return -EIO;
