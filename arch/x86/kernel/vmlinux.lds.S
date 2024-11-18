@@ -358,6 +358,7 @@ SECTIONS
 #endif
 
 	RUNTIME_CONST_VARIABLES
+	RUNTIME_CONST(ptr, USER_PTR_MAX)
 
 	. = ALIGN(PAGE_SIZE);
 
@@ -489,6 +490,9 @@ SECTIONS
  */
 . = ASSERT((_end - LOAD_OFFSET <= KERNEL_IMAGE_SIZE),
 	   "kernel image bigger than KERNEL_IMAGE_SIZE");
+
+/* needed for Clang - see arch/x86/entry/entry.S */
+PROVIDE(__ref_stack_chk_guard = __stack_chk_guard);
 
 #ifdef CONFIG_X86_64
 /*

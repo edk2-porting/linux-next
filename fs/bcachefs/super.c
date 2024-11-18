@@ -272,6 +272,7 @@ static void __bch2_fs_read_only(struct bch_fs *c)
 		clean_passes++;
 
 		if (bch2_btree_interior_updates_flush(c) ||
+		    bch2_btree_write_buffer_flush_going_ro(c) ||
 		    bch2_journal_flush_all_pins(&c->journal) ||
 		    bch2_btree_flush_all_writes(c) ||
 		    seq != atomic64_read(&c->journal.seq)) {
@@ -1972,7 +1973,7 @@ int bch2_dev_resize(struct bch_fs *c, struct bch_dev *ca, u64 nbuckets)
 		};
 		u64 v[3] = { nbuckets - old_nbuckets, 0, 0 };
 
-		ret   = bch2_trans_do(ca->fs, NULL, NULL, 0,
+		ret   = bch2_trans_commit_do(ca->fs, NULL, NULL, 0,
 				bch2_disk_accounting_mod(trans, &acc, v, ARRAY_SIZE(v), false)) ?:
 			bch2_dev_freespace_init(c, ca, old_nbuckets, nbuckets);
 		if (ret)
