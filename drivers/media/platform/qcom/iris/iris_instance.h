@@ -35,6 +35,10 @@
  * @m2m_dev:	a reference to m2m device structure
  * @m2m_ctx:	a reference to m2m context structure
  * @subscriptions: variable to hold current events subscriptions
+ * @sequence_cap: a sequence counter for capture queue
+ * @sequence_out: a sequence counter for output queue
+ * @tss: timestamp metadata
+ * @metadata_idx: index for metadata buffer
  */
 
 struct iris_inst {
@@ -58,6 +62,10 @@ struct iris_inst {
 	struct v4l2_m2m_dev		*m2m_dev;
 	struct v4l2_m2m_ctx		*m2m_ctx;
 	unsigned int			subscriptions;
+	u32				sequence_cap;
+	u32				sequence_out;
+	struct iris_ts_metadata		tss[VIDEO_MAX_FRAME];
+	u32				metadata_idx;
 };
 
 #endif
