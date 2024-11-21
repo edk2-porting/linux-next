@@ -90,6 +90,8 @@ static void show_mnt_attrs(uint64_t flags)
 		break;
 	}
 
+	if (flags & MOUNT_ATTR_NODIRATIME)
+		printf(",nodiratime");
 	if (flags & MOUNT_ATTR_NOSYMFOLLOW)
 		printf(",nosymfollow");
 	if (flags & MOUNT_ATTR_IDMAP)
@@ -102,7 +104,7 @@ static void show_propagation(struct statmount *sm)
 		printf(" shared:%llu", sm->mnt_peer_group);
 	if (sm->mnt_propagation & MS_SLAVE) {
 		printf(" master:%llu", sm->mnt_master);
-		if (sm->mnt_master)
+		if (sm->propagate_from && sm->propagate_from != sm->mnt_master)
 			printf(" propagate_from:%llu", sm->propagate_from);
 	}
 	if (sm->mnt_propagation & MS_UNBINDABLE)
