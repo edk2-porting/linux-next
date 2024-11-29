@@ -1633,6 +1633,7 @@ static int zram_write_page(struct zram *zram, struct page *page, u32 index)
 	unsigned long alloced_pages;
 	unsigned long handle = -ENOMEM;
 	unsigned int comp_len = 0;
+	unsigned int last_comp_len = 0;
 	void *src, *dst, *mem;
 	struct zcomp_strm *zstrm;
 	unsigned long element = 0;
@@ -1664,6 +1665,11 @@ compress_again:
 
 	if (comp_len >= huge_class_size)
 		comp_len = PAGE_SIZE;
+
+	if (last_comp_len && (last_comp_len != comp_len)) {
+		zs_free(zram->mem_pool, handle);
+		handle = (unsigned long)ERR_PTR(-ENOMEM);
+	}
 	/*
 	 * handle allocation has 2 paths:
 	 * a) fast path is executed with preemption disabled (for
@@ -1692,8 +1698,10 @@ compress_again:
 		if (IS_ERR_VALUE(handle))
 			return PTR_ERR((void *)handle);
 
-		if (comp_len != PAGE_SIZE)
+		if (comp_len != PAGE_SIZE) {
+			last_comp_len = comp_len;
 			goto compress_again;
+		}
 		/*
 		 * If the page is not compressible, you need to acquire the
 		 * lock and execute the code below. The zcomp_stream_get()
