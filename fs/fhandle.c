@@ -187,17 +187,6 @@ static int get_path_from_fd(int fd, struct path *root)
 	return 0;
 }
 
-enum handle_to_path_flags {
-	HANDLE_CHECK_PERMS   = (1 << 0),
-	HANDLE_CHECK_SUBTREE = (1 << 1),
-};
-
-struct handle_to_path_ctx {
-	struct path root;
-	enum handle_to_path_flags flags;
-	unsigned int fh_flags;
-};
-
 static int vfs_dentry_acceptable(void *context, struct dentry *dentry)
 {
 	struct handle_to_path_ctx *ctx = context;
@@ -336,15 +325,19 @@ static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
 	struct file_handle f_handle;
 	struct file_handle *handle = NULL;
 	struct handle_to_path_ctx ctx = {};
+	const struct export_operations *eops;
 
 	retval = get_path_from_fd(mountdirfd, &ctx.root);
 	if (retval)
 		goto out_err;
 
-	if (!may_decode_fh(&ctx, o_flags)) {
-		retval = -EPERM;
+	eops = ctx.root.mnt->mnt_sb->s_export_op;
+	if (eops && eops->permission)
+		retval = eops->permission(&ctx, o_flags);
+	else
+		retval = may_decode_fh(&ctx, o_flags);
+	if (retval)
 		goto out_path;
-	}
 
 	if (copy_from_user(&f_handle, ufh, sizeof(struct file_handle))) {
 		retval = -EFAULT;
