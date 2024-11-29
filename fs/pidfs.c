@@ -23,6 +23,63 @@
 #include "internal.h"
 #include "mount.h"
 
+static u32 pidfs_ino_highbits;
+static u32 pidfs_ino_last_ino_lowbits;
+
+static DEFINE_IDR(pidfs_ino_idr);
+
+static inline ino_t pidfs_ino(u64 ino)
+{
+	/* On 32 bit low 32 bits are the inode. */
+	if (sizeof(ino_t) < sizeof(u64))
+		return (u32)ino;
+
+	/* On 64 bit simply return ino. */
+	return ino;
+}
+
+static inline u32 pidfs_gen(u64 ino)
+{
+	/* On 32 bit the generation number are the upper 32 bits. */
+	if (sizeof(ino_t) < sizeof(u64))
+		return ino >> 32;
+
+	/* On 64 bit the generation number is 1. */
+	return 1;
+}
+
+/*
+ * Construct an inode number for struct pid in a way that we can use the
+ * lower 32bit to lookup struct pid independent of any pid numbers that
+ * could be leaked into userspace (e.g., via file handle encoding).
+ */
+int pidfs_add_pid(struct pid *pid)
+{
+	u32 ino_highbits;
+	int ret;
+
+        /*
+	 * Inode numbering for pidfs start at 2. This avoids collisions
+	 * with the root inode which is 1 for pseudo filesystems.
+         */
+	ret = idr_alloc_cyclic(&pidfs_ino_idr, pid, 2, 0, GFP_ATOMIC);
+	if (ret >= 0 && ret < pidfs_ino_last_ino_lowbits)
+		pidfs_ino_highbits++;
+	ino_highbits = pidfs_ino_highbits;
+	pidfs_ino_last_ino_lowbits = ret;
+	if (ret < 0)
+		return ret;
+
+	pid->ino = (u64)ino_highbits << 32 | ret;
+	pid->stashed = NULL;
+	return 0;
+}
+
+void pidfs_remove_pid(struct pid *pid)
+{
+	idr_remove(&pidfs_ino_idr, (u32)pidfs_ino(pid->ino));
+}
+
 #ifdef CONFIG_PROC_FS
 /**
  * pidfd_show_fdinfo - print information about a pidfd
@@ -198,6 +255,14 @@ static long pidfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct ns_common *ns_common = NULL;
 	struct pid_namespace *pid_ns;
 
+	if (cmd == FS_IOC_GETVERSION) {
+		if (!arg)
+			return -EINVAL;
+
+		__u32 __user *argp = (__u32 __user *)arg;
+		return put_user(file_inode(file)->i_generation, argp);
+	}
+
 	task = get_pid_task(pid, PIDTYPE_PID);
 	if (!task)
 		return -ESRCH;
@@ -318,40 +383,6 @@ struct pid *pidfd_pid(const struct file *file)
 
 static struct vfsmount *pidfs_mnt __ro_after_init;
 
-#if BITS_PER_LONG == 32
-/*
- * Provide a fallback mechanism for 32-bit systems so processes remain
- * reliably comparable by inode number even on those systems.
- */
-static DEFINE_IDA(pidfd_inum_ida);
-
-static int pidfs_inum(struct pid *pid, unsigned long *ino)
-{
-	int ret;
-
-	ret = ida_alloc_range(&pidfd_inum_ida, RESERVED_PIDS + 1,
-			      UINT_MAX, GFP_ATOMIC);
-	if (ret < 0)
-		return -ENOSPC;
-
-	*ino = ret;
-	return 0;
-}
-
-static inline void pidfs_free_inum(unsigned long ino)
-{
-	if (ino > 0)
-		ida_free(&pidfd_inum_ida, ino);
-}
-#else
-static inline int pidfs_inum(struct pid *pid, unsigned long *ino)
-{
-	*ino = pid->ino;
-	return 0;
-}
-#define pidfs_free_inum(ino) ((void)(ino))
-#endif
-
 /*
  * The vfs falls back to simple_setattr() if i_op->setattr() isn't
  * implemented. Let's reject it completely until we have a clean
@@ -403,7 +434,6 @@ static void pidfs_evict_inode(struct inode *inode)
 
 	clear_inode(inode);
 	put_pid(pid);
-	pidfs_free_inum(inode->i_ino);
 }
 
 static const struct super_operations pidfs_sops = {
@@ -429,17 +459,16 @@ static const struct dentry_operations pidfs_dentry_operations = {
 
 static int pidfs_init_inode(struct inode *inode, void *data)
 {
+	struct pid *pid = data;
+
 	inode->i_private = data;
 	inode->i_flags |= S_PRIVATE;
 	inode->i_mode |= S_IRWXU;
 	inode->i_op = &pidfs_inode_operations;
 	inode->i_fop = &pidfs_file_operations;
-	/*
-	 * Inode numbering for pidfs start at RESERVED_PIDS + 1. This
-	 * avoids collisions with the root inode which is 1 for pseudo
-	 * filesystems.
-	 */
-	return pidfs_inum(data, &inode->i_ino);
+	inode->i_ino = pidfs_ino(pid->ino);
+	inode->i_generation = pidfs_gen(pid->ino);
+	return 0;
 }
 
 static void pidfs_put_data(void *data)
@@ -491,6 +520,16 @@ struct file *pidfs_alloc_file(struct pid *pid, unsigned int flags)
 
 void __init pidfs_init(void)
 {
+	/*
+	 * On 32 bit systems the lower 32 bits are the inode number and
+	 * the higher 32 bits are the generation number. The starting
+	 * value for the inode number and the generation number is one.
+	 */
+	if (sizeof(ino_t) < sizeof(u64))
+		pidfs_ino_highbits = 1;
+	else
+		pidfs_ino_highbits = 0;
+
 	pidfs_mnt = kern_mount(&pidfs_type);
 	if (IS_ERR(pidfs_mnt))
 		panic("Failed to mount pidfs pseudo filesystem");
