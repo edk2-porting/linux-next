@@ -158,5 +158,5 @@ void swap_cgroup_swapoff(int type)
 	ctrl->map = NULL;
 	mutex_unlock(&swap_cgroup_mutex);
 
-	kvfree(map);
+	vfree(map);
 }
