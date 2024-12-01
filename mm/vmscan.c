@@ -381,7 +381,7 @@ unsigned long zone_reclaimable_pages(struct zone *zone)
 	 * scenarios where they can still help alleviate memory pressure.
 	 */
 	if (nr == 0)
-	    nr = zone_page_state_snapshot(zone, NR_FREE_PAGES);
+		nr = zone_page_state_snapshot(zone, NR_FREE_PAGES);
 	return nr;
 }
 
