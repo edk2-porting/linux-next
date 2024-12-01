@@ -260,6 +260,7 @@ struct export_operations {
 						*/
 #define EXPORT_OP_FLUSH_ON_CLOSE	(0x20) /* fs flushes file data on close */
 #define EXPORT_OP_ASYNC_LOCK		(0x40) /* fs can do async lock request */
+#define EXPORT_OP_LOCAL_FILE_HANDLE		(0x80) /* fs only supports file handles, no proper export */
 	unsigned long	flags;
 };
 

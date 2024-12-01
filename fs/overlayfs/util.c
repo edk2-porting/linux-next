@@ -83,10 +83,15 @@ void ovl_revert_creds(const struct cred *old_cred)
  */
 int ovl_can_decode_fh(struct super_block *sb)
 {
+	const struct export_operations *nop = sb->s_export_op;
+
 	if (!capable(CAP_DAC_READ_SEARCH))
 		return 0;
 
-	if (!exportfs_can_decode_fh(sb->s_export_op))
+	if (!exportfs_can_decode_fh(nop))
+		return 0;
+
+	if (nop && nop->flags & EXPORT_OP_LOCAL_FILE_HANDLE)
 		return 0;
 
 	return sb->s_export_op->encode_fh ? -1 : FILEID_INO32_GEN;
