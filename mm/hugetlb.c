@@ -3113,7 +3113,7 @@ out_end_reservation:
 	if (!memcg_charge_ret)
 		mem_cgroup_cancel_charge(memcg, nr_pages);
 	mem_cgroup_put(memcg);
-	return ERR_PTR(-ENOSPC);
+	return ERR_PTR(-ENOMEM);
 }
 
 int alloc_bootmem_huge_page(struct hstate *h, int nid)
