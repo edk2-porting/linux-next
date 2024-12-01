@@ -154,6 +154,7 @@ static const struct export_operations kernfs_export_ops = {
 	.fh_to_dentry	= kernfs_fh_to_dentry,
 	.fh_to_parent	= kernfs_fh_to_parent,
 	.get_parent	= kernfs_get_parent_dentry,
+	.flags		= EXPORT_OP_LOCAL_FILE_HANDLE,
 };
 
 /**
