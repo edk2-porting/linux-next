@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0
+#
+# diffconfig - a tool to compare .config files.
+#
+# originally written in 2006 by Matt Mackall
+#  (at least, this was in his bloatwatch source code)
+# last worked on 2008 by Tim Bird
+#
+
+import sys
+import os
+import re
+from collections import OrderedDict
+
+def usage():
+    print("""Usage: diffconfig [-h] [-m] [<config1> <config2>]
+
+Diffconfig is a simple utility for comparing two .config files.
+...
+""")
+    sys.exit(0)
+
+def readconfig(config_file):
+    d = OrderedDict()
+    config_pattern = re.compile(r"^(CONFIG_[^\s=]+)(?:=(.*))?$")
+    not_set_pattern = re.compile(r"^# (CONFIG_[^\s=]+) is not set$")
+    for line in config_file:
+        line = line.strip()
+        if not line or line.startswith("#") and "is not set" not in line:
+            continue  # Skip empty lines and comments
+        m = config_pattern.match(line)
+        if m:
+            name = m.group(1)[7:]  # Remove 'CONFIG_' prefix
+            val = m.group(2)
+            if val is None:
+                # Handle cases like 'CONFIG_EXAMPLE' without '='
+                val = ""
+            d[name] = val
+            continue
+        m = not_set_pattern.match(line)
+        if m:
+            name = m.group(1)[7:]  # Remove 'CONFIG_' prefix
+            d[name] = "n"
+    return d
+
+def print_config(op, config, old_value, new_value):
+    global merge_style
+    if merge_style:
+        if new_value is None:
+            return
+        if new_value == "n" or new_value == "":
+            print("# CONFIG_%s is not set" % config)
+        else:
+            print("CONFIG_%s=%s" % (config, new_value))
+    else:
+        if op == "-":
+            print("-%s %s" % (config, old_value))
+        elif op == "+":
+            print("+%s %s" % (config, new_value))
+        else:
+            print(" %s %s -> %s" % (config, old_value, new_value))
+
+def show_diff():
+    global merge_style
+
+    # Parse command line args
+    if ("-h" in sys.argv or "--help" in sys.argv):
+        usage()
+
+    merge_style = 0
+    if "-m" in sys.argv:
+        merge_style = 1
+        sys.argv.remove("-m")
+
+    argc = len(sys.argv)
+    if not (argc == 1 or argc == 3):
+        print("Error: incorrect number of arguments or unrecognized option")
+        usage()
+
+    if argc == 1:
+        # Use default config files
+        build_dir = ""
+        if "KBUILD_OUTPUT" in os.environ:
+            build_dir = os.environ["KBUILD_OUTPUT"] + "/"
+        configa_filename = build_dir + ".config.old"
+        configb_filename = build_dir + ".config"
+    else:
+        configa_filename = sys.argv[1]
+        configb_filename = sys.argv[2]
+
+    try:
+        with open(configa_filename) as f:
+            a = readconfig(f)
+        with open(configb_filename) as f:
+            b = readconfig(f)
+    except IOError as e:
+        print("I/O error[%s]: %s\n" % (e.errno, e.strerror))
+        usage()
+
+    if merge_style:
+        print("""# Use this config fragment with the following command:
+# make defconfig
+# make qcom.config
+
+# This config fragment can be produced using the following command:
+# make defconfig
+# ./scripts/diffconfig_new -m .config .config.old > arch/arm64/configs/qcom.config
+# cp .config.old .config
+""")
+    # Process configs in the order of the new config file
+    for config in b:
+        if config not in a:
+            # New config item
+            print_config("+", config, None, b[config])
+        elif a[config] != b[config]:
+            # Changed config item
+            print_config("->", config, a[config], b[config])
+        # If values are the same, do nothing
+        # Remove processed items from old config dictionary
+        if config in a:
+            del a[config]
+
+    # Any remaining items in 'a' are the items removed in 'b'
+    for config in a:
+        print_config("-", config, a[config], None)
+
+def main():
+    try:
+        show_diff()
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
