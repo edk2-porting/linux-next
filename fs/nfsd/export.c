@@ -417,6 +417,7 @@ static struct svc_export *svc_export_lookup(struct svc_export *);
 static int check_export(struct path *path, int *flags, unsigned char *uuid)
 {
 	struct inode *inode = d_inode(path->dentry);
+	const struct export_operations *nop;
 
 	/*
 	 * We currently export only dirs, regular files, and (for v4
@@ -449,8 +450,14 @@ static int check_export(struct path *path, int *flags, unsigned char *uuid)
 		return -EINVAL;
 	}
 
-	if (!exportfs_can_decode_fh(inode->i_sb->s_export_op)) {
+	nop = inode->i_sb->s_export_op;
+	if (!exportfs_can_decode_fh(nop)) {
 		dprintk("exp_export: export of invalid fs type.\n");
+		return -EINVAL;
+	}
+
+	if (nop && (nop->flags & EXPORT_OP_LOCAL_FILE_HANDLE)) {
+		dprintk("exp_export: filesystem only supports non-exportable file handles.\n");
 		return -EINVAL;
 	}
 
