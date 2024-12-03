@@ -78,8 +78,9 @@ struct io_hash_table {
 
 struct io_mapped_region {
 	struct page		**pages;
-	void			*vmap_ptr;
-	size_t			nr_pages;
+	void			*ptr;
+	unsigned		nr_pages;
+	unsigned		flags;
 };
 
 /*
@@ -293,6 +294,11 @@ struct io_ring_ctx {
 
 		struct io_submit_state	submit_state;
 
+		/*
+		 * Modifications are protected by ->uring_lock and ->mmap_lock.
+		 * The flags, buf_pages and buf_nr_pages fields should be stable
+		 * once published.
+		 */
 		struct xarray		io_bl_xa;
 
 		struct io_hash_table	cancel_table;
@@ -424,17 +430,10 @@ struct io_ring_ctx {
 	 * side will need to grab this lock, to prevent either side from
 	 * being run concurrently with the other.
 	 */
-	struct mutex			resize_lock;
+	struct mutex			mmap_lock;
 
-	/*
-	 * If IORING_SETUP_NO_MMAP is used, then the below holds
-	 * the gup'ed pages for the two rings, and the sqes.
-	 */
-	unsigned short			n_ring_pages;
-	unsigned short			n_sqe_pages;
-	struct page			**ring_pages;
-	struct page			**sqe_pages;
-
+	struct io_mapped_region		sq_region;
+	struct io_mapped_region		ring_region;
 	/* used for optimised request parameter and wait argument passing  */
 	struct io_mapped_region		param_region;
 };
