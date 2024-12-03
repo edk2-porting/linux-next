@@ -45,6 +45,7 @@
 #include <drm/drm_managed.h>
 #include <drm/drm_probe_helper.h>
 
+#include "display/i9xx_display_sr.h"
 #include "display/intel_acpi.h"
 #include "display/intel_bw.h"
 #include "display/intel_cdclk.h"
@@ -60,6 +61,7 @@
 #include "display/intel_pch_refclk.h"
 #include "display/intel_pps.h"
 #include "display/intel_sprite_uapi.h"
+#include "display/intel_vga.h"
 #include "display/skl_watermark.h"
 
 #include "gem/i915_gem_context.h"
@@ -93,7 +95,6 @@
 #include "i915_memcpy.h"
 #include "i915_perf.h"
 #include "i915_query.h"
-#include "i915_suspend.h"
 #include "i915_switcheroo.h"
 #include "i915_sysfs.h"
 #include "i915_utils.h"
@@ -104,6 +105,8 @@
 #include "intel_pci_config.h"
 #include "intel_pcode.h"
 #include "intel_region_ttm.h"
+#include "intel_sbi.h"
+#include "vlv_sideband.h"
 #include "vlv_suspend.h"
 
 static const struct drm_driver i915_drm_driver;
@@ -231,8 +234,9 @@ static int i915_driver_early_probe(struct drm_i915_private *dev_priv)
 	spin_lock_init(&dev_priv->irq_lock);
 	spin_lock_init(&dev_priv->gpu_error.lock);
 
+	intel_sbi_init(dev_priv);
+	vlv_iosf_sb_init(dev_priv);
 	mutex_init(&dev_priv->sb_lock);
-	cpu_latency_qos_add_request(&dev_priv->sb_qos, PM_QOS_DEFAULT_VALUE);
 
 	i915_memcpy_init_early(dev_priv);
 	intel_runtime_pm_init_early(&dev_priv->runtime_pm);
@@ -282,16 +286,19 @@ err_workqueues:
  */
 static void i915_driver_late_release(struct drm_i915_private *dev_priv)
 {
+	struct intel_display *display = &dev_priv->display;
+
 	intel_irq_fini(dev_priv);
-	intel_power_domains_cleanup(dev_priv);
+	intel_power_domains_cleanup(display);
 	i915_gem_cleanup_early(dev_priv);
 	intel_gt_driver_late_release_all(dev_priv);
 	intel_region_ttm_device_fini(dev_priv);
 	vlv_suspend_cleanup(dev_priv);
 	i915_workqueues_cleanup(dev_priv);
 
-	cpu_latency_qos_remove_request(&dev_priv->sb_qos);
 	mutex_destroy(&dev_priv->sb_lock);
+	vlv_iosf_sb_fini(dev_priv);
+	intel_sbi_fini(dev_priv);
 
 	i915_params_free(&dev_priv->params);
 }
@@ -307,6 +314,7 @@ static void i915_driver_late_release(struct drm_i915_private *dev_priv)
  */
 static int i915_driver_mmio_probe(struct drm_i915_private *dev_priv)
 {
+	struct intel_display *display = &dev_priv->display;
 	struct intel_gt *gt;
 	int ret, i;
 
@@ -332,7 +340,7 @@ static int i915_driver_mmio_probe(struct drm_i915_private *dev_priv)
 	/* Try to make sure MCHBAR is enabled before poking at it */
 	intel_gmch_bar_setup(dev_priv);
 	intel_device_info_runtime_init(dev_priv);
-	intel_display_device_info_runtime_init(dev_priv);
+	intel_display_device_info_runtime_init(display);
 
 	for_each_gt(gt, dev_priv, i) {
 		ret = intel_gt_init_mmio(gt);
@@ -599,6 +607,7 @@ static void i915_driver_hw_remove(struct drm_i915_private *dev_priv)
  */
 static void i915_driver_register(struct drm_i915_private *dev_priv)
 {
+	struct intel_display *display = &dev_priv->display;
 	struct intel_gt *gt;
 	unsigned int i;
 
@@ -629,7 +638,7 @@ static void i915_driver_register(struct drm_i915_private *dev_priv)
 
 	intel_display_driver_register(dev_priv);
 
-	intel_power_domains_enable(dev_priv);
+	intel_power_domains_enable(display);
 	intel_runtime_pm_enable(&dev_priv->runtime_pm);
 
 	intel_register_dsm_handler();
@@ -644,6 +653,7 @@ static void i915_driver_register(struct drm_i915_private *dev_priv)
  */
 static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 {
+	struct intel_display *display = &dev_priv->display;
 	struct intel_gt *gt;
 	unsigned int i;
 
@@ -652,7 +662,7 @@ static void i915_driver_unregister(struct drm_i915_private *dev_priv)
 	intel_unregister_dsm_handler();
 
 	intel_runtime_pm_disable(&dev_priv->runtime_pm);
-	intel_power_domains_disable(dev_priv);
+	intel_power_domains_disable(display);
 
 	intel_display_driver_unregister(dev_priv);
 
@@ -731,7 +741,7 @@ i915_driver_create(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Set up device info and initial runtime info. */
 	intel_device_info_driver_create(i915, pdev->device, match_info);
 
-	intel_display_device_probe(i915);
+	intel_display_device_probe(pdev);
 
 	return i915;
 }
@@ -883,6 +893,7 @@ void i915_driver_remove(struct drm_i915_private *i915)
 static void i915_driver_release(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_display *display = &dev_priv->display;
 	struct intel_runtime_pm *rpm = &dev_priv->runtime_pm;
 	intel_wakeref_t wakeref;
 
@@ -906,7 +917,7 @@ static void i915_driver_release(struct drm_device *dev)
 
 	i915_driver_late_release(dev_priv);
 
-	intel_display_device_remove(dev_priv);
+	intel_display_device_remove(display);
 }
 
 static int i915_driver_open(struct drm_device *dev, struct drm_file *file)
@@ -936,9 +947,11 @@ static void i915_driver_postclose(struct drm_device *dev, struct drm_file *file)
 
 void i915_driver_shutdown(struct drm_i915_private *i915)
 {
+	struct intel_display *display = &i915->display;
+
 	disable_rpm_wakeref_asserts(&i915->runtime_pm);
 	intel_runtime_pm_disable(&i915->runtime_pm);
-	intel_power_domains_disable(i915);
+	intel_power_domains_disable(display);
 
 	intel_fbdev_set_suspend(&i915->drm, FBINFO_STATE_SUSPENDED, true);
 	if (HAS_DISPLAY(i915)) {
@@ -974,7 +987,7 @@ void i915_driver_shutdown(struct drm_i915_private *i915)
 	 * - unify the driver remove and system/runtime suspend sequences with
 	 *   the above unified shutdown/poweroff sequence.
 	 */
-	intel_power_domains_driver_remove(i915);
+	intel_power_domains_driver_remove(display);
 	enable_rpm_wakeref_asserts(&i915->runtime_pm);
 
 	intel_runtime_pm_driver_last_release(&i915->runtime_pm);
@@ -1022,7 +1035,7 @@ static int i915_drm_suspend(struct drm_device *dev)
 
 	/* We do a lot of poking in a lot of registers, make sure they work
 	 * properly. */
-	intel_power_domains_disable(dev_priv);
+	intel_power_domains_disable(display);
 	intel_fbdev_set_suspend(dev, FBINFO_STATE_SUSPENDED, true);
 	if (HAS_DISPLAY(dev_priv)) {
 		drm_kms_helper_poll_disable(dev);
@@ -1032,8 +1045,6 @@ static int i915_drm_suspend(struct drm_device *dev)
 	pci_save_state(pdev);
 
 	intel_display_driver_suspend(dev_priv);
-
-	intel_dp_mst_suspend(dev_priv);
 
 	intel_irq_suspend(dev_priv);
 	intel_hpd_cancel_work(dev_priv);
@@ -1047,7 +1058,7 @@ static int i915_drm_suspend(struct drm_device *dev)
 	intel_dpt_suspend(dev_priv);
 	i915_ggtt_suspend(to_gt(dev_priv)->ggtt);
 
-	i915_save_display(dev_priv);
+	i9xx_display_sr_save(display);
 
 	opregion_target_state = suspend_to_idle(dev_priv) ? PCI_D1 : PCI_D3cold;
 	intel_opregion_suspend(display, opregion_target_state);
@@ -1066,6 +1077,7 @@ static int i915_drm_suspend(struct drm_device *dev)
 static int i915_drm_suspend_late(struct drm_device *dev, bool hibernation)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_display *display = &dev_priv->display;
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	struct intel_runtime_pm *rpm = &dev_priv->runtime_pm;
 	struct intel_gt *gt;
@@ -1081,14 +1093,12 @@ static int i915_drm_suspend_late(struct drm_device *dev, bool hibernation)
 	for_each_gt(gt, dev_priv, i)
 		intel_uncore_suspend(gt->uncore);
 
-	intel_power_domains_suspend(dev_priv, s2idle);
-
-	intel_display_power_suspend_late(dev_priv);
+	intel_display_power_suspend_late(display, s2idle);
 
 	ret = vlv_suspend_complete(dev_priv);
 	if (ret) {
 		drm_err(&dev_priv->drm, "Suspend complete failed: %d\n", ret);
-		intel_power_domains_resume(dev_priv);
+		intel_display_power_resume_early(display);
 
 		goto out;
 	}
@@ -1166,7 +1176,12 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	intel_dmc_resume(display);
 
-	i915_restore_display(dev_priv);
+	i9xx_display_sr_restore(display);
+
+	intel_vga_redisable(display);
+
+	intel_gmbus_reset(display);
+
 	intel_pps_unlock_regs_wa(display);
 
 	intel_init_pch_refclk(dev_priv);
@@ -1197,8 +1212,6 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	intel_hpd_init(dev_priv);
 
-	/* MST sideband requires HPD interrupts enabled */
-	intel_dp_mst_resume(dev_priv);
 	intel_display_driver_resume(dev_priv);
 
 	if (HAS_DISPLAY(dev_priv)) {
@@ -1211,7 +1224,7 @@ static int i915_drm_resume(struct drm_device *dev)
 
 	intel_fbdev_set_suspend(dev, FBINFO_STATE_RUNNING, false);
 
-	intel_power_domains_enable(dev_priv);
+	intel_power_domains_enable(display);
 
 	intel_gvt_resume(dev_priv);
 
@@ -1223,6 +1236,7 @@ static int i915_drm_resume(struct drm_device *dev)
 static int i915_drm_resume_early(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = to_i915(dev);
+	struct intel_display *display = &dev_priv->display;
 	struct pci_dev *pdev = to_pci_dev(dev_priv->drm.dev);
 	struct intel_gt *gt;
 	int ret, i;
@@ -1282,9 +1296,7 @@ static int i915_drm_resume_early(struct drm_device *dev)
 	for_each_gt(gt, dev_priv, i)
 		intel_gt_resume_early(gt);
 
-	intel_display_power_resume_early(dev_priv);
-
-	intel_power_domains_resume(dev_priv);
+	intel_display_power_resume_early(display);
 
 	enable_rpm_wakeref_asserts(&dev_priv->runtime_pm);
 
@@ -1486,7 +1498,7 @@ static int intel_runtime_suspend(struct device *kdev)
 	for_each_gt(gt, dev_priv, i)
 		intel_uncore_suspend(gt->uncore);
 
-	intel_display_power_suspend(dev_priv);
+	intel_display_power_suspend(display);
 
 	ret = vlv_suspend_complete(dev_priv);
 	if (ret) {
@@ -1580,7 +1592,7 @@ static int intel_runtime_resume(struct device *kdev)
 		drm_dbg(&dev_priv->drm,
 			"Unclaimed access during suspend, bios?\n");
 
-	intel_display_power_resume(dev_priv);
+	intel_display_power_resume(display);
 
 	ret = vlv_resume_prepare(dev_priv, true);
 

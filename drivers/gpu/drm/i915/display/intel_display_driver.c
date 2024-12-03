@@ -226,13 +226,13 @@ int intel_display_driver_probe_noirq(struct drm_i915_private *i915)
 		goto cleanup_bios;
 
 	/* FIXME: completely on the wrong abstraction layer */
-	ret = intel_power_domains_init(i915);
+	ret = intel_power_domains_init(display);
 	if (ret < 0)
 		goto cleanup_vga;
 
 	intel_pmdemand_init_early(i915);
 
-	intel_power_domains_init_hw(i915, false);
+	intel_power_domains_init_hw(display, false);
 
 	if (!HAS_DISPLAY(i915))
 		return 0;
@@ -242,6 +242,7 @@ int intel_display_driver_probe_noirq(struct drm_i915_private *i915)
 	i915->display.wq.modeset = alloc_ordered_workqueue("i915_modeset", 0);
 	i915->display.wq.flip = alloc_workqueue("i915_flip", WQ_HIGHPRI |
 						WQ_UNBOUND, WQ_UNBOUND_MAX_ACTIVE);
+	i915->display.wq.cleanup = alloc_workqueue("i915_cleanup", WQ_HIGHPRI, 0);
 
 	intel_mode_config_init(i915);
 
@@ -273,7 +274,7 @@ int intel_display_driver_probe_noirq(struct drm_i915_private *i915)
 
 cleanup_vga_client_pw_domain_dmc:
 	intel_dmc_fini(display);
-	intel_power_domains_driver_remove(i915);
+	intel_power_domains_driver_remove(display);
 cleanup_vga:
 	intel_vga_unregister(display);
 cleanup_bios:
@@ -472,7 +473,7 @@ int intel_display_driver_probe_nogem(struct drm_i915_private *i915)
 	intel_acpi_assign_connector_fwnodes(display);
 	drm_modeset_unlock_all(dev);
 
-	intel_initial_plane_config(i915);
+	intel_initial_plane_config(display);
 
 	/*
 	 * Make sure hardware watermarks really match the state we read out.
@@ -518,7 +519,7 @@ int intel_display_driver_probe(struct drm_i915_private *i915)
 	if (ret)
 		drm_dbg_kms(&i915->drm, "Initial modeset failed, %d\n", ret);
 
-	intel_overlay_setup(i915);
+	intel_overlay_setup(display);
 
 	/* Only enable hotplug handling once the fbdev is fully set up. */
 	intel_hpd_init(i915);
@@ -571,6 +572,7 @@ void intel_display_driver_remove(struct drm_i915_private *i915)
 
 	flush_workqueue(i915->display.wq.flip);
 	flush_workqueue(i915->display.wq.modeset);
+	flush_workqueue(i915->display.wq.cleanup);
 
 	/*
 	 * MST topology needs to be suspended so we don't have any calls to
@@ -607,12 +609,13 @@ void intel_display_driver_remove_noirq(struct drm_i915_private *i915)
 
 	intel_dp_tunnel_mgr_cleanup(display);
 
-	intel_overlay_cleanup(i915);
+	intel_overlay_cleanup(display);
 
 	intel_gmbus_teardown(display);
 
 	destroy_workqueue(i915->display.wq.flip);
 	destroy_workqueue(i915->display.wq.modeset);
+	destroy_workqueue(i915->display.wq.cleanup);
 
 	intel_fbc_cleanup(&i915->display);
 }
@@ -624,7 +627,7 @@ void intel_display_driver_remove_nogem(struct drm_i915_private *i915)
 
 	intel_dmc_fini(display);
 
-	intel_power_domains_driver_remove(i915);
+	intel_power_domains_driver_remove(display);
 
 	intel_vga_unregister(display);
 
@@ -676,6 +679,12 @@ int intel_display_driver_suspend(struct drm_i915_private *i915)
 			ret);
 	else
 		i915->display.restore.modeset_state = state;
+
+	/* ensure all DPT VMAs have been unpinned for intel_dpt_suspend() */
+	flush_workqueue(i915->display.wq.cleanup);
+
+	intel_dp_mst_suspend(i915);
+
 	return ret;
 }
 
@@ -728,6 +737,9 @@ void intel_display_driver_resume(struct drm_i915_private *i915)
 
 	if (!HAS_DISPLAY(i915))
 		return;
+
+	/* MST sideband requires HPD interrupts enabled */
+	intel_dp_mst_resume(i915);
 
 	i915->display.restore.modeset_state = NULL;
 	if (state)
