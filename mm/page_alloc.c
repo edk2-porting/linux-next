@@ -1506,7 +1506,6 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 	int i;
 
 	set_page_private(page, 0);
-	set_page_refcounted(page);
 
 	arch_alloc_page(page, order);
 	debug_pagealloc_map_pages(page, 1 << order);
@@ -1854,6 +1853,14 @@ static bool can_steal_fallback(unsigned int order, int start_mt)
 	if (order >= pageblock_order)
 		return true;
 
+	/*
+	 * Movable pages won't cause permanent fragmentation, so when you alloc
+	 * small pages, you just need to temporarily steal unmovable or
+	 * reclaimable pages that are closest to the request size.  After a
+	 * while, memory compaction may occur to form large contiguous pages,
+	 * and the next movable allocation may not need to steal.  Unmovable and
+	 * reclaimable allocations need to actually steal pages.
+	 */
 	if (order >= pageblock_order / 2 ||
 		start_mt == MIGRATE_RECLAIMABLE ||
 		start_mt == MIGRATE_UNMOVABLE ||
@@ -2590,9 +2597,9 @@ static int nr_pcp_high(struct per_cpu_pages *pcp, struct zone *zone,
 	return high;
 }
 
-static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
-				   struct page *page, int migratetype,
-				   unsigned int order)
+static void free_frozen_page_commit(struct zone *zone,
+		struct per_cpu_pages *pcp, struct page *page, int migratetype,
+		unsigned int order)
 {
 	int high, batch;
 	int pindex;
@@ -2641,7 +2648,7 @@ static void free_unref_page_commit(struct zone *zone, struct per_cpu_pages *pcp,
 /*
  * Free a pcp page
  */
-void free_unref_page(struct page *page, unsigned int order)
+void free_frozen_pages(struct page *page, unsigned int order)
 {
 	unsigned long __maybe_unused UP_flags;
 	struct per_cpu_pages *pcp;
@@ -2664,20 +2671,20 @@ void free_unref_page(struct page *page, unsigned int order)
 	 * get those areas back if necessary. Otherwise, we may have to free
 	 * excessively into the page allocator
 	 */
+	zone = page_zone(page);
 	migratetype = get_pfnblock_migratetype(page, pfn);
 	if (unlikely(migratetype >= MIGRATE_PCPTYPES)) {
 		if (unlikely(is_migrate_isolate(migratetype))) {
-			free_one_page(page_zone(page), page, pfn, order, FPI_NONE);
+			free_one_page(zone, page, pfn, order, FPI_NONE);
 			return;
 		}
 		migratetype = MIGRATE_MOVABLE;
 	}
 
-	zone = page_zone(page);
 	pcp_trylock_prepare(UP_flags);
 	pcp = pcp_spin_trylock(zone->per_cpu_pageset);
 	if (pcp) {
-		free_unref_page_commit(zone, pcp, page, migratetype, order);
+		free_frozen_page_commit(zone, pcp, page, migratetype, order);
 		pcp_spin_unlock(pcp);
 	} else {
 		free_one_page(zone, page, pfn, order, FPI_NONE);
@@ -2741,7 +2748,7 @@ void free_unref_folios(struct folio_batch *folios)
 
 			/*
 			 * Free isolated pages directly to the
-			 * allocator, see comment in free_unref_page.
+			 * allocator, see comment in free_frozen_pages.
 			 */
 			if (is_migrate_isolate(migratetype)) {
 				free_one_page(zone, &folio->page, pfn,
@@ -2772,7 +2779,7 @@ void free_unref_folios(struct folio_batch *folios)
 			migratetype = MIGRATE_MOVABLE;
 
 		trace_mm_page_free_batched(&folio->page);
-		free_unref_page_commit(zone, pcp, &folio->page, migratetype,
+		free_frozen_page_commit(zone, pcp, &folio->page, migratetype,
 				order);
 	}
 
@@ -3565,7 +3572,6 @@ __alloc_pages_cpuset_fallback(gfp_t gfp_mask, unsigned int order,
 	if (!page)
 		page = get_page_from_freelist(gfp_mask, order,
 				alloc_flags, ac);
-
 	return page;
 }
 
@@ -4676,6 +4682,7 @@ retry_this_zone:
 		nr_account++;
 
 		prep_new_page(page, 0, gfp, 0);
+		set_page_refcounted(page);
 		if (page_list)
 			list_add(&page->lru, page_list);
 		else
@@ -4712,8 +4719,8 @@ EXPORT_SYMBOL_GPL(alloc_pages_bulk_noprof);
 /*
  * This is the 'heart' of the zoned buddy allocator.
  */
-struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
-				      int preferred_nid, nodemask_t *nodemask)
+struct page *__alloc_frozen_pages_noprof(gfp_t gfp, unsigned int order,
+		int preferred_nid, nodemask_t *nodemask)
 {
 	struct page *page;
 	unsigned int alloc_flags = ALLOC_WMARK_LOW;
@@ -4766,13 +4773,25 @@ struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
 out:
 	if (memcg_kmem_online() && (gfp & __GFP_ACCOUNT) && page &&
 	    unlikely(__memcg_kmem_charge_page(page, gfp, order) != 0)) {
-		__free_pages(page, order);
+		free_frozen_pages(page, order);
 		page = NULL;
 	}
 
 	trace_mm_page_alloc(page, order, alloc_gfp, ac.migratetype);
 	kmsan_alloc_page(page, order, alloc_gfp);
 
+	return page;
+}
+EXPORT_SYMBOL(__alloc_frozen_pages_noprof);
+
+struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
+		int preferred_nid, nodemask_t *nodemask)
+{
+	struct page *page;
+
+	page = __alloc_frozen_pages_noprof(gfp, order, preferred_nid, nodemask);
+	if (page)
+		set_page_refcounted(page);
 	return page;
 }
 EXPORT_SYMBOL(__alloc_pages_noprof);
@@ -4835,11 +4854,11 @@ void __free_pages(struct page *page, unsigned int order)
 	struct alloc_tag *tag = pgalloc_tag_get(page);
 
 	if (put_page_testzero(page))
-		free_unref_page(page, order);
+		free_frozen_pages(page, order);
 	else if (!head) {
 		pgalloc_tag_sub_pages(tag, (1 << order) - 1);
 		while (order-- > 0)
-			free_unref_page(page + (1 << order), order);
+			free_frozen_pages(page + (1 << order), order);
 	}
 }
 EXPORT_SYMBOL(__free_pages);
@@ -6358,6 +6377,7 @@ static void split_free_pages(struct list_head *list)
 			int i;
 
 			post_alloc_hook(page, order, __GFP_MOVABLE);
+			set_page_refcounted(page);
 			if (!order)
 				continue;
 
@@ -6497,6 +6517,7 @@ int alloc_contig_range_noprof(unsigned long start, unsigned long end,
 
 		check_new_pages(head, order);
 		prep_new_page(head, order, gfp_mask, 0);
+		set_page_refcounted(head);
 	} else {
 		ret = -EINVAL;
 		WARN(true, "PFN range: requested [%lu, %lu), allocated [%lu, %lu)\n",
