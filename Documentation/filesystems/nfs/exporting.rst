@@ -238,3 +238,9 @@ following flags are defined:
     all of an inode's dirty data on last close. Exports that behave this
     way should set EXPORT_OP_FLUSH_ON_CLOSE so that NFSD knows to skip
     waiting for writeback when closing such files.
+
+  EXPORT_OP_LOCAL_FILE_HANDLE - Filesystem only supports local file handles
+    Some filesystems only support local file handles. Local file handles can be
+    used with ``name_to_handle_at()`` and ``open_by_handle_at()`` but not for
+    actual export operations. Filesystems that only support local file handles
+    must set this flag.
