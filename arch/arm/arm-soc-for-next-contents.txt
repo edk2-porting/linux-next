@@ -1,0 +1,139 @@
+soc/arm
+	broadcom/arm
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-6.13/soc
+	samsung/soc
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-soc-6.13
+	zynq/arm
+		https://github.com/Xilinx/linux-xlnx tags/zynq-soc-for-6.13
+	imx/arm
+		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-soc-6.13
+
+soc/dt
+	thead/dt
+		https://github.com/pdp7/linux tags/thead-dt-for-v6.13
+	thead/dt-2
+		https://github.com/pdp7/linux tags/thead-dt-for-v6.13-p2
+	renesas/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dts-for-v6.13-tag1
+	ux500/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/linusw/linux-nomadik tags/ux500-dts-for-v6.13
+	tegra/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.13-dt-bindings
+	tegra/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.13-arm64-dt
+	samsung/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-dt64-6.13
+	rockchip/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.13-armsoc/dts64-1
+	zynq/dt64
+		https://github.com/Xilinx/linux-xlnx tags/zynqmp-dt-for-6.13
+	sockfpga/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/dinguyen/linux tags/socfpga_dts_updates_for_v6.13
+	qcom/dt32
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm32-for-6.13
+	imx/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-bindings-6.13
+	imx/dt32
+		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt-6.13
+	imx/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-dt64-6.13
+	mtk/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/mediatek/linux tags/mtk-dts64-for-v6.13
+	renesas/dt-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-dts-for-v6.13-tag2
+	omap/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-omap tags/omap-for-v6.13/dt-signed-1
+	qcom/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-for-6.13
+	patch
+		arm64: dts: seattle: Update spi clock properties
+		arm64: dts: lg131x: Update spi clock properties
+	sophgo/dt
+		https://github.com/sophgo/linux tags/riscv-sophgo-dt-for-v6.13
+	amlogic/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/amlogic/linux tags/amlogic-arm-dt-for-v6.13
+	amlogic/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/amlogic/linux tags/amlogic-arm64-dt-for-v6.13
+	k3/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/ti/linux tags/ti-k3-dt-for-v6.13
+	stm32/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/atorgue/stm32 tags/stm32-dt-for-v6.13-1
+	mvebu/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/gclement/mvebu tags/mvebu-dt-6.13-1
+	mvebu/dt64
+		https://git.kernel.org/pub/scm/linux/kernel/git/gclement/mvebu tags/mvebu-dt64-6.13-1
+	riscv/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/conor/linux tags/riscv-dt-for-v6.13
+	sunxi/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-dt-for-6.13-2
+	rockchip/dt32-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.13-rockchip-dts32-2
+	rockchip/dt64-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.13-rockchip-dts64-2
+	apple/dt
+		https://github.com/AsahiLinux/linux tags/asahi-soc-dt-6.13
+	samsung/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux tags/samsung-drivers-6.13
+	rockchips/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/mmind/linux-rockchip tags/v6.13-armsoc/drivers1
+	at91/dt
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-dt-6.13
+	at91/dt-bindings
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-soc-6.13
+
+soc/drivers
+	patch
+		soc: Switch back to struct platform_driver::remove()
+	hisi/drivers
+		https://github.com/hisilicon/linux-hisi tags/hisi-drivers-for-6.13
+	tegra/firmware
+		https://git.kernel.org/pub/scm/linux/kernel/git/tegra/linux tags/tegra-for-6.13-firmware
+	drivers/memory
+		https://git.kernel.org/pub/scm/linux/kernel/git/krzk/linux-mem-ctrl tags/memory-controller-drv-6.13
+	zynq/soc
+		https://github.com/Xilinx/linux-xlnx tags/zynqmp-soc-for-6.13
+	qcom/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-6.13
+	imx/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-drivers-6.13
+	mediatek/driver
+		https://git.kernel.org/pub/scm/linux/kernel/git/mediatek/linux tags/mtk-soc-for-v6.13
+	omap/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/khilman/linux-omap tags/omap-for-v6.13/drivers-signed
+	patch
+		bus: Switch back to struct platform_driver::remove()
+	firmware/scmi
+		https://git.kernel.org/pub/scm/linux/kernel/git/sudeep.holla/linux tags/scmi-updates-6.13
+	drivers/reset
+		git://git.pengutronix.de/pza/linux tags/reset-for-v6.13
+	ti/drivers
+		https://git.kernel.org/pub/scm/linux/kernel/git/ti/linux tags/ti-driver-soc-for-v6.13
+	patch
+		firmware: turris-mox-rwtm: Document the driver private data structure
+		platform: cznic: turris-omnia-mcu: Document the driver private data structure
+		platform: cznic: turris-omnia-mcu: Rename variable holding GPIO line names
+	qcom/drivers-2
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-drivers-for-6.13-2
+
+soc/defconfig
+	broadcom/defconfig
+		https://github.com/Broadcom/stblinux tags/arm-soc/for-6.13/defconfig
+	qcom/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/qcom/linux tags/qcom-arm64-defconfig-for-6.13
+	imx/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/shawnguo/linux tags/imx-defconfig-6.13
+	renesas/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-arm-defconfig-for-v6.13-tag1
+	k3/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/ti/linux tags/ti-k3-config-for-v6.13
+	at91/defconfig
+		https://git.kernel.org/pub/scm/linux/kernel/git/at91/linux tags/at91-defconfig-6.13
+
+soc/late
+
+arm/fixes
+	<no branch> (dd36ad71ad65968f97630808bc8d605c929b128e)
+		https://git.kernel.org/pub/scm/linux/kernel/git/sunxi/linux tags/sunxi-fixes-for-6.12
+	<no branch> (124f4f1a18696c4198f9f903fd74034ea8b7d352)
+		https://git.kernel.org/pub/scm/linux/kernel/git/geert/renesas-devel tags/renesas-fixes-for-v6.12-tag1
+
