@@ -63,6 +63,13 @@
 #define ATH12K_RECONFIGURE_TIMEOUT_HZ		(10 * HZ)
 #define ATH12K_RECOVER_START_TIMEOUT_HZ		(20 * HZ)
 
+#define ATH12K_MAX_SOCS 3
+#define ATH12K_INVALID_GROUP_ID  0xFF
+#define ATH12K_INVALID_DEVICE_ID 0xFF
+
+#define ATH12K_MAX_MLO_PEERS            256
+#define ATH12K_MLO_PEER_ID_INVALID      0xFFFF
+
 enum ath12k_bdf_search {
 	ATH12K_BDF_SEARCH_DEFAULT,
 	ATH12K_BDF_SEARCH_BUS_AND_BOARD,
@@ -115,6 +122,7 @@ struct ath12k_skb_cb {
 	dma_addr_t paddr_ext_desc;
 	u32 cipher;
 	u8 flags;
+	u8 link_id;
 };
 
 struct ath12k_skb_rxcb {
@@ -220,6 +228,7 @@ enum ath12k_dev_flags {
 	ATH12K_FLAG_HTC_SUSPEND_COMPLETE,
 	ATH12K_FLAG_CE_IRQ_ENABLED,
 	ATH12K_FLAG_EXT_IRQ_ENABLED,
+	ATH12K_FLAG_QMI_FW_READY_COMPLETE,
 };
 
 struct ath12k_tx_conf {
@@ -314,10 +323,11 @@ struct ath12k_vif {
 	bool ps;
 
 	struct ath12k_link_vif deflink;
-	struct ath12k_link_vif __rcu *link[IEEE80211_MLD_MAX_NUM_LINKS];
+	struct ath12k_link_vif __rcu *link[ATH12K_NUM_MAX_LINKS];
 	struct ath12k_vif_cache *cache[IEEE80211_MLD_MAX_NUM_LINKS];
 	/* indicates bitmap of link vif created in FW */
 	u16 links_map;
+	u8 last_scan_link;
 
 	/* Must be last - ends in a flexible-array member.
 	 *
@@ -469,6 +479,9 @@ struct ath12k_link_sta {
 	struct ath12k_link_vif *arvif;
 	struct ath12k_sta *ahsta;
 
+	/* link address similar to ieee80211_link_sta */
+	u8 addr[ETH_ALEN];
+
 	/* the following are protected by ar->data_lock */
 	u32 changed; /* IEEE80211_RC_* */
 	u32 bw;
@@ -485,14 +498,26 @@ struct ath12k_link_sta {
 	struct ath12k_rx_peer_stats *rx_stats;
 	struct ath12k_wbm_tx_stats *wbm_tx_stats;
 	u32 bw_prev;
+
+	/* For now the assoc link will be considered primary */
+	bool is_assoc_link;
+
+	 /* for firmware use only */
+	u8 link_idx;
 };
 
 struct ath12k_sta {
+	struct ath12k_vif *ahvif;
 	enum hal_pn_type pn_type;
 	struct ath12k_link_sta deflink;
 	struct ath12k_link_sta __rcu *link[IEEE80211_MLD_MAX_NUM_LINKS];
 	/* indicates bitmap of link sta created in FW */
 	u16 links_map;
+	u8 assoc_link_id;
+	u16 ml_peer_id;
+	u8 num_peer;
+
+	enum ieee80211_sta_state state;
 };
 
 #define ATH12K_MIN_5G_FREQ 4150
@@ -657,7 +682,7 @@ struct ath12k {
 
 	struct work_struct regd_update_work;
 
-	struct work_struct wmi_mgmt_tx_work;
+	struct wiphy_work wmi_mgmt_tx_work;
 	struct sk_buff_head wmi_mgmt_tx_queue;
 
 	struct ath12k_wow wow;
@@ -688,6 +713,8 @@ struct ath12k {
 
 struct ath12k_hw {
 	struct ieee80211_hw *hw;
+	struct device *dev;
+
 	/* Protect the write operation of the hardware state ath12k_hw::state
 	 * between hardware start<=>reconfigure<=>stop transitions.
 	 */
@@ -697,6 +724,11 @@ struct ath12k_hw {
 	bool use_6ghz_regd;
 
 	u8 num_radio;
+
+	DECLARE_BITMAP(free_ml_peer_id_map, ATH12K_MAX_MLO_PEERS);
+
+	/* protected by wiphy_lock() */
+	struct list_head ml_peers;
 
 	/* Keep last */
 	struct ath12k radio[] __aligned(sizeof(void *));
@@ -1129,4 +1161,20 @@ static inline struct ieee80211_hw *ath12k_ar_to_hw(struct ath12k *ar)
 #define for_each_ar(ah, ar, index) \
 	for ((index) = 0; ((index) < (ah)->num_radio && \
 	     ((ar) = &(ah)->radio[(index)])); (index)++)
+
+static inline struct ath12k_hw *ath12k_ab_to_ah(struct ath12k_base *ab, int idx)
+{
+	return ab->ah[idx];
+}
+
+static inline void ath12k_ab_set_ah(struct ath12k_base *ab, int idx,
+				    struct ath12k_hw *ah)
+{
+	ab->ah[idx] = ah;
+}
+
+static inline int ath12k_get_num_hw(struct ath12k_base *ab)
+{
+	return ab->num_hw;
+}
 #endif /* _CORE_H_ */

@@ -2066,7 +2066,9 @@ static void ath12k_host_cap_parse_mlo(struct ath12k_base *ab,
 	req->mlo_chip_info_valid = 1;
 }
 
-static int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
 {
 	struct qmi_wlanfw_host_cap_req_msg_v01 req = {};
 	struct qmi_wlanfw_host_cap_resp_msg_v01 resp = {};
@@ -2275,7 +2277,9 @@ resp_out:
 	return ret;
 }
 
-static int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
 {
 	struct qmi_wlanfw_respond_mem_req_msg_v01 *req;
 	struct qmi_wlanfw_respond_mem_resp_msg_v01 resp = {};
@@ -2433,7 +2437,9 @@ this_chunk_done:
 	return 0;
 }
 
-static int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 {
 	struct qmi_wlanfw_cap_req_msg_v01 req = {};
 	struct qmi_wlanfw_cap_resp_msg_v01 resp = {};
@@ -2619,8 +2625,10 @@ out:
 	return ret;
 }
 
-static int ath12k_qmi_load_bdf_qmi(struct ath12k_base *ab,
-				   enum ath12k_qmi_bdf_type type)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_load_bdf_qmi(struct ath12k_base *ab,
+			    enum ath12k_qmi_bdf_type type)
 {
 	struct device *dev = ab->dev;
 	char filename[ATH12K_QMI_MAX_BDF_FILE_NAME_SIZE];
@@ -2791,7 +2799,9 @@ out:
 	return ret;
 }
 
-static int ath12k_qmi_wlanfw_m3_info_send(struct ath12k_base *ab)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_wlanfw_m3_info_send(struct ath12k_base *ab)
 {
 	struct m3_mem_region *m3_mem = &ab->qmi.m3_mem;
 	struct qmi_wlanfw_m3_info_req_msg_v01 req = {};
@@ -3023,6 +3033,8 @@ void ath12k_qmi_firmware_stop(struct ath12k_base *ab)
 {
 	int ret;
 
+	clear_bit(ATH12K_FLAG_QMI_FW_READY_COMPLETE, &ab->dev_flags);
+
 	ret = ath12k_qmi_wlanfw_mode_send(ab, ATH12K_FIRMWARE_MODE_OFF);
 	if (ret < 0) {
 		ath12k_warn(ab, "qmi failed to send wlan mode off\n");
@@ -3079,7 +3091,9 @@ ath12k_qmi_driver_event_post(struct ath12k_qmi *qmi,
 	return 0;
 }
 
-static int ath12k_qmi_event_server_arrive(struct ath12k_qmi *qmi)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_event_server_arrive(struct ath12k_qmi *qmi)
 {
 	struct ath12k_base *ab = qmi->ab;
 	int ret;
@@ -3101,7 +3115,9 @@ static int ath12k_qmi_event_server_arrive(struct ath12k_qmi *qmi)
 	return ret;
 }
 
-static int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi)
 {
 	struct ath12k_base *ab = qmi->ab;
 	int ret;
@@ -3115,7 +3131,9 @@ static int ath12k_qmi_event_mem_request(struct ath12k_qmi *qmi)
 	return ret;
 }
 
-static int ath12k_qmi_event_load_bdf(struct ath12k_qmi *qmi)
+/* clang stack usage explodes if this is inlined */
+static noinline_for_stack
+int ath12k_qmi_event_load_bdf(struct ath12k_qmi *qmi)
 {
 	struct ath12k_base *ab = qmi->ab;
 	int ret;
@@ -3320,7 +3338,7 @@ static void ath12k_qmi_driver_event_work(struct work_struct *work)
 			break;
 		case ATH12K_QMI_EVENT_FW_READY:
 			clear_bit(ATH12K_FLAG_QMI_FAIL, &ab->dev_flags);
-			if (test_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags)) {
+			if (test_bit(ATH12K_FLAG_QMI_FW_READY_COMPLETE, &ab->dev_flags)) {
 				if (ab->is_reset)
 					ath12k_hal_dump_srng_stats(ab);
 				queue_work(ab->workqueue, &ab->restart_work);
@@ -3330,8 +3348,12 @@ static void ath12k_qmi_driver_event_work(struct work_struct *work)
 			clear_bit(ATH12K_FLAG_CRASH_FLUSH,
 				  &ab->dev_flags);
 			clear_bit(ATH12K_FLAG_RECOVERY, &ab->dev_flags);
-			ath12k_core_qmi_firmware_ready(ab);
-			set_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags);
+			ret = ath12k_core_qmi_firmware_ready(ab);
+			if (!ret) {
+				set_bit(ATH12K_FLAG_QMI_FW_READY_COMPLETE,
+					&ab->dev_flags);
+				set_bit(ATH12K_FLAG_REGISTERED, &ab->dev_flags);
+			}
 
 			break;
 		default:
@@ -3386,11 +3408,15 @@ int ath12k_qmi_init_service(struct ath12k_base *ab)
 
 void ath12k_qmi_deinit_service(struct ath12k_base *ab)
 {
+	if (!ab->qmi.ab)
+		return;
+
 	qmi_handle_release(&ab->qmi.handle);
 	cancel_work_sync(&ab->qmi.event_work);
 	destroy_workqueue(ab->qmi.event_wq);
 	ath12k_qmi_m3_free(ab);
 	ath12k_qmi_free_target_mem_chunk(ab);
+	ab->qmi.ab = NULL;
 }
 
 void ath12k_qmi_free_resource(struct ath12k_base *ab)
