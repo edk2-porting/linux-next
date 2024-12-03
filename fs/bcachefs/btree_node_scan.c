@@ -22,9 +22,9 @@ struct find_btree_nodes_worker {
 
 static void found_btree_node_to_text(struct printbuf *out, struct bch_fs *c, const struct found_btree_node *n)
 {
-	prt_printf(out, "%s l=%u seq=%u journal_seq=%llu cookie=%llx ",
-		   bch2_btree_id_str(n->btree_id), n->level, n->seq,
-		   n->journal_seq, n->cookie);
+	bch2_btree_id_level_to_text(out, n->btree_id, n->level);
+	prt_printf(out, " seq=%u journal_seq=%llu cookie=%llx ",
+		   n->seq, n->journal_seq, n->cookie);
 	bch2_bpos_to_text(out, n->min_key);
 	prt_str(out, "-");
 	bch2_bpos_to_text(out, n->max_key);
@@ -159,6 +159,9 @@ static void try_read_btree_node(struct find_btree_nodes *f, struct bch_dev *ca,
 		return;
 
 	if (bch2_csum_type_is_encryption(BSET_CSUM_TYPE(&bn->keys))) {
+		if (!c->chacha20)
+			return;
+
 		struct nonce nonce = btree_nonce(&bn->keys, 0);
 		unsigned bytes = (void *) &bn->keys - (void *) &bn->flags;
 
@@ -499,7 +502,9 @@ int bch2_get_scanned_nodes(struct bch_fs *c, enum btree_id btree,
 	if (c->opts.verbose) {
 		struct printbuf buf = PRINTBUF;
 
-		prt_printf(&buf, "recovering %s l=%u ", bch2_btree_id_str(btree), level);
+		prt_str(&buf, "recovery ");
+		bch2_btree_id_level_to_text(&buf, btree, level);
+		prt_str(&buf, " ");
 		bch2_bpos_to_text(&buf, node_min);
 		prt_str(&buf, " - ");
 		bch2_bpos_to_text(&buf, node_max);
@@ -533,7 +538,12 @@ int bch2_get_scanned_nodes(struct bch_fs *c, enum btree_id btree,
 		bch_verbose(c, "%s(): recovering %s", __func__, buf.buf);
 		printbuf_exit(&buf);
 
-		BUG_ON(bch2_bkey_validate(c, bkey_i_to_s_c(&tmp.k), BKEY_TYPE_btree, 0));
+		BUG_ON(bch2_bkey_validate(c, bkey_i_to_s_c(&tmp.k),
+					  (struct bkey_validate_context) {
+						.from	= BKEY_VALIDATE_btree_node,
+						.level	= level + 1,
+						.btree	= btree,
+					  }));
 
 		ret = bch2_journal_key_insert(c, btree, level + 1, &tmp.k);
 		if (ret)
