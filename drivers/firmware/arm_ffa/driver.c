@@ -483,13 +483,13 @@ static int ffa_msg_send_direct_req2(u16 src_id, u16 dst_id, const uuid_t *uuid,
 	u32 src_dst_ids = PACK_TARGET_INFO(src_id, dst_id);
 	union {
 		uuid_t uuid;
-		__le64 regs[2];
+		unsigned long regs[2];
 	} uuid_regs = { .uuid = *uuid };
 	ffa_value_t ret, args = {
 		.a0 = FFA_MSG_SEND_DIRECT_REQ2,
 		.a1 = src_dst_ids,
-		.a2 = le64_to_cpu(uuid_regs.regs[0]),
-		.a3 = le64_to_cpu(uuid_regs.regs[1]),
+		.a2 = uuid_regs.regs[0],
+		.a3 = uuid_regs.regs[1],
 	};
 	memcpy((void *)&args + offsetof(ffa_value_t, a4), data, sizeof(*data));
 
