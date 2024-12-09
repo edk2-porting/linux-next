@@ -158,6 +158,18 @@ pacman-pkg:
 		KBUILD_REVISION="$(shell $(srctree)/scripts/build-version)" \
 		makepkg $(MAKEPKGOPTS)
 
+# pacman-odin2-pkg
+# ---------------------------------------------------------------------------
+
+PHONY += pacman-odin2-pkg
+pacman-odin2-pkg:
+	@ln -srf $(srctree)/scripts/package/PKGBUILD-odin2 $(objtree)/PKGBUILD
+	+BUILDDIR="$(realpath $(objtree))/pacman" \
+		CARCH="$(UTS_MACHINE)" \
+		KBUILD_MAKEFLAGS="$(MAKEFLAGS)" \
+		KBUILD_REVISION="$(shell $(srctree)/scripts/build-version)" \
+		makepkg $(MAKEPKGOPTS)
+
 # dir-pkg tar*-pkg - tarball targets
 # ---------------------------------------------------------------------------
 
@@ -239,6 +251,7 @@ help:
 	@echo '  snap-pkg            - Build only the binary kernel snap package'
 	@echo '                        (will connect to external hosts)'
 	@echo '  pacman-pkg          - Build only the binary kernel pacman package'
+	@echo '  pacman-odin2-pkg    - Build only the binary kernel pacman package for odin2'
 	@echo '  dir-pkg             - Build the kernel as a plain directory structure'
 	@echo '  tar-pkg             - Build the kernel as an uncompressed tarball'
 	@echo '  targz-pkg           - Build the kernel as a gzip compressed tarball'
