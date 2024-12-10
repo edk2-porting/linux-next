@@ -107,6 +107,8 @@ def show_diff():
 # make defconfig
 # ./scripts/diffconfig_new -m .config .config.old > arch/arm64/configs/qcom.config
 # cp .config.old .config
+
+# This config fragment tries to follow Arch Linux's config.
 """)
     # Process configs in the order of the new config file
     for config in b:
